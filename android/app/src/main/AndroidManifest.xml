@@ -1,0 +1,137 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!-- RECORD_AUDIO implies a required microphone by default, which drops
+         the app from the Play Store's device catalog for mic-less devices
+         (some TVs/tablets). Voice search is optional, not core functionality
+         — the app already degrades gracefully when the mic is unavailable
+         (see _toggleVoiceSearch in search_screen.dart), so this feature
+         should never be required for install. -->
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+
+    <!-- Not used anywhere in this app: no boot-triggered work, no locally
+         scheduled/recurring notifications to reschedule after reboot — every
+         notification here is server-pushed via FCM. Declaring an unused
+         permission is exactly the kind of thing a reviewer (or a careful
+         user reading the permission list) flags as unjustified. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" tools:node="remove" />
+
+    <!-- Pulled in by com.razorpay:standard-core for its optional NFC
+         tap-to-pay flow, which this app's checkout never invokes (card/UPI/
+         netbanking/wallet only, via Razorpay's standard hosted checkout).
+         Verified via manifest-merger blame + confirmed checkout still works
+         after removal (see emulator verification). -->
+    <uses-permission android:name="android.permission.NFC" tools:node="remove" />
+
+    <!-- Firebase Analytics' measurement SDK requests these for optional
+         ad-attribution ("Google Signals"), which this app doesn't use — it
+         only uses Analytics for usage/crash diagnostics, never ad
+         personalization. Removing keeps the "Advertising ID: not used" /
+         "Ads: none" declarations actually true instead of contradicted by
+         the app's own requested-permissions list. -->
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_ADSERVICES_ATTRIBUTION" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_ADSERVICES_AD_ID" tools:node="remove" />
+
+    <application
+        android:label="FreshCuts"
+        android:name="${applicationName}"
+        android:icon="@mipmap/launcher_icon"
+        android:extractNativeLibs="false">
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="${GOOGLE_MAPS_API_KEY}" />
+
+        <!-- This app doesn't do ad personalization/attribution — Analytics is
+             usage/crash diagnostics only. Matches the AD_ID permission removal
+             above and keeps Play Console's "Advertising ID: not used"
+             declaration accurate. -->
+        <meta-data
+            android:name="google_analytics_default_allow_ad_personalization_signals"
+            android:value="false" />
+
+        <!-- Small icon for FCM notifications received while the app is in
+             the background/terminated (handled natively, not by
+             LocalNotificationService). Without this, FCM falls back to the
+             app's full-color launcher icon, which Android's alpha-only
+             status-bar mask renders as a blank/generic shape instead of the
+             Bakaloo mark. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_notification" />
+
+        <activity
+            android:name="com.razorpay.CheckoutActivity"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize"
+            android:exported="true"
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"
+            tools:replace="android:exported,android:theme" />
+
+        <activity
+            android:name="com.meetcommerce.app.MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <meta-data
+                android:name="io.flutter.embedding.android.NormalTheme"
+                android:resource="@style/NormalTheme" />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Required for firebase_messaging: routes background/terminated
+                 notification taps back to Flutter via onMessageOpenedApp.
+                 Must match the clickAction set in FCM push payload. -->
+            <intent-filter>
+                <action android:name="FLUTTER_NOTIFICATION_CLICK" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <!-- Android App Links: opens shared https://bakaloo.in links
+                 directly in the app instead of a browser. autoVerify requires
+                 https://bakaloo.in/.well-known/assetlinks.json (and the same
+                 file at www.bakaloo.in) to list this app's signing certificate
+                 SHA-256 fingerprint, or the OS falls back to normal browser
+                 handling. go_router already has a matching /product/:id route. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="bakaloo.in" />
+                <data android:scheme="https" android:host="www.bakaloo.in" />
+            </intent-filter>
+        </activity>
+
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+    </application>
+
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT" />
+            <data android:mimeType="text/plain" />
+        </intent>
+        <!-- Android 11+ package-visibility: without these, launchUrl('tel:...')
+             / launchUrl('mailto:...') from the Support sheet can report no
+             app found even when a dialer/mail app is installed. -->
+        <intent>
+            <action android:name="android.intent.action.DIAL" />
+            <data android:scheme="tel" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+            <data android:scheme="mailto" />
+        </intent>
+    </queries>
+</manifest>

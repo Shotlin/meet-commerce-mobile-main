@@ -1,0 +1,175 @@
+name: bakaloo_flutter_app
+description: FreshCuts — Customer Mobile App
+publish_to: none
+version: 1.0.11+41
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+  flutter: ">=3.22.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_riverpod: ^3.0.3
+  riverpod_annotation: ^3.0.3
+  go_router: ^14.2.0
+  dio: ^5.6.0
+  retrofit: ^4.7.2
+  http_certificate_pinning: ^3.0.1
+  socket_io_client: ^2.0.3+1
+  flutter_secure_storage: ^9.2.2
+  hive_flutter: ^1.1.0
+  hive: ^2.2.3
+  shared_preferences: ^2.3.2
+  freezed_annotation: ^3.1.0
+  json_annotation: ^4.9.0
+  razorpay_flutter: ^1.4.1
+  firebase_core: ^3.4.0
+  firebase_messaging: ^15.1.0
+  flutter_local_notifications: ^17.2.2
+  firebase_crashlytics: ^4.1.0
+  firebase_analytics: ^11.3.0
+  maplibre_gl: ^0.27.0
+  geolocator: ^13.0.1
+  # Used solely for its Android SettingsClient integration (requestService())
+  # — the native "Turn on Location Accuracy" resolution dialog that lets the
+  # customer enable device location in-app (Zomato/Blinkit-style) instead of
+  # being bounced out to the OS Settings app. geolocator has no equivalent;
+  # it can only open Settings.
+  location: ^6.0.2
+  geocoding: ^3.0.0
+  cached_network_image: ^3.4.1
+  flutter_svg: ^2.0.10+1
+  flutter_jailbreak_detection: ^1.10.0
+  open_file: ^3.5.8
+  flutter_animate: ^4.5.0
+  lottie: ^3.1.0
+  dotlottie_loader: ^0.0.4
+  shimmer: ^3.0.0
+  flutter_screenutil: ^5.9.3
+  gap: ^3.0.1
+  phosphoricons_flutter: ^1.0.0
+  infinite_scroll_pagination: ^4.0.0
+  youtube_player_flutter: ^10.0.1
+  pinput: ^5.0.0
+  flutter_rating_bar: ^4.0.1
+  flutter_slidable: ^3.1.0
+  connectivity_plus: ^6.0.3
+  local_auth: ^2.3.0
+  path_provider: ^2.1.4
+  intl: ^0.19.0
+  url_launcher: ^6.3.0
+  share_plus: ^10.0.0
+  package_info_plus: ^8.1.1
+  in_app_review: ^2.0.10
+  synchronized: ^3.1.0+1
+  jwt_decoder: ^2.0.1
+  dartz: ^0.10.1
+  equatable: ^2.0.7
+  speech_to_text: ^7.0.0
+  flutter_dotenv: ^5.1.0
+  wakelock_plus: ^1.2.8
+  timeago: ^3.7.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  build_runner: ^2.4.12
+  freezed: ^3.2.3
+  json_serializable: ^6.8.0
+  retrofit_generator: ^10.0.1
+  riverpod_generator: ^3.0.3
+  mockito: ^5.4.4
+  mocktail: ^1.0.4
+  fake_async: ^1.3.2
+  flutter_launcher_icons: ^0.14.1
+  flutter_native_splash: ^2.4.1
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/animations/
+    - assets/3d_icons/
+    - assets/icon/
+    - assets/icon/footer_icon/
+    - assets/lottie/
+    - .env
+  fonts:
+    # ── DM Sans — body text, product names, labels, descriptions ──────────
+    # Humanist sans-serif, warm and highly legible at small sizes.
+    # Psychologically: conveys trust, clarity and ease — perfect for
+    # product names, prices, cart items, descriptions.
+    - family: DMSans
+      fonts:
+        - asset: assets/fonts/DMSans-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/DMSans-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/DMSans-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/DMSans-Bold.ttf
+          weight: 700
+
+    # ── Plus Jakarta Sans — headings, section titles, buttons, prices ──────
+    # Geometric sans-serif with warm humanist curves.
+    # Psychologically: energetic, fresh and premium — perfect for
+    # category titles, big price tags, CTA buttons, app header.
+    - family: PlusJakartaSans
+      fonts:
+        - asset: assets/fonts/PlusJakartaSans-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/PlusJakartaSans-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/PlusJakartaSans-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/PlusJakartaSans-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/PlusJakartaSans-ExtraBold.ttf
+          weight: 800
+
+    # ── Legacy stubs (kept for backward compat, 0-byte placeholders) ──────
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/DMSans-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/DMSans-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/DMSans-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/DMSans-Bold.ttf
+          weight: 700
+    - family: Poppins
+      fonts:
+        - asset: assets/fonts/PlusJakartaSans-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/PlusJakartaSans-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/PlusJakartaSans-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/PlusJakartaSans-Bold.ttf
+          weight: 700
+    - family: NexaTrial
+      fonts:
+        - asset: assets/fonts/Nexa-Trial-Regular.otf
+
+flutter_native_splash:
+  color: "#FFFFFF"
+  image: assets/images/freshcuts-splash-screen.jpg
+  color_dark: "#FFFFFF"
+  image_dark: assets/images/freshcuts-splash-screen.jpg
+  android_12:
+    image: assets/icon/app_icon.png
+    icon_background_color: "#FFFFFF"
+    color: "#FFFFFF"
+  web: false
+
+flutter_launcher_icons:
+  android: launcher_icon
+  ios: true
+  image_path: assets/icon/app_icon.png
+  min_sdk_android: 23
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: assets/icon/app_icon.png
+  remove_alpha_ios: true

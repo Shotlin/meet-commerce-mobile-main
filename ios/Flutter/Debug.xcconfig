@@ -1,0 +1,13 @@
+#include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"
+#include "Generated.xcconfig"
+
+// Generated.xcconfig sets EXCLUDED_ARCHS[sdk=iphonesimulator*]=i386, which is
+// included after (and so overrides) the Pods-Runner exclusion above — even
+// though every pod target correctly excludes x86_64 (Razorpay's XCFramework
+// only ships an arm64 simulator slice), Runner itself was still trying to
+// build both x86_64 and arm64. Xcode's implicit-dependency resolution can't
+// satisfy that for the aggregate Pods-Runner framework, so it silently
+// skipped building every pod target rather than just the missing slice,
+// which surfaced as a "Module 'connectivity_plus' not found" parse error at
+// GeneratedPluginRegistrant.m — completely unrelated to that plugin itself.
+EXCLUDED_ARCHS[sdk=iphonesimulator*] = i386 x86_64

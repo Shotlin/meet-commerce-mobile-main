@@ -1,0 +1,241 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1. Write bug condition exploration test": [
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781754253735
+      },
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781754264940
+      }
+    ],
+    "2. Write preservation property tests (BEFORE implementing fix)": [
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781754253790
+      },
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781754269176
+      }
+    ],
+    "3.1 Create `lib/core/utils/app_toast.dart`": [
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781754253824
+      },
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781754277340
+      },
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781754440341
+      }
+    ],
+    "3.2 Update `showCartSnackBar` in `lib/features/cart/presentation/providers/cart_provider.dart`": [
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781754253866
+      },
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781754450273
+      },
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781754533172
+      }
+    ],
+    "3.3 Fix silent max-qty guard in `lib/features/products/presentation/widgets/product_option_bottom_sheet.dart`": [
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781754253900
+      },
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781754538547
+      },
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781754635879
+      }
+    ],
+    "3.4 Replace `ScaffoldMessenger` calls in `lib/features/orders/presentation/screens/orders_screen.dart`": [
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781754253949
+      },
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781754658141
+      },
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781754794683
+      }
+    ],
+    "3.5 Replace `ScaffoldMessenger` calls in `lib/features/orders/presentation/screens/order_detail_screen.dart`": [
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781754253978
+      },
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781754799994
+      },
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781755141732
+      }
+    ],
+    "3.6 Replace `ScaffoldMessenger` calls in `lib/features/profile/presentation/screens/profile_screen.dart`": [
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781754254005
+      },
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781755146930
+      }
+    ],
+    "3.7 Replace `ScaffoldMessenger` calls in `lib/features/addresses/presentation/screens/address_list_screen.dart`": [
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781754254027
+      },
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781755147948
+      },
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781755154058
+      }
+    ],
+    "3.8 Replace `ScaffoldMessenger` calls in `lib/features/notifications/presentation/screens/notifications_screen.dart`": [
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781754254051
+      },
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781755160616
+      }
+    ],
+    "3.9 Replace `_showSnackBar` calls in `lib/features/checkout/presentation/screens/checkout_screen.dart`": [
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781754254078
+      },
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781755165914
+      }
+    ],
+    "3.10 Replace `_showSnackBar` calls in `lib/features/addresses/presentation/screens/add_edit_address_screen.dart`": [
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781754254101
+      },
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781755171536
+      },
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781755472110
+      }
+    ],
+    "3.11 Replace `ScaffoldMessenger` calls in `lib/features/reviews/presentation/screens/write_review_screen.dart`": [
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781754254116
+      },
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781755478197
+      }
+    ],
+    "3.12 Replace `ScaffoldMessenger` calls in `lib/features/wallet/presentation/screens/topup_screen.dart`": [
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781754254134
+      },
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781755484929
+      }
+    ],
+    "3.13 Build release APK and install on device": [
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781754254153
+      },
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781755490733
+      }
+    ],
+    "3.14 Verify bug condition exploration test now passes": [
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781754254176
+      }
+    ],
+    "3.15 Verify preservation tests still pass": [
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781754254191
+      }
+    ],
+    "4. Checkpoint — Ensure all tests pass": [
+      {
+        "executionId": "9c3fea71-220c-4db6-94b4-8153ba9be7ce",
+        "chatSessionId": "sess_55bb1a9d-42e7-484c-9ed2-daa297549084",
+        "timestamp": 1781754254207
+      }
+    ]
+  }
+}
