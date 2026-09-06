@@ -284,10 +284,6 @@ class _StoreScreenShellState extends ConsumerState<StoreScreenShell>
                                   addressText: addressText,
                                   onAddressTap: () =>
                                       showAddressSheet(context),
-                                  onNotificationTap: () =>
-                                      context.go(RouteNames.notifications),
-                                  onWalletTap: () =>
-                                      context.go(RouteNames.wallet),
                                   topBarTheme: chromeTheme.topBarTheme,
                                   searchZoneColor: chromeTheme.searchZoneColor,
                                   deliveryEtaMinutes: deliveryEtaMinutes,

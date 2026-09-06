@@ -7,8 +7,6 @@ import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
-import 'package:bakaloo_flutter_app/core/theme/app_dimensions.dart';
-import 'package:bakaloo_flutter_app/core/theme/app_text_styles.dart';
 import 'package:bakaloo_flutter_app/core/utils/app_toast.dart';
 import 'package:bakaloo_flutter_app/features/profile/presentation/providers/profile_provider.dart';
 import 'package:bakaloo_flutter_app/routing/route_names.dart';
@@ -54,166 +52,213 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     }
 
     return Scaffold(
-      backgroundColor: AppColors.bgPrimary,
-      appBar: AppBar(
-        title: Text('Edit Profile', style: AppTextStyles.h2),
-        leading: IconButton(
-          onPressed: () => context.pop(),
-          icon: PhosphorIcon(
-            PhosphorIcons.caretLeft,
-            color: AppColors.textPrimary,
-            size: 22.sp,
+      body: Stack(
+        fit: StackFit.expand,
+        children: <Widget>[
+          Image.asset(
+            'assets/images/freshcuts-edit-profile-background.png',
+            fit: BoxFit.cover,
           ),
-        ),
-      ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 30.h),
-          children: <Widget>[
-            Text(
-              'Name',
-              style: AppTextStyles.labelLarge.copyWith(
-                fontSize: 13.sp,
-                color: AppColors.textSecondary,
-              ),
-            ),
-            Gap(6.h),
-            TextFormField(
-              controller: _nameController,
-              textInputAction: TextInputAction.next,
-              decoration: _inputDecoration('Enter your name'),
-              validator: (value) {
-                final text = value?.trim() ?? '';
-                if (text.length < 2) {
-                  return 'Name must be at least 2 characters';
-                }
-                return null;
-              },
-            ),
-            Gap(14.h),
-            Text(
-              'Email',
-              style: AppTextStyles.labelLarge.copyWith(
-                fontSize: 13.sp,
-                color: AppColors.textSecondary,
-              ),
-            ),
-            Gap(6.h),
-            TextFormField(
-              controller: _emailController,
-              keyboardType: TextInputType.emailAddress,
-              textInputAction: TextInputAction.done,
-              decoration: _inputDecoration('Enter your email'),
-              validator: (value) {
-                final text = value?.trim() ?? '';
-                if (text.isEmpty) {
-                  return null;
-                }
-                final valid = RegExp(
-                  r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$',
-                ).hasMatch(text);
-                if (!valid) {
-                  return 'Enter a valid email address';
-                }
-                return null;
-              },
-            ),
-            Gap(14.h),
-            Text(
-              'Birthday',
-              style: AppTextStyles.labelLarge.copyWith(
-                fontSize: 13.sp,
-                color: AppColors.textSecondary,
-              ),
-            ),
-            Gap(6.h),
-            InkWell(
-              borderRadius: BorderRadius.circular(AppDimensions.radiusMd.r),
-              onTap: _pickBirthday,
-              child: InputDecorator(
-                decoration: _inputDecoration('Select birthday'),
-                child: Row(
+          SafeArea(
+            child: Form(
+              key: _formKey,
+              child: SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 24.h),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: <Widget>[
-                    Expanded(
+                    Row(
+                      children: <Widget>[
+                        GestureDetector(
+                          onTap: () => context.pop(),
+                          child: Container(
+                            width: 40.w,
+                            height: 40.w,
+                            decoration: const BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.arrow_back,
+                              size: 20.sp,
+                              color: const Color(0xFF1A1A1A),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Image.asset(
+                            'assets/images/freshcuts-logo-wordmark.png',
+                            height: 46.h,
+                            fit: BoxFit.contain,
+                          ),
+                        ),
+                        SizedBox(width: 40.w),
+                      ],
+                    ),
+                    Gap(20.h),
+                    Text(
+                      'Edit Profile',
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 13.sp,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    Gap(4.h),
+                    RichText(
+                      text: TextSpan(
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 26.sp,
+                          fontWeight: FontWeight.w800,
+                          height: 1.2,
+                          color: const Color(0xFF1A1A1A),
+                        ),
+                        children: <TextSpan>[
+                          const TextSpan(text: 'Your Details,\n'),
+                          TextSpan(
+                            text: 'A Fresher You',
+                            style: TextStyle(color: AppColors.brandRed),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Gap(8.h),
+                    SizedBox(
+                      width: 220.w,
                       child: Text(
-                        _birthday == null
-                            ? 'Select birthday'
-                            : DateFormat('dd MMM yyyy').format(_birthday!),
-                        style: AppTextStyles.bodyLarge.copyWith(
-                          color: _birthday == null
-                              ? AppColors.textTertiary
-                              : AppColors.textPrimary,
+                        'Keep your information up to date for a better '
+                        'experience.',
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 12.5.sp,
+                          fontWeight: FontWeight.w400,
+                          color: AppColors.textSecondary,
+                          height: 1.4,
                         ),
                       ),
                     ),
-                    PhosphorIcon(
-                      PhosphorIcons.calendarDots,
-                      size: 20.sp,
-                      color: AppColors.textSecondary,
+                    Gap(18.h),
+                    Container(
+                      padding: EdgeInsets.all(18.w),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20.r),
+                        boxShadow: <BoxShadow>[
+                          BoxShadow(
+                            color: const Color(0x14000000),
+                            blurRadius: 24.r,
+                            offset: Offset(0, 8.h),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        children: <Widget>[
+                          _ProfileField(
+                            icon: PhosphorIcons.userFill,
+                            label: 'Full Name',
+                            controller: _nameController,
+                            hint: 'Enter your name',
+                            validator: (value) {
+                              final text = value?.trim() ?? '';
+                              if (text.length < 2) {
+                                return 'Name must be at least 2 characters';
+                              }
+                              return null;
+                            },
+                          ),
+                          Gap(16.h),
+                          _ProfileField(
+                            icon: PhosphorIcons.envelopeSimpleFill,
+                            label: 'Email Address',
+                            controller: _emailController,
+                            hint: 'Enter your email',
+                            keyboardType: TextInputType.emailAddress,
+                            validator: (value) {
+                              final text = value?.trim() ?? '';
+                              if (text.isEmpty) return null;
+                              final valid = RegExp(
+                                r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$',
+                              ).hasMatch(text);
+                              return valid
+                                  ? null
+                                  : 'Enter a valid email address';
+                            },
+                          ),
+                          Gap(16.h),
+                          _ProfileField(
+                            icon: PhosphorIcons.calendarDotsFill,
+                            label: 'Date of Birth',
+                            hint: 'Select birthday',
+                            readOnlyText: _birthday == null
+                                ? null
+                                : DateFormat('dd MMM yyyy').format(_birthday!),
+                            onTap: _pickBirthday,
+                          ),
+                        ],
+                      ),
+                    ),
+                    Gap(18.h),
+                    Material(
+                      color: AppColors.brandRed,
+                      borderRadius: BorderRadius.circular(28.r),
+                      child: InkWell(
+                        onTap: _isSaving ? null : _save,
+                        borderRadius: BorderRadius.circular(28.r),
+                        child: Container(
+                          height: 54.h,
+                          alignment: Alignment.center,
+                          child: _isSaving
+                              ? SizedBox(
+                                  width: 22.sp,
+                                  height: 22.sp,
+                                  child: const CircularProgressIndicator(
+                                    strokeWidth: 2.4,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: <Widget>[
+                                    Text(
+                                      'Save Changes',
+                                      style: TextStyle(
+                                        fontFamily: 'Poppins',
+                                        fontSize: 15.5.sp,
+                                        fontWeight: FontWeight.w700,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                    Gap(8.w),
+                                    Icon(
+                                      Icons.arrow_forward,
+                                      size: 18.sp,
+                                      color: Colors.white,
+                                    ),
+                                  ],
+                                ),
+                        ),
+                      ),
+                    ),
+                    Gap(14.h),
+                    Text(
+                      'Fresher Everyday',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        fontStyle: FontStyle.italic,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13.sp,
+                        color: AppColors.brandRed,
+                      ),
                     ),
                   ],
                 ),
               ),
             ),
-            Gap(22.h),
-            SizedBox(
-              height: 50.h,
-              child: FilledButton(
-                onPressed: _isSaving ? null : _save,
-                child: _isSaving
-                    ? SizedBox(
-                        height: 20.r,
-                        width: 20.r,
-                        child: const CircularProgressIndicator(
-                          strokeWidth: 2.2,
-                          color: AppColors.textOnGreen,
-                        ),
-                      )
-                    : Text(
-                        'Save',
-                        style: AppTextStyles.buttonLarge.copyWith(
-                          color: AppColors.textOnGreen,
-                        ),
-                      ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  InputDecoration _inputDecoration(String hint) {
-    return InputDecoration(
-      hintText: hint,
-      hintStyle:
-          AppTextStyles.bodyMedium.copyWith(color: AppColors.textTertiary),
-      filled: true,
-      fillColor: AppColors.bgCard,
-      contentPadding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 14.h),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppDimensions.radiusMd.r),
-        borderSide: const BorderSide(color: AppColors.borderLight),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppDimensions.radiusMd.r),
-        borderSide: const BorderSide(color: AppColors.borderLight),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppDimensions.radiusMd.r),
-        borderSide: const BorderSide(
-          color: AppColors.primaryGreen,
-          width: 1.2,
-        ),
-      ),
-      errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppDimensions.radiusMd.r),
-        borderSide: const BorderSide(color: AppColors.errorRed),
-      ),
-      focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppDimensions.radiusMd.r),
-        borderSide: const BorderSide(color: AppColors.errorRed, width: 1.2),
+          ),
+        ],
       ),
     );
   }
@@ -278,6 +323,145 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       context,
       'Profile updated successfully',
       type: ToastType.success,
+    );
+  }
+}
+
+class _ProfileField extends StatelessWidget {
+  const _ProfileField({
+    required this.icon,
+    required this.label,
+    required this.hint,
+    this.controller,
+    this.keyboardType,
+    this.validator,
+    this.readOnlyText,
+    this.onTap,
+  });
+
+  final PhosphorIconData icon;
+  final String label;
+  final String hint;
+  final TextEditingController? controller;
+  final TextInputType? keyboardType;
+  final String? Function(String?)? validator;
+  final String? readOnlyText;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Container(
+          width: 40.w,
+          height: 40.w,
+          margin: EdgeInsets.only(top: 20.h),
+          decoration: BoxDecoration(
+            color: AppColors.brandRedSurface,
+            borderRadius: BorderRadius.circular(12.r),
+          ),
+          child: Center(
+            child: PhosphorIcon(
+              icon,
+              size: 18.sp,
+              color: AppColors.brandRed,
+            ),
+          ),
+        ),
+        Gap(12.w),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                label,
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 12.sp,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF1A1A1A),
+                ),
+              ),
+              Gap(6.h),
+              if (onTap != null)
+                InkWell(
+                  onTap: onTap,
+                  borderRadius: BorderRadius.circular(12.r),
+                  child: Container(
+                    width: double.infinity,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 14.w,
+                      vertical: 12.h,
+                    ),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12.r),
+                      border: Border.all(color: const Color(0xFFE5E5E5)),
+                    ),
+                    child: Row(
+                      children: <Widget>[
+                        Expanded(
+                          child: Text(
+                            readOnlyText ?? hint,
+                            style: TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 13.sp,
+                              color: readOnlyText == null
+                                  ? AppColors.textTertiary
+                                  : const Color(0xFF1A1A1A),
+                            ),
+                          ),
+                        ),
+                        Icon(
+                          Icons.calendar_today_outlined,
+                          size: 16.sp,
+                          color: AppColors.textSecondary,
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                TextFormField(
+                  controller: controller,
+                  keyboardType: keyboardType,
+                  validator: validator,
+                  style: TextStyle(fontFamily: 'Inter', fontSize: 13.sp),
+                  decoration: InputDecoration(
+                    hintText: hint,
+                    hintStyle: TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 13.sp,
+                      color: AppColors.textTertiary,
+                    ),
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 14.w,
+                      vertical: 12.h,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12.r),
+                      borderSide: const BorderSide(color: Color(0xFFE5E5E5)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12.r),
+                      borderSide: const BorderSide(color: Color(0xFFE5E5E5)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12.r),
+                      borderSide: const BorderSide(
+                          color: AppColors.brandRed, width: 1.2),
+                    ),
+                    errorBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12.r),
+                      borderSide: const BorderSide(color: Colors.red),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

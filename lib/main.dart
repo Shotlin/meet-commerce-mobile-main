@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:maplibre_gl/maplibre_gl.dart';
 
 import 'package:bakaloo_flutter_app/app.dart';
 import 'package:bakaloo_flutter_app/core/constants/app_constants.dart';
@@ -44,6 +45,15 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // MapLibre's default Android platform-view mode (SurfaceView-backed) is
+  // known to render a solid black surface instead of map tiles on a subset
+  // of devices (widely reported on MIUI/Xiaomi, and whenever the map sits
+  // inside a Stack with other overlays composited above it, as
+  // AddressMapPickerScreen does). Hybrid composition (TextureView-backed) is
+  // slightly slower to render but avoids that failure mode entirely — this
+  // must be set before the first MapLibreMap widget is created.
+  MapLibreMap.useHybridComposition = true;
 
   await dotenv.load(fileName: '.env');
   try {

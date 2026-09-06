@@ -38,6 +38,13 @@ class AppCacheManager {
 
   static const String _sectionManifestBoxName = 'section_manifests';
 
+  static const String _shopScopeKey = 'bakaloo_app_cache_shop_scope';
+
+  /// The literal scope for anonymous/unallocated browsing — mirrors the
+  /// backend's `_scopeKey` in products.service.js, which returns 'anon' for
+  /// callers with no resolved shop allocation.
+  static const String anonShopScope = 'anon';
+
   /// Call once after [HiveService.init], before the first screen renders.
   /// Wipes stale caches when the schema version or API base URL changed.
   static Future<void> ensureFreshOnStartup() async {
@@ -117,10 +124,109 @@ class AppCacheManager {
     }
   }
 
-  /// Clears only user-scoped data caches (cart/wallet/orders/profile/addresses).
-  /// Layout/theme/product caches are public and need not be wiped here.
+  /// Clears the local product/category/theme caches that are now scoped to
+  /// the customer's allocated shop, not "public" — that assumption held
+  /// before multi-store existed (one shop, one catalog, same for everyone),
+  /// but no longer does. ProductRepositoryImpl's page-1 product list cache
+  /// in particular is stale-while-revalidate with a 10-minute TTL keyed only
+  /// by page/limit (never by shop), so a page fetched before a customer's
+  /// allocation resolved (or before it changed) to a different store would
+  /// otherwise keep being served — correctly scoped server responses never
+  /// even get requested until the TTL naturally expires.
+  ///
+  /// Call this whenever the customer's shop allocation may have changed:
+  /// login/session-restore and after allocation auto-assign/recompute
+  /// (see auth_notifier.dart and allocation_recompute.dart).
+  static Future<void> clearShopScopedCaches() async {
+    await _safeClearBox(HiveService.productsBox);
+    await _safeClearBox(HiveService.categoriesBox);
+    await _safeClearBox(HiveService.remoteThemeBox);
+    await _clearSectionManifestBox();
+  }
+
+  /// The current customer's shop-allocation scope, as a stable string derived
+  /// from their allocated shop id(s) — 'anon' when unresolved/anonymous.
+  ///
+  /// Read synchronously by ProductRepositoryImpl and folded into its Hive
+  /// cache keys, so a different allocation (or no allocation at all) can
+  /// never read another scope's cached product list — the two live under
+  /// different keys entirely rather than depending on cache invalidation
+  /// happening to run before the next read. This mirrors the backend's
+  /// products.service.js `_scopeKey`, which does the same thing server-side.
+  static String get currentShopScope {
+    try {
+      final stored = HiveService.settingsBox.get(_shopScopeKey) as String?;
+      return (stored == null || stored.isEmpty) ? anonShopScope : stored;
+    } catch (_) {
+      return anonShopScope;
+    }
+  }
+
+  /// Call after any allocation call (auto-assign/recompute) resolves with a
+  /// shop id list — including an empty list, which maps to [anonShopScope].
+  /// Clears the shop-scoped caches only when the scope actually changed, so
+  /// unrelated calls (e.g. a recompute that confirms the same shop) don't pay
+  /// for a needless refetch.
+  static Future<void> setShopScope(List<String> shopIds) async {
+    final sorted = [...shopIds]..sort();
+    final next = sorted.isEmpty ? anonShopScope : sorted.join(',');
+    await _applyShopScope(next);
+  }
+
+  /// Call on logout so the next anonymous session (or a different customer
+  /// logging in on the same device) never reads the previous customer's
+  /// shop-scoped cache before their own allocation resolves.
+  static Future<void> resetShopScope() => _applyShopScope(anonShopScope);
+
+  /// Parses an allocation endpoint's response body — auto-assign and
+  /// recompute are both shaped `{success, message, data: {shops: [...]}}`
+  /// server-side (see allocation.routes.js / allocation.service.js
+  /// `getForUser`), with each shop object carrying a `shop_id` — and applies
+  /// the resulting scope via [setShopScope]. Best-effort: an unexpected shape
+  /// (or an empty/absent shops list, e.g. no address yet) just leaves the
+  /// scope as anonymous rather than throwing.
+  static Future<void> applyAllocationResponse(dynamic responseData) async {
+    try {
+      final data = responseData is Map ? responseData['data'] : null;
+      final shops = data is Map ? data['shops'] : null;
+      if (shops is! List) {
+        return;
+      }
+      final shopIds = shops
+          .whereType<Map>()
+          .map((shop) => shop['shop_id'])
+          .whereType<String>()
+          .where((id) => id.isNotEmpty)
+          .toList();
+      await setShopScope(shopIds);
+    } catch (error) {
+      debugPrint('[AppCacheManager] applyAllocationResponse failed: $error');
+    }
+  }
+
+  static Future<void> _applyShopScope(String next) async {
+    try {
+      final settings = HiveService.settingsBox;
+      final current = settings.get(_shopScopeKey) as String?;
+      if (current == next) {
+        return;
+      }
+      if (current != null) {
+        await clearShopScopedCaches();
+      }
+      await settings.put(_shopScopeKey, next);
+    } catch (error) {
+      debugPrint('[AppCacheManager] setShopScope failed: $error');
+    }
+  }
+
+  /// Clears only user-scoped data caches (cart/wallet/orders/profile/addresses),
+  /// plus shop-scoped product/category/theme caches — a different user may
+  /// well be allocated to a different store, so the previous user's cached
+  /// catalog can't be trusted for them either.
   static Future<void> _clearUserSpecificCaches() async {
     await _safeClearBox(HiveService.ordersBox);
+    await clearShopScopedCaches();
     // Cart and wallet are not persisted in their own Hive box (cart lives in
     // backend Redis, wallet is fetched live), but any cached profile/address
     // snapshot and order history must be dropped so the new user starts clean.

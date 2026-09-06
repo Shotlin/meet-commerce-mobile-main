@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 
 import 'package:bakaloo_flutter_app/core/errors/error_handler.dart';
 import 'package:bakaloo_flutter_app/core/errors/failure.dart';
+import 'package:bakaloo_flutter_app/core/storage/app_cache_manager.dart';
 import 'package:bakaloo_flutter_app/core/storage/cache_strategy.dart';
 import 'package:bakaloo_flutter_app/features/products/data/datasources/product_remote_datasource.dart';
 import 'package:bakaloo_flutter_app/features/products/data/local/product_local_datasource.dart';
@@ -29,7 +30,14 @@ class ProductRepositoryImpl implements ProductRepository {
     int page = 1,
     int limit = 20,
   }) async {
-    final cacheKey = 'products_page_${page}_$limit';
+    // Shop-scoped: the server's product list is filtered to the customer's
+    // allocated shop(s) (or the shared/anon catalog when unallocated), so the
+    // local cache must be keyed by that same scope — otherwise a page cached
+    // under one scope (e.g. anonymous, pre-login) would keep being served
+    // after the customer's real allocation resolves, regardless of when/if
+    // an invalidation happens to run first. See AppCacheManager.currentShopScope.
+    final cacheKey =
+        'products_page_${page}_${limit}_${AppCacheManager.currentShopScope}';
 
     if (page == 1) {
       final cached = _cachedPage(cacheKey);
@@ -254,6 +262,9 @@ class ProductRepositoryImpl implements ProductRepository {
     required String cacheKey,
     required Duration ttl,
   }) async {
+    // See the matching comment in getProducts — these lists are shop-scoped
+    // server-side too, so the cache key must be as well.
+    cacheKey = '${cacheKey}_${AppCacheManager.currentShopScope}';
     final cachedJson = _localDataSource.getCachedList(cacheKey);
     final cachedItems =
         (cachedJson?['items'] as List<dynamic>? ?? const <dynamic>[])

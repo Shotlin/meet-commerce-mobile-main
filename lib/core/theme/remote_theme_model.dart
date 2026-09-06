@@ -82,10 +82,17 @@ class TopBarTheme {
   const TopBarTheme({
     required this.backgroundColor,
     required this.textColor,
+    this.colorEnabled = true,
   });
 
   final Color backgroundColor;
   final Color textColor;
+
+  /// When false, [backgroundColor] is not painted (renders transparent) so a
+  /// [HeaderBackgroundTheme.imageUrl] set behind the combined top bar /
+  /// search zone / category tabs block shows through. Defaults to true so
+  /// themes saved before this field existed keep their original solid color.
+  final bool colorEnabled;
 
   factory TopBarTheme.fromJson(Map<String, dynamic> json) {
     final defaults = TopBarTheme.defaults();
@@ -98,17 +105,20 @@ class TopBarTheme {
         _parseNullableString(json['textColor']),
         defaults.textColor,
       ),
+      colorEnabled: _parseBool(json['colorEnabled'], defaults.colorEnabled),
     );
   }
 
   factory TopBarTheme.defaults() => const TopBarTheme(
         backgroundColor: Color(0xFF88D4FE),
         textColor: Color(0xFF000000),
+        colorEnabled: true,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
         'backgroundColor': _colorToHex(backgroundColor),
         'textColor': _colorToHex(textColor),
+        'colorEnabled': colorEnabled,
       };
 }
 
@@ -152,14 +162,21 @@ class CategoryTabsTheme {
     required this.textColor,
     required this.indicatorColor,
     this.backgroundColor,
+    this.colorEnabled = true,
   });
 
   final bool visible;
   final Color textColor;
   final Color indicatorColor;
+
   /// Optional independent background for the category-tabs container row.
   /// When null, the parent [SearchZoneTheme.backgroundColor] is used (legacy behavior).
   final Color? backgroundColor;
+
+  /// When false, no background color is painted for this row (renders
+  /// transparent) so [HeaderBackgroundTheme.imageUrl] shows through.
+  /// Defaults to true for backward compatibility.
+  final bool colorEnabled;
 
   factory CategoryTabsTheme.fromJson(Map<String, dynamic> json) {
     final defaults = CategoryTabsTheme.defaults();
@@ -177,9 +194,11 @@ class CategoryTabsTheme {
       backgroundColor: json['backgroundColor'] != null
           ? _parseColor(
               _parseNullableString(json['backgroundColor']),
-              defaults.textColor, // dummy fallback — null is returned when key absent
+              defaults
+                  .textColor, // dummy fallback — null is returned when key absent
             )
           : null,
+      colorEnabled: _parseBool(json['colorEnabled'], defaults.colorEnabled),
     );
   }
 
@@ -188,6 +207,7 @@ class CategoryTabsTheme {
         textColor: Color(0xFF111827),
         indicatorColor: Color(0xFF111827),
         backgroundColor: null,
+        colorEnabled: true,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -196,6 +216,7 @@ class CategoryTabsTheme {
         'indicatorColor': _colorToHex(indicatorColor),
         if (backgroundColor != null)
           'backgroundColor': _colorToHex(backgroundColor!),
+        'colorEnabled': colorEnabled,
       };
 }
 
@@ -205,12 +226,17 @@ class SearchZoneTheme {
     required this.waveColor,
     required this.searchHints,
     required this.promoBoxImageUrl,
+    this.colorEnabled = true,
   });
 
   final Color backgroundColor;
   final Color waveColor;
   final List<String> searchHints;
   final String? promoBoxImageUrl;
+
+  /// When false, [backgroundColor] is not painted (renders transparent) so a
+  /// [HeaderBackgroundTheme.imageUrl] shows through. Defaults to true.
+  final bool colorEnabled;
 
   static const List<String> _defaultSearchHints = <String>[
     'fresh vegetables',
@@ -237,6 +263,7 @@ class SearchZoneTheme {
         defaults.searchHints,
       ),
       promoBoxImageUrl: _parseNullableString(json['promoBoxImageUrl']),
+      colorEnabled: _parseBool(json['colorEnabled'], defaults.colorEnabled),
     );
   }
 
@@ -245,6 +272,7 @@ class SearchZoneTheme {
         waveColor: const Color(0xFF88D4FE),
         searchHints: List<String>.from(_defaultSearchHints),
         promoBoxImageUrl: null,
+        colorEnabled: true,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -252,6 +280,7 @@ class SearchZoneTheme {
         'waveColor': _colorToHex(waveColor),
         'searchHints': List<String>.from(searchHints),
         'promoBoxImageUrl': promoBoxImageUrl,
+        'colorEnabled': colorEnabled,
       };
 }
 
@@ -302,6 +331,27 @@ class BannerAnimationTheme {
       };
 }
 
+/// A single image spanning the combined Top Bar + Search Zone + Category
+/// Tabs block, painted behind them. Pair with `colorEnabled: false` on those
+/// three sections' themes so their solid colors don't cover it.
+class HeaderBackgroundTheme {
+  const HeaderBackgroundTheme({required this.imageUrl});
+
+  final String? imageUrl;
+
+  factory HeaderBackgroundTheme.fromJson(Map<String, dynamic> json) =>
+      HeaderBackgroundTheme(
+        imageUrl: _parseNullableString(json['imageUrl']),
+      );
+
+  factory HeaderBackgroundTheme.defaults() =>
+      const HeaderBackgroundTheme(imageUrl: null);
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'imageUrl': imageUrl,
+      };
+}
+
 class FeeStripTheme {
   const FeeStripTheme({
     required this.imageUrl,
@@ -347,9 +397,7 @@ class MosaicTileAction {
     if (type == 'tab' || type == 'app_page') {
       return value != null && value!.isNotEmpty;
     }
-    if (type == 'product' ||
-        type == 'category' ||
-        type == 'external_url') {
+    if (type == 'product' || type == 'category' || type == 'external_url') {
       return value != null && value!.isNotEmpty;
     }
     return false;
@@ -389,6 +437,7 @@ class HeroTileTheme {
   final List<Color> badgeGradient;
   final String? imageUrl;
   final MosaicTileAction? action;
+
   /// 'cover' = a complete, pre-designed banner meant to fill the whole
   /// tile edge-to-edge (own caption/branding already baked in — no title
   /// overlay area reserved). 'contain' (default) keeps the original
@@ -656,7 +705,8 @@ class ThemeSections {
     required this.feeStrip,
     required this.seasonalMosaic,
     required this.bankOffers,
-  });
+    HeaderBackgroundTheme? headerBackground,
+  }) : headerBackground = headerBackground ?? HeaderBackgroundTheme.defaults();
 
   final TopBarTheme topBar;
   final StoreSelectorTheme storeSelector;
@@ -666,6 +716,10 @@ class ThemeSections {
   final FeeStripTheme feeStrip;
   final SeasonalMosaicTheme seasonalMosaic;
   final BankOffersTheme bankOffers;
+
+  /// Shared background image behind topBar + searchZone + categoryTabs.
+  /// Additive — absent in themes saved before this field existed.
+  final HeaderBackgroundTheme headerBackground;
 
   factory ThemeSections.fromJson(Map<String, dynamic> json) => ThemeSections(
         topBar: TopBarTheme.fromJson(_asMap(json['topBar'])),
@@ -679,6 +733,8 @@ class ThemeSections {
         seasonalMosaic:
             SeasonalMosaicTheme.fromJson(_asMap(json['seasonalMosaic'])),
         bankOffers: BankOffersTheme.fromJson(_asMap(json['bankOffers'])),
+        headerBackground:
+            HeaderBackgroundTheme.fromJson(_asMap(json['headerBackground'])),
       );
 
   factory ThemeSections.defaults() => ThemeSections(
@@ -690,6 +746,7 @@ class ThemeSections {
         feeStrip: FeeStripTheme.defaults(),
         seasonalMosaic: SeasonalMosaicTheme.defaults(),
         bankOffers: BankOffersTheme.defaults(),
+        headerBackground: HeaderBackgroundTheme.defaults(),
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -701,6 +758,7 @@ class ThemeSections {
         'feeStrip': feeStrip.toJson(),
         'seasonalMosaic': seasonalMosaic.toJson(),
         'bankOffers': bankOffers.toJson(),
+        'headerBackground': headerBackground.toJson(),
       };
 }
 

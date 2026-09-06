@@ -7,9 +7,6 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:bakaloo_flutter_app/core/network/app_availability_provider.dart';
 import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
 import 'package:bakaloo_flutter_app/core/theme/app_text_styles.dart';
-import 'package:bakaloo_flutter_app/routing/app_router.dart';
-import 'package:bakaloo_flutter_app/routing/route_names.dart';
-import 'package:bakaloo_flutter_app/shared/widgets/bakaloo_state_screen.dart';
 
 class AppAvailabilityGate extends ConsumerWidget {
   const AppAvailabilityGate({
@@ -28,33 +25,178 @@ class AppAvailabilityGate extends ConsumerWidget {
         child,
         if (status == AppAvailabilityStatus.offline)
           Positioned.fill(
-            child: BakalooStateScreen(
-              illustrationAsset:
-                  'assets/images/bakaloo-offline-state-illustration.png',
-              icon: PhosphorIcons.wifiSlashBold,
-              title: "You're offline",
-              subtitle:
-                  'Please check your internet connection\nand try again.',
-              primaryLabel: 'Retry',
-              onPrimary: () =>
-                  ref.read(appAvailabilityProvider.notifier).retry(),
-              secondaryLabel: 'Browse saved items',
-              onSecondary: () {
-                ref.read(appAvailabilityProvider.notifier).browseOffline();
-                // Navigate via the router instance (this gate lives above the
-                // Router subtree, so `context.go` has no GoRouter ancestor).
-                ref.read(appRouterProvider).go(RouteNames.wishlist);
-              },
+            child: _OfflineScreen(
+              onRetry: () => ref.read(appAvailabilityProvider.notifier).retry(),
             ),
           )
         else if (status == AppAvailabilityStatus.serviceUnavailable)
           Positioned.fill(
             child: _ServiceUnavailableBlocker(
-              onRetry: () =>
-                  ref.read(appAvailabilityProvider.notifier).retry(),
+              onRetry: () => ref.read(appAvailabilityProvider.notifier).retry(),
             ),
           ),
       ],
+    );
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Offline screen — shown full-screen (overlaid above whatever page the
+// customer was on) the moment device connectivity drops, from
+// AppAvailabilityGate wrapping the whole app. Both buttons re-run the same
+// real connectivity check (there's only one honest way to "check the
+// connection" from inside the app); no fabricated network-diagnostics step.
+// ───────────────────────────────────────────────────────────────────────────
+class _OfflineScreen extends StatelessWidget {
+  const _OfflineScreen({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: const Color(0xFFFCFCFE),
+      child: SafeArea(
+        child: SingleChildScrollView(
+          padding: EdgeInsets.only(top: 12.h, bottom: 24.h),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20.w),
+                child: Image.asset(
+                  'assets/images/freshcuts-logo-wordmark.png',
+                  height: 42.h,
+                  fit: BoxFit.contain,
+                  alignment: Alignment.centerLeft,
+                ),
+              ),
+              Gap(8.h),
+              Image.asset(
+                'assets/images/freshcuts-offline-state-illustration.png',
+                width: double.infinity,
+                fit: BoxFit.fitWidth,
+              ),
+              Gap(12.h),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20.w),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    RichText(
+                      textAlign: TextAlign.center,
+                      text: TextSpan(
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 21.sp,
+                          fontWeight: FontWeight.w800,
+                          height: 1.25,
+                          color: const Color(0xFF1A1A1A),
+                        ),
+                        children: <TextSpan>[
+                          const TextSpan(text: 'No internet\n'),
+                          TextSpan(
+                            text: 'connection',
+                            style: TextStyle(color: AppColors.brandRed),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Gap(10.h),
+                    Text(
+                      'Please check your network and try again. We need an '
+                      'active connection to show fresh products and deliver '
+                      'to your area.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 13.5.sp,
+                        fontWeight: FontWeight.w400,
+                        color: AppColors.textSecondary,
+                        height: 1.45,
+                      ),
+                    ),
+                    Gap(24.h),
+                    _OfflineButton(
+                      label: 'Try Again',
+                      icon: PhosphorIcons.arrowClockwiseBold,
+                      filled: true,
+                      onTap: onRetry,
+                    ),
+                    Gap(12.h),
+                    _OfflineButton(
+                      label: 'Check Connection',
+                      icon: PhosphorIcons.wifiHighBold,
+                      filled: false,
+                      onTap: onRetry,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _OfflineButton extends StatelessWidget {
+  const _OfflineButton({
+    required this.label,
+    required this.icon,
+    required this.filled,
+    required this.onTap,
+  });
+
+  final String label;
+  final PhosphorIconData icon;
+  final bool filled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: filled ? AppColors.brandRed : Colors.white,
+      borderRadius: BorderRadius.circular(28.r),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(28.r),
+        child: Container(
+          width: double.infinity,
+          height: 52.h,
+          alignment: Alignment.center,
+          decoration: filled
+              ? null
+              : BoxDecoration(
+                  borderRadius: BorderRadius.circular(28.r),
+                  border: Border.all(
+                    color: const Color(0xFFDDDDDD),
+                    width: 1.2,
+                  ),
+                ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              PhosphorIcon(
+                icon,
+                size: 18.sp,
+                color: filled ? Colors.white : const Color(0xFF1A1A1A),
+              ),
+              Gap(8.w),
+              Text(
+                label,
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 14.5.sp,
+                  fontWeight: FontWeight.w700,
+                  color: filled ? Colors.white : const Color(0xFF1A1A1A),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

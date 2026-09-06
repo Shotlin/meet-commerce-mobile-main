@@ -11,6 +11,7 @@ import 'package:bakaloo_flutter_app/features/addresses/domain/repositories/addre
 import 'package:bakaloo_flutter_app/features/addresses/presentation/providers/address_provider.dart';
 import 'package:bakaloo_flutter_app/features/auth/presentation/providers/auth_notifier.dart';
 import 'package:bakaloo_flutter_app/features/auth/presentation/providers/auth_state.dart';
+import 'package:bakaloo_flutter_app/features/location/presentation/providers/allocation_recompute.dart';
 import 'package:bakaloo_flutter_app/features/location/presentation/providers/non_serviceable_location_provider.dart';
 
 /// Returns true if the location-enable prompt should be shown right now:
@@ -294,6 +295,17 @@ Future<LocationAutoDetectResult> _geocodeAndSave(
 
   // Refresh addresses so cart/checkout picks up the new default
   ref.invalidate(addressProvider);
+
+  // Fire-and-forget: make sure the customer's shop allocation reflects this
+  // (possibly new) default address right away, not just at next login.
+  unawaited(
+    triggerAllocationRecompute(
+      ref,
+      lat: position.latitude,
+      lng: position.longitude,
+      pincode: pincode,
+    ),
+  );
 
   return LocationAutoDetectResult.success;
 }

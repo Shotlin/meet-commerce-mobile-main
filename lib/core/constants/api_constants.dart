@@ -107,6 +107,7 @@ class ApiConstants {
   // provider API key never ships inside the app build.
   // See lib/core/maps/ola/ola_maps_service.dart.
   static const olaMapsStyleUrl = '/maps/ola/style-url';
+  static const olaMapsStaticMapUrl = '/maps/ola/static-map-url';
   static const olaMapsGeocode = '/maps/ola/geocode';
   static const olaMapsReverseGeocode = '/maps/ola/reverse-geocode';
   static const olaMapsDirections = '/maps/ola/directions';

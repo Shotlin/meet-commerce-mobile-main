@@ -24,6 +24,7 @@ class StorageKeys {
   static const hideSensitiveItems = 'hide_sensitive_items';
   static const nonServiceableLocationDetected =
       'non_serviceable_location_detected';
+  static const priceMode = 'price_mode';
 
   static const cacheCategories = 'cache_categories';
   static const cacheFeatured = 'cache_featured';

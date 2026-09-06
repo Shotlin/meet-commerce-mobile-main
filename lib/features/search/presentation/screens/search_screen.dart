@@ -5,19 +5,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
 import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
+import 'package:bakaloo_flutter_app/core/providers/price_mode_provider.dart';
 import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
 import 'package:bakaloo_flutter_app/core/theme/app_dimensions.dart';
 import 'package:bakaloo_flutter_app/core/theme/app_shadows.dart';
 import 'package:bakaloo_flutter_app/core/theme/app_text_styles.dart';
 import 'package:bakaloo_flutter_app/core/utils/app_toast.dart';
-import 'package:bakaloo_flutter_app/features/auth/presentation/providers/auth_gate_controller.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/providers/cart_provider.dart';
 import 'package:bakaloo_flutter_app/features/categories/domain/entities/category_entity.dart';
 import 'package:bakaloo_flutter_app/features/categories/presentation/providers/category_provider.dart';
@@ -28,9 +27,13 @@ import 'package:bakaloo_flutter_app/features/search/presentation/providers/searc
 import 'package:bakaloo_flutter_app/features/search/presentation/providers/search_provider.dart';
 import 'package:bakaloo_flutter_app/routing/route_names.dart';
 import 'package:bakaloo_flutter_app/features/products/presentation/widgets/show_product_options.dart';
+import 'package:bakaloo_flutter_app/features/search/presentation/widgets/search_filter_chip_bar.dart';
+import 'package:bakaloo_flutter_app/features/search/presentation/widgets/search_product_grid_card.dart';
+import 'package:bakaloo_flutter_app/shared/widgets/b2b_segment_toggle.dart';
 import 'package:bakaloo_flutter_app/shared/widgets/product_card.dart';
-import 'package:bakaloo_flutter_app/shared/widgets/quantity_control.dart';
 import 'package:bakaloo_flutter_app/shared/widgets/skeleton_loader.dart';
+
+const String _allChipLabel = 'All';
 
 // ─── Sort & Filter enums ─────────────────────────────────────────────────────
 
@@ -134,9 +137,8 @@ class _FilterState {
       inStockOnly: inStockOnly ?? this.inStockOnly,
       onSaleOnly: onSaleOnly ?? this.onSaleOnly,
       priceRange: priceRange ?? this.priceRange,
-      categoryId: categoryId == _sentinel
-          ? this.categoryId
-          : categoryId as String?,
+      categoryId:
+          categoryId == _sentinel ? this.categoryId : categoryId as String?,
     );
   }
 
@@ -178,6 +180,24 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   final List<ProductEntity> _allProducts = <ProductEntity>[];
   List<ProductEntity> _displayProducts = <ProductEntity>[];
   int _totalBackendCount = 0;
+
+  // Quick sub-filter chips above the grid (e.g. "Fresh Chicken", "Boneless").
+  // Built from the tags actually present on this query's results, so the
+  // row only ever offers filters that exist — never hardcoded categories.
+  String _selectedTagChip = _allChipLabel;
+
+  List<String> _tagChipOptions() {
+    final tags = <String>{};
+    for (final product in _allProducts) {
+      if (product.customBadges.isNotEmpty) {
+        tags.add(product.customBadges.first);
+      } else if (product.tags.isNotEmpty) {
+        tags.add(product.tags.first);
+      }
+    }
+    final sorted = tags.toList()..sort();
+    return <String>[_allChipLabel, ...sorted.take(6)];
+  }
 
   @override
   void initState() {
@@ -308,6 +328,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // Reset sort/filter when the query changes
     _sortOption = _SortOption.relevance;
     _filterState = const _FilterState();
+    _selectedTagChip = _allChipLabel;
 
     ref.read(searchProvider.notifier).onQueryChanged(value);
   }
@@ -430,8 +451,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       }).toList();
     }
     if (_filterState.categoryId != null) {
-      products =
-          products.where((p) => p.categoryId == _filterState.categoryId).toList();
+      products = products
+          .where((p) => p.categoryId == _filterState.categoryId)
+          .toList();
+    }
+    if (_selectedTagChip != _allChipLabel) {
+      products = products.where((p) {
+        final tag = p.customBadges.isNotEmpty
+            ? p.customBadges.first
+            : (p.tags.isNotEmpty ? p.tags.first : null);
+        return tag == _selectedTagChip;
+      }).toList();
     }
 
     // Apply sort
@@ -556,8 +586,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                           backgroundColor: AppColors.orderViolet,
                           padding: EdgeInsets.symmetric(vertical: 14.h),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(
-                                AppDimensions.radiusFull),
+                            borderRadius:
+                                BorderRadius.circular(AppDimensions.radiusFull),
                           ),
                         ),
                         child: Text(
@@ -583,8 +613,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   Future<void> _showFilterSheet(BuildContext ctx) async {
     _FilterState tempFilter = _filterState;
-    final categories =
-        ref.read(categoryCollectionProvider).asData?.value ?? <CategoryEntity>[];
+    final categories = ref.read(categoryCollectionProvider).asData?.value ??
+        <CategoryEntity>[];
 
     await showModalBottomSheet<void>(
       context: ctx,
@@ -657,18 +687,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                           _FilterSwitchRow(
                             label: 'In Stock only',
                             value: tempFilter.inStockOnly,
-                            onChanged: (v) =>
-                                setModalState(() => tempFilter =
-                                    tempFilter.copyWith(inStockOnly: v)),
+                            onChanged: (v) => setModalState(() => tempFilter =
+                                tempFilter.copyWith(inStockOnly: v)),
                           ),
                           Gap(4.h),
                           // On Sale
                           _FilterSwitchRow(
                             label: 'On Sale only',
                             value: tempFilter.onSaleOnly,
-                            onChanged: (v) =>
-                                setModalState(() => tempFilter =
-                                    tempFilter.copyWith(onSaleOnly: v)),
+                            onChanged: (v) => setModalState(() => tempFilter =
+                                tempFilter.copyWith(onSaleOnly: v)),
                           ),
                           Gap(16.h),
                           const Divider(height: 1, color: AppColors.divider),
@@ -686,8 +714,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                             spacing: 8.w,
                             runSpacing: 8.h,
                             children: _PriceRange.values.map((range) {
-                              final isSelected =
-                                  tempFilter.priceRange == range;
+                              final isSelected = tempFilter.priceRange == range;
                               return GestureDetector(
                                 onTap: () => setModalState(() => tempFilter =
                                     tempFilter.copyWith(priceRange: range)),
@@ -742,8 +769,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                                 return GestureDetector(
                                   onTap: () => setModalState(
                                     () => tempFilter = tempFilter.copyWith(
-                                      categoryId:
-                                          isSelected ? null : cat.id,
+                                      categoryId: isSelected ? null : cat.id,
                                     ),
                                   ),
                                   child: Container(
@@ -784,10 +810,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                     // Apply button
                     const Divider(height: 1, color: AppColors.divider),
                     Padding(
-                      padding: EdgeInsets.fromLTRB(
-                          20.w,
-                          12.h,
-                          20.w,
+                      padding: EdgeInsets.fromLTRB(20.w, 12.h, 20.w,
                           12.h + MediaQuery.of(sheetCtx).padding.bottom),
                       child: SizedBox(
                         width: double.infinity,
@@ -892,7 +915,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
               child: Column(
                 children: <Widget>[
                   Padding(
-                    padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 8.h),
+                    padding: EdgeInsets.fromLTRB(16.w, 10.h, 16.w, 10.h),
                     child: Row(
                       children: <Widget>[
                         _CircleIconButton(
@@ -900,42 +923,75 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                           semanticLabel: 'Back',
                           onTap: _dismiss,
                         ),
-                        Gap(12.w),
-                        Expanded(
-                          child: _SearchInput(
-                            controller: _searchController,
-                            focusNode: _focusNode,
-                            hint: _hints[_hintIndex],
-                            onChanged: _onQueryChanged,
-                          ),
+                        Gap(10.w),
+                        Image.asset(
+                          'assets/images/freshcuts-logo-wordmark.png',
+                          height: 26.h,
+                          cacheHeight: 104,
+                          fit: BoxFit.contain,
+                          filterQuality: FilterQuality.high,
                         ),
-                        Gap(12.w),
-                        _CircleIconButton(
-                          icon: _isListening
-                              ? PhosphorIcons.stopBold
-                              : (_searchController.text.trim().isEmpty
-                                  ? PhosphorIcons.microphoneBold
-                                  : PhosphorIcons.xBold),
-                          iconColor: _isListening
-                              ? AppColors.errorRed
-                              : (_searchController.text.trim().isEmpty
-                                  ? AppColors.orderViolet
-                                  : AppColors.textSecondary),
-                          semanticLabel: _isListening
-                              ? 'Stop voice search'
-                              : (_searchController.text.trim().isEmpty
-                                  ? 'Voice search'
-                                  : 'Clear search'),
-                          onTap: _isListening ||
-                                  _searchController.text.trim().isEmpty
+                        const Spacer(),
+                        Consumer(
+                          builder: (context, ref, _) {
+                            final mode = ref.watch(priceModeProvider);
+                            final isWholesale = mode == PriceMode.wholesale;
+                            return SizedBox(
+                              width: 92.w,
+                              child: B2BSegmentToggle(
+                                value: isWholesale
+                                    ? BusinessMode.b2b
+                                    : BusinessMode.b2c,
+                                onChanged: (next) {
+                                  final notifier =
+                                      ref.read(priceModeProvider.notifier);
+                                  final wantsWholesale =
+                                      next == BusinessMode.b2b;
+                                  if (wantsWholesale != isWholesale) {
+                                    notifier.toggle();
+                                  }
+                                },
+                              ),
+                            );
+                          },
+                        ),
+                        Gap(10.w),
+                        _CartIconButton(
+                          onTap: () => context.push(RouteNames.cart),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(16.w, 0, 16.w, 8.h),
+                    child: _SearchInput(
+                      controller: _searchController,
+                      focusNode: _focusNode,
+                      hint: _hints[_hintIndex],
+                      onChanged: _onQueryChanged,
+                      trailingIcon: _isListening
+                          ? PhosphorIcons.stopBold
+                          : (_searchController.text.trim().isEmpty
+                              ? PhosphorIcons.microphoneBold
+                              : PhosphorIcons.xBold),
+                      trailingIconColor: _isListening
+                          ? AppColors.errorRed
+                          : (_searchController.text.trim().isEmpty
+                              ? AppColors.orderViolet
+                              : AppColors.textSecondary),
+                      trailingSemanticLabel: _isListening
+                          ? 'Stop voice search'
+                          : (_searchController.text.trim().isEmpty
+                              ? 'Voice search'
+                              : 'Clear search'),
+                      onTrailingTap:
+                          _isListening || _searchController.text.trim().isEmpty
                               ? _toggleVoiceSearch
                               : () {
                                   _searchController.clear();
                                   _focusNode.requestFocus();
                                   _onQueryChanged('');
                                 },
-                        ),
-                      ],
                     ),
                   ),
                   Expanded(
@@ -1005,15 +1061,23 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
                                 return _SearchResultsState(
                                   key: const ValueKey<String>('results'),
+                                  query: _searchController.text.trim(),
                                   pagingController: _pagingController,
                                   displayProducts: _displayProducts,
                                   allProductsCount: _allProducts.length,
                                   totalBackendCount: _totalBackendCount,
                                   sortOption: _sortOption,
                                   filterState: _filterState,
+                                  tagChipOptions: _tagChipOptions(),
+                                  selectedTagChip: _selectedTagChip,
                                   onSortTap: () => _showSortSheet(context),
-                                  onFilterTap: () =>
-                                      _showFilterSheet(context),
+                                  onFilterTap: () => _showFilterSheet(context),
+                                  onTagChipSelected: (tag) {
+                                    setState(() {
+                                      _selectedTagChip = tag;
+                                      _computeDisplayProducts();
+                                    });
+                                  },
                                 );
                               },
                             ),
@@ -1034,13 +1098,11 @@ class _CircleIconButton extends StatelessWidget {
     required this.icon,
     required this.semanticLabel,
     required this.onTap,
-    this.iconColor,
   });
 
   final IconData icon;
   final String semanticLabel;
   final VoidCallback onTap;
-  final Color? iconColor;
 
   @override
   Widget build(BuildContext context) {
@@ -1063,7 +1125,7 @@ class _CircleIconButton extends StatelessWidget {
               child: PhosphorIcon(
                 icon,
                 size: 20.sp,
-                color: iconColor ?? AppColors.textPrimary,
+                color: AppColors.textPrimary,
               ),
             ),
           ),
@@ -1079,12 +1141,20 @@ class _SearchInput extends StatelessWidget {
     required this.focusNode,
     required this.hint,
     required this.onChanged,
+    required this.trailingIcon,
+    required this.trailingIconColor,
+    required this.trailingSemanticLabel,
+    required this.onTrailingTap,
   });
 
   final TextEditingController controller;
   final FocusNode focusNode;
   final String hint;
   final ValueChanged<String> onChanged;
+  final IconData trailingIcon;
+  final Color trailingIconColor;
+  final String trailingSemanticLabel;
+  final VoidCallback onTrailingTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1096,59 +1166,154 @@ class _SearchInput extends StatelessWidget {
         border: Border.all(color: AppColors.borderLight),
         boxShadow: const <BoxShadow>[AppShadows.cardShadow],
       ),
-      child: Stack(
+      child: Row(
         children: <Widget>[
-          TextField(
-            controller: controller,
-            focusNode: focusNode,
-            autofocus: true,
-            onChanged: onChanged,
-            textInputAction: TextInputAction.search,
-            cursorColor: AppColors.orderViolet,
-            style: AppTextStyles.bodyLarge.copyWith(
-              color: AppColors.textPrimary,
-            ),
-            decoration: InputDecoration(
-              border: InputBorder.none,
-              isCollapsed: true,
-              prefixIcon: Padding(
-                padding: EdgeInsets.only(left: 16.w, right: 10.w),
-                child: PhosphorIcon(
-                  PhosphorIcons.magnifyingGlassBold,
-                  size: 20.sp,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              prefixIconConstraints:
-                  const BoxConstraints(minWidth: 0, minHeight: 0),
-              contentPadding: EdgeInsets.symmetric(vertical: 15.h),
-            ),
-          ),
-          if (controller.text.isEmpty)
-            Positioned(
-              left: 46.w,
-              right: 16.w,
-              top: 0,
-              bottom: 0,
-              child: IgnorePointer(
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 250),
-                    child: Text(
-                      hint,
-                      key: ValueKey<String>(hint),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTextStyles.bodyLarge.copyWith(
-                        color: AppColors.textTertiary,
+          Expanded(
+            child: Stack(
+              children: <Widget>[
+                TextField(
+                  controller: controller,
+                  focusNode: focusNode,
+                  autofocus: true,
+                  onChanged: onChanged,
+                  textInputAction: TextInputAction.search,
+                  cursorColor: AppColors.orderViolet,
+                  style: AppTextStyles.bodyLarge.copyWith(
+                    color: AppColors.textPrimary,
+                  ),
+                  decoration: InputDecoration(
+                    border: InputBorder.none,
+                    isCollapsed: true,
+                    prefixIcon: Padding(
+                      padding: EdgeInsets.only(left: 16.w, right: 10.w),
+                      child: PhosphorIcon(
+                        PhosphorIcons.magnifyingGlassBold,
+                        size: 20.sp,
+                        color: AppColors.textSecondary,
                       ),
-                    ).animate().fadeIn(duration: 250.ms),
+                    ),
+                    prefixIconConstraints:
+                        const BoxConstraints(minWidth: 0, minHeight: 0),
+                    contentPadding: EdgeInsets.symmetric(vertical: 15.h),
                   ),
                 ),
+                if (controller.text.isEmpty)
+                  Positioned(
+                    left: 46.w,
+                    right: 8.w,
+                    top: 0,
+                    bottom: 0,
+                    child: IgnorePointer(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 250),
+                          child: Text(
+                            hint,
+                            key: ValueKey<String>(hint),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTextStyles.bodyLarge.copyWith(
+                              color: AppColors.textTertiary,
+                            ),
+                          ).animate().fadeIn(duration: 250.ms),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          Container(
+            width: 1,
+            height: 22.h,
+            color: AppColors.borderLight,
+          ),
+          Semantics(
+            label: trailingSemanticLabel,
+            button: true,
+            child: InkWell(
+              onTap: onTrailingTap,
+              customBorder: const CircleBorder(),
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12.w),
+                child: PhosphorIcon(
+                  trailingIcon,
+                  size: 20.sp,
+                  color: trailingIconColor,
+                ),
               ),
             ),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+class _CartIconButton extends ConsumerWidget {
+  const _CartIconButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final count = ref.watch(cartCountProvider);
+    return Semantics(
+      label: 'Cart, $count item${count == 1 ? '' : 's'}',
+      button: true,
+      child: Material(
+        color: AppColors.bgCard,
+        shape: const CircleBorder(
+          side: BorderSide(color: AppColors.borderLight),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          customBorder: const CircleBorder(),
+          child: SizedBox(
+            width: 44.w,
+            height: 44.w,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: <Widget>[
+                Center(
+                  child: PhosphorIcon(
+                    PhosphorIcons.shoppingCartBold,
+                    size: 20.sp,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                if (count > 0)
+                  Positioned(
+                    top: -2,
+                    right: -2,
+                    child: Container(
+                      padding: EdgeInsets.symmetric(horizontal: 5.w),
+                      height: 17.h,
+                      decoration: const BoxDecoration(
+                        color: AppColors.brandRed,
+                        shape: BoxShape.circle,
+                      ),
+                      constraints: BoxConstraints(minWidth: 17.w),
+                      child: Center(
+                        child: Text(
+                          count > 99 ? '99+' : '$count',
+                          style: TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 9.sp,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                            height: 1,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -1536,29 +1701,26 @@ class _DebouncingState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView.separated(
-      padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 24.h),
-      itemCount: 3,
-      separatorBuilder: (_, __) => Gap(12.h),
+    return GridView.builder(
+      padding: EdgeInsets.fromLTRB(16.w, 4.h, 16.w, 24.h),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 12.w,
+        mainAxisSpacing: 14.h,
+        mainAxisExtent: 300.h,
+      ),
+      itemCount: 6,
       itemBuilder: (_, __) {
-        return Row(
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            const SkeletonLoader(height: 64, width: 64, radius: 12),
-            Gap(12.w),
-            const Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  SkeletonLoader(height: 14, radius: 8),
-                  Gap(AppDimensions.spacing8),
-                  SkeletonLoader(height: 12, width: 100, radius: 8),
-                  Gap(AppDimensions.spacing8),
-                  SkeletonLoader(height: 12, width: 80, radius: 8),
-                ],
-              ),
-            ),
-            Gap(12.w),
-            const SkeletonLoader(height: 36, width: 80, radius: 12),
+            SkeletonLoader(height: (170 / 1.22).h, radius: 18),
+            Gap(10.h),
+            const SkeletonLoader(height: 14, radius: 8),
+            Gap(6.h),
+            SkeletonLoader(height: 12, width: 90.w, radius: 8),
+            Gap(10.h),
+            SkeletonLoader(height: 34, width: 70.w, radius: 10),
           ],
         );
       },
@@ -1568,77 +1730,135 @@ class _DebouncingState extends StatelessWidget {
 
 class _SearchResultsState extends StatelessWidget {
   const _SearchResultsState({
+    required this.query,
     required this.pagingController,
     required this.displayProducts,
     required this.allProductsCount,
     required this.totalBackendCount,
     required this.sortOption,
     required this.filterState,
+    required this.tagChipOptions,
+    required this.selectedTagChip,
     required this.onSortTap,
     required this.onFilterTap,
+    required this.onTagChipSelected,
     super.key,
   });
 
+  final String query;
   final PagingController<int, ProductEntity> pagingController;
   final List<ProductEntity> displayProducts;
   final int allProductsCount;
   final int totalBackendCount;
   final _SortOption sortOption;
   final _FilterState filterState;
+  final List<String> tagChipOptions;
+  final String selectedTagChip;
   final VoidCallback onSortTap;
   final VoidCallback onFilterTap;
+  final ValueChanged<String> onTagChipSelected;
 
   @override
   Widget build(BuildContext context) {
-    final isFiltered = !filterState.isDefault ||
-        sortOption != _SortOption.relevance;
+    final isFiltered =
+        !filterState.isDefault || selectedTagChip != _allChipLabel;
 
-    // Result count label
     final displayCount = displayProducts.length;
     final countLabel = isFiltered
-        ? '$displayCount result${displayCount == 1 ? '' : 's'} (filtered)'
-        : (totalBackendCount == 1
-            ? '1 result'
-            : '$totalBackendCount results');
+        ? 'Showing $displayCount result${displayCount == 1 ? '' : 's'} for "$query"'
+        : 'Showing $totalBackendCount result${totalBackendCount == 1 ? '' : 's'} for "$query"';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
+        if (tagChipOptions.length > 1) ...<Widget>[
+          Padding(
+            padding: EdgeInsets.fromLTRB(16.w, 10.h, 16.w, 0),
+            child: SearchFilterChipBar(
+              options: tagChipOptions,
+              selected: selectedTagChip,
+              onSelected: onTagChipSelected,
+            ),
+          ),
+        ],
         Padding(
-          padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 12.h),
+          padding: EdgeInsets.fromLTRB(16.w, 14.h, 16.w, 10.h),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               Expanded(
-                child: Text(
-                  countLabel,
-                  style: AppTextStyles.bodyMedium.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      countLabel,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 20.sp,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF111318),
+                        height: 1.2,
+                      ),
+                    ),
+                    Gap(2.h),
+                    Text(
+                      'Fresh. Healthy. Always.',
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 13.sp,
+                        fontWeight: FontWeight.w400,
+                        color: const Color(0xFF7A8392),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              // Sort pill
-              _SortFilterPill(
-                icon: PhosphorIcons.caretDownBold,
-                label: sortOption.label,
-                isActive: sortOption != _SortOption.relevance,
-                onTap: onSortTap,
-              ),
-              Gap(14.w),
-              // Filter pill
-              _SortFilterPill(
-                icon: PhosphorIcons.slidersHorizontalBold,
-                label: filterState.isDefault
-                    ? null
-                    : 'Filters ${filterState.activeCount}',
-                isActive: !filterState.isDefault,
-                onTap: onFilterTap,
+              Gap(10.w),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: <Widget>[
+                  SearchSortButton(
+                    currentLabel: sortOption.label,
+                    onTap: onSortTap,
+                  ),
+                  Gap(6.h),
+                  GestureDetector(
+                    onTap: onFilterTap,
+                    behavior: HitTestBehavior.opaque,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        PhosphorIcon(
+                          PhosphorIcons.slidersHorizontalBold,
+                          size: 13.sp,
+                          color: filterState.isDefault
+                              ? const Color(0xFF6F7785)
+                              : const Color(0xFFC32D2E),
+                        ),
+                        if (!filterState.isDefault) ...<Widget>[
+                          Gap(3.w),
+                          Text(
+                            'Filters ${filterState.activeCount}',
+                            style: TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 11.sp,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFFC32D2E),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
         ),
-        const Divider(height: 1, thickness: 1, color: AppColors.divider),
         Expanded(
-          child: _SortedFilteredList(
+          child: _SortedFilteredGrid(
             displayProducts: displayProducts,
             pagingController: pagingController,
           ),
@@ -1648,8 +1868,8 @@ class _SearchResultsState extends StatelessWidget {
   }
 }
 
-class _SortedFilteredList extends StatelessWidget {
-  const _SortedFilteredList({
+class _SortedFilteredGrid extends StatelessWidget {
+  const _SortedFilteredGrid({
     required this.displayProducts,
     required this.pagingController,
   });
@@ -1663,16 +1883,21 @@ class _SortedFilteredList extends StatelessWidget {
     return ValueListenableBuilder<PagingState<int, ProductEntity>>(
       valueListenable: pagingController,
       builder: (context, pagingState, _) {
-        final isLoadingMore = pagingState.nextPageKey != null &&
-            pagingState.error == null;
-        final hasError = pagingState.error != null &&
-            pagingState.nextPageKey != null;
+        final isLoadingMore =
+            pagingState.nextPageKey != null && pagingState.error == null;
+        final hasError =
+            pagingState.error != null && pagingState.nextPageKey != null;
 
-        return ListView.separated(
-          padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 24.h),
+        return GridView.builder(
+          padding: EdgeInsets.fromLTRB(16.w, 0, 16.w, 24.h),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 12.w,
+            mainAxisSpacing: 14.h,
+            mainAxisExtent: 300.h,
+          ),
           itemCount:
               displayProducts.length + (isLoadingMore || hasError ? 1 : 0),
-          separatorBuilder: (_, __) => Gap(12.h),
           itemBuilder: (context, index) {
             if (index >= displayProducts.length) {
               if (hasError) {
@@ -1686,81 +1911,20 @@ class _SortedFilteredList extends StatelessWidget {
               // Trigger next page load
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (pagingState.nextPageKey != null) {
-                  pagingController.notifyPageRequestListeners(
-                      pagingState.nextPageKey!);
+                  pagingController
+                      .notifyPageRequestListeners(pagingState.nextPageKey!);
                 }
               });
-              return const Padding(
-                padding: EdgeInsets.symmetric(vertical: 16),
-                child: Center(
-                  child: CircularProgressIndicator(
-                    color: AppColors.primaryGreen,
-                  ),
+              return const Center(
+                child: CircularProgressIndicator(
+                  color: Color(0xFFC32D2E),
                 ),
               );
             }
-            return _SearchResultTile(product: displayProducts[index]);
+            return SearchProductGridCard(product: displayProducts[index]);
           },
         );
       },
-    );
-  }
-}
-
-class _SortFilterPill extends StatelessWidget {
-  const _SortFilterPill({
-    required this.icon,
-    required this.onTap,
-    this.label,
-    this.isActive = false,
-  });
-
-  final IconData icon;
-  final String? label;
-  final VoidCallback onTap;
-  final bool isActive;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = isActive ? AppColors.orderViolet : AppColors.textPrimary;
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 6.h),
-        decoration: BoxDecoration(
-          color: isActive
-              ? AppColors.orderVioletSurface
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
-          border: Border.all(
-            color: isActive
-                ? AppColors.orderVioletBorder
-                : Colors.transparent,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            if (label != null) ...<Widget>[
-              Text(
-                label!,
-                style: AppTextStyles.labelLarge.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: color,
-                ),
-              ),
-              Gap(4.w),
-            ],
-            PhosphorIcon(
-              icon,
-              size: 16.sp,
-              color: color,
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -1801,206 +1965,6 @@ class _FilterSwitchRow extends StatelessWidget {
   }
 }
 
-class _SearchResultTile extends ConsumerWidget {
-  const _SearchResultTile({required this.product});
-
-  final ProductEntity product;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final imageUrl = product.thumbnailUrl ??
-        (product.images.isNotEmpty ? product.images.first : null);
-    final quantity = ref.watch(cartItemQuantityProvider(product.id));
-    // Purchase-limits: null == unrestricted (the common case, zero extra
-    // visual/logic changes). Watched so this tile live-updates — e.g.
-    // right after this exact tap pushes the product to its limit.
-    final purchaseLimitStatus =
-        ref.watch(purchaseLimitStatusProvider(product.id));
-    final isAtLimit = purchaseLimitStatus?.isAtLimit ?? false;
-
-    return InkWell(
-      onTap: () => context.push('/product/${product.id}'),
-      borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
-      child: Container(
-        padding: EdgeInsets.all(12.w),
-        decoration: BoxDecoration(
-          color: AppColors.bgCard,
-          borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
-          boxShadow: const <BoxShadow>[AppShadows.cardShadow],
-        ),
-        child: Row(
-          children: <Widget>[
-            ClipRRect(
-              borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-              child: Container(
-                width: 72.w,
-                height: 72.w,
-                color: AppColors.bgSection,
-                child: imageUrl == null || imageUrl.isEmpty
-                    ? Center(
-                        child: PhosphorIcon(
-                          PhosphorIcons.image,
-                          color: AppColors.textDisabled,
-                        ),
-                      )
-                    : CachedNetworkImage(
-                        imageUrl: imageUrl,
-                        memCacheWidth: 300,
-                        fit: BoxFit.cover,
-                        errorWidget: (_, __, ___) => Center(
-                          child: PhosphorIcon(
-                            PhosphorIcons.imageBroken,
-                            color: AppColors.textDisabled,
-                          ),
-                        ),
-                      ),
-              ),
-            ),
-            Gap(14.w),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    product.name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTextStyles.labelLarge.copyWith(
-                      fontSize: 14.sp,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const Gap(AppDimensions.spacing4),
-                  Text(
-                    product.displayUnit,
-                    style: AppTextStyles.bodySmall,
-                  ),
-                  const Gap(AppDimensions.spacing8),
-                  RichText(
-                    text: TextSpan(
-                      text: '₹${product.effectivePrice.toStringAsFixed(0)}',
-                      style: AppTextStyles.buttonMedium.copyWith(
-                        color: AppColors.textPrimary,
-                        fontFamily: 'Inter',
-                        fontWeight: FontWeight.w700,
-                      ),
-                      children: <InlineSpan>[
-                        if (product.isOnSale)
-                          TextSpan(
-                            text: '  ₹${product.price.toStringAsFixed(0)}',
-                            style: AppTextStyles.bodySmall.copyWith(
-                              decoration: TextDecoration.lineThrough,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Gap(12.w),
-            QuantityControl(
-              quantity: quantity,
-              width: 84,
-              height: 38,
-              disableIncrement: isAtLimit,
-              onAdd: product.inStock
-                  ? () async {
-                      // Re-checked fresh on every tap (ref.read, not the
-                      // watched value above) so a stale cache can never
-                      // let a mutation through — block before it ever
-                      // reaches the network.
-                      final status = ref
-                          .read(purchaseLimitStatusProvider(product.id));
-                      if (status?.isAtLimit ?? false) {
-                        AppToast.show(
-                          context,
-                          'Maximum product order complete',
-                        );
-                        return;
-                      }
-                      final authGate = ref.read(authGateControllerProvider);
-                      final allowed = await authGate.protectAddToCart(
-                        context,
-                        product,
-                      );
-                      if (!allowed || !context.mounted) {
-                        return;
-                      }
-                      final result =
-                          await ref.read(cartProvider.notifier).addItem(
-                                product.id,
-                                1,
-                                product: product,
-                              );
-                      if (!context.mounted) {
-                        return;
-                      }
-                      if (!result.isSuccess) {
-                        showCartSnackBar(
-                          context,
-                          result.failure!.message,
-                        );
-                      }
-                    }
-                  : null,
-              onIncrement: product.inStock && quantity < 50
-                  ? () async {
-                      // Re-checked fresh on every tap (ref.read, not the
-                      // watched value above) so a stale cache can never
-                      // let a mutation through — block before it ever
-                      // reaches the network.
-                      final status = ref
-                          .read(purchaseLimitStatusProvider(product.id));
-                      if (status?.isAtLimit ?? false) {
-                        AppToast.show(
-                          context,
-                          'Maximum product order complete',
-                        );
-                        return;
-                      }
-                      final result = await ref
-                          .read(cartProvider.notifier)
-                          .updateItem(product.id, quantity + 1);
-                      if (!context.mounted) {
-                        return;
-                      }
-                      if (!result.isSuccess) {
-                        showCartSnackBar(
-                          context,
-                          result.failure!.message,
-                        );
-                      }
-                    }
-                  : null,
-              onDecrement: product.inStock && quantity > 0
-                  ? () async {
-                      final result = quantity == 1
-                          ? await ref
-                              .read(cartProvider.notifier)
-                              .removeItem(product.id)
-                          : await ref
-                              .read(cartProvider.notifier)
-                              .updateItem(product.id, quantity - 1);
-                      if (!context.mounted) {
-                        return;
-                      }
-                      if (!result.isSuccess) {
-                        showCartSnackBar(
-                          context,
-                          result.failure!.message,
-                        );
-                      }
-                    }
-                  : null,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _NoResultsState extends StatelessWidget {
   const _NoResultsState({
     required this.query,
@@ -2011,37 +1975,48 @@ class _NoResultsState extends StatelessWidget {
   final String query;
   final List<ProductEntity> suggestions;
 
-  static const String _sadMagnifierSvg = '''
-<svg width="132" height="132" viewBox="0 0 132 132" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <circle cx="56" cy="56" r="32" stroke="#0C831F" stroke-width="8"/>
-  <path d="M78 78L110 110" stroke="#0C831F" stroke-width="8" stroke-linecap="round"/>
-  <circle cx="47" cy="50" r="4" fill="#0C831F"/>
-  <circle cx="65" cy="50" r="4" fill="#0C831F"/>
-  <path d="M44 69C48 63 64 63 68 69" stroke="#D32F2F" stroke-width="6" stroke-linecap="round"/>
-</svg>
-''';
-
   @override
   Widget build(BuildContext context) {
     return ListView(
       padding: EdgeInsets.fromLTRB(16.w, 20.h, 16.w, 24.h),
       children: <Widget>[
-        SvgPicture.string(
-          _sadMagnifierSvg,
-          width: 132.w,
-          height: 132.w,
+        Gap(12.h),
+        Center(
+          child: Container(
+            width: 88.w,
+            height: 88.w,
+            decoration: const BoxDecoration(
+              color: Color(0xFFF7F8FA),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.search_off_rounded,
+              size: 40.sp,
+              color: const Color(0xFF6F7785),
+            ),
+          ),
         ),
-        const Gap(AppDimensions.spacing20),
+        Gap(20.h),
         Text(
-          'No results',
+          'No products found',
           textAlign: TextAlign.center,
-          style: AppTextStyles.h2,
+          style: TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 18.sp,
+            fontWeight: FontWeight.w700,
+            color: const Color(0xFF111318),
+          ),
         ),
-        const Gap(AppDimensions.spacing8),
+        Gap(6.h),
         Text(
-          'We could not find anything for "$query".',
+          'Try another search or explore categories.',
           textAlign: TextAlign.center,
-          style: AppTextStyles.bodyMedium,
+          style: TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 13.5.sp,
+            fontWeight: FontWeight.w400,
+            color: const Color(0xFF6F7785),
+          ),
         ),
         if (suggestions.isNotEmpty) ...<Widget>[
           const Gap(AppDimensions.spacing24),
@@ -2061,7 +2036,8 @@ class _NoResultsState extends StatelessWidget {
                   product: suggestions[index],
                   style: ProductCardStyle.scroll,
                   onOptionsTap: suggestions[index].hasMultipleOptions
-                      ? () => showProductOptionsSheet(context, suggestions[index])
+                      ? () =>
+                          showProductOptionsSheet(context, suggestions[index])
                       : null,
                 );
               },
@@ -2093,26 +2069,48 @@ class _SearchErrorState extends StatelessWidget {
           children: <Widget>[
             PhosphorIcon(
               PhosphorIcons.warningCircle,
-              size: 48,
-              color: AppColors.warningOrange,
+              size: 48.sp,
+              color: const Color(0xFFE51F2A),
             ),
-            const Gap(AppDimensions.spacing16),
+            Gap(16.h),
+            Text(
+              'Something went wrong',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 17.sp,
+                fontWeight: FontWeight.w700,
+                color: const Color(0xFF111318),
+              ),
+            ),
+            Gap(6.h),
             Text(
               message,
               textAlign: TextAlign.center,
-              style: AppTextStyles.bodyLarge,
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 13.5.sp,
+                fontWeight: FontWeight.w400,
+                color: const Color(0xFF6F7785),
+              ),
             ),
-            const Gap(AppDimensions.spacing16),
+            Gap(16.h),
             FilledButton(
               onPressed: onRetry,
               style: FilledButton.styleFrom(
-                backgroundColor: AppColors.primaryGreen,
+                backgroundColor: const Color(0xFFE51F2A),
                 padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 12.h),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(13.r),
+                ),
               ),
               child: Text(
-                'Retry',
-                style: AppTextStyles.buttonMedium.copyWith(
-                  color: AppColors.textOnGreen,
+                'Try Again',
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 14.sp,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
                 ),
               ),
             ),

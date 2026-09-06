@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:maplibre_gl/maplibre_gl.dart';
+import 'package:go_router/go_router.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import 'package:bakaloo_flutter_app/core/maps/geo_point.dart';
@@ -25,8 +25,11 @@ import 'package:bakaloo_flutter_app/features/addresses/presentation/providers/ad
 import 'package:bakaloo_flutter_app/features/addresses/presentation/screens/address_map_picker_screen.dart';
 import 'package:bakaloo_flutter_app/features/auth/presentation/providers/auth_notifier.dart';
 import 'package:bakaloo_flutter_app/features/auth/presentation/providers/auth_state.dart';
+import 'package:bakaloo_flutter_app/features/location/presentation/providers/allocation_recompute.dart';
+import 'package:bakaloo_flutter_app/features/location/presentation/providers/non_serviceable_location_provider.dart';
 import 'package:bakaloo_flutter_app/features/location/presentation/widgets/location_permission_denied_dialog.dart';
 import 'package:bakaloo_flutter_app/features/products/presentation/widgets/show_product_options.dart';
+import 'package:bakaloo_flutter_app/routing/route_names.dart';
 
 class AddEditAddressScreen extends ConsumerStatefulWidget {
   const AddEditAddressScreen({
@@ -174,9 +177,9 @@ class _AddEditAddressScreenState extends ConsumerState<AddEditAddressScreen> {
     // address is still specific to this exact point, just without a named
     // road, so it's the better fallback of the two.
     final address = _firstNonEmpty(<String?>[
-      reverse?.addressLine1,
-      reverse?.displayName,
-    ]) ??
+          reverse?.addressLine1,
+          reverse?.displayName,
+        ]) ??
         '';
 
     // Runs once, right as the screen opens, before the customer has had a
@@ -403,8 +406,7 @@ class _AddEditAddressScreenState extends ConsumerState<AddEditAddressScreen> {
           return;
         }
         if (!serviceEnabled) {
-          AppToast.show(
-              context, '📍 Turn on location services and try again.',
+          AppToast.show(context, '📍 Turn on location services and try again.',
               type: ToastType.warning);
           return;
         }
@@ -650,11 +652,45 @@ class _AddEditAddressScreenState extends ConsumerState<AddEditAddressScreen> {
     });
 
     if (!result.isSuccess) {
+      final failureMessage = result.failure?.message ?? '';
+      // The backend has no separate error code surfaced this far up the
+      // stack (Failure only carries a message) — matching on its one
+      // stable message string for this specific case, rather than the
+      // generic toast, is what gets the customer the full "not serving
+      // this area" screen instead of a message they can easily miss.
+      if (failureMessage
+          .toLowerCase()
+          .contains('not available at this address')) {
+        await ref.read(nonServiceableLocationProvider.notifier).markDetected();
+        if (!mounted) return;
+        context.push(
+          RouteNames.locationUnavailable,
+          extra: '${_city ?? ''}, ${_pincode ?? ''}'
+              .replaceAll(RegExp(r'^,\s*|,\s*$'), ''),
+        );
+        return;
+      }
       AppToast.show(
         context,
-        result.failure?.message ?? 'Unable to save this address right now.',
+        failureMessage.isNotEmpty
+            ? failureMessage
+            : 'Unable to save this address right now.',
       );
       return;
+    }
+
+    // This address is the customer's default — refresh their shop
+    // allocation now so a changed delivery address takes effect immediately
+    // instead of only at next login (see allocation_recompute.dart).
+    if (params.isDefault && _latitude != null && _longitude != null) {
+      unawaited(
+        triggerAllocationRecompute(
+          ref,
+          lat: _latitude!,
+          lng: _longitude!,
+          pincode: _pincode!.trim(),
+        ),
+      );
     }
 
     Navigator.of(context).pop(true);
@@ -739,187 +775,190 @@ class _AddEditAddressScreenState extends ConsumerState<AddEditAddressScreen> {
         body: Stack(
           children: <Widget>[
             GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onTap: () => FocusScope.of(context).unfocus(),
-          child: SafeArea(
-          top: false,
-          child: SingleChildScrollView(
-            // resizeToAvoidBottomInset is off (see comment above), so this
-            // scroll view's viewport never actually shrinks when the
-            // keyboard opens — without the extra bottomInset here, there is
-            // no genuine scrollable room below a lower field for
-            // Scrollable.ensureVisible (in _FormField) to scroll into, and
-            // it silently does nothing. Reported: focusing Receiver's Phone
-            // Number left it hidden behind the keyboard with only the
-            // floating SAVE ADDRESS button visible above it.
-            padding: EdgeInsets.only(bottom: 120.h + bottomInset),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Container(
-                    color: Colors.white,
-                    child: Column(
-                      children: <Widget>[
-                        _CompactMapPreview(
-                          point: _previewPoint,
-                          hasPinnedLocation: _hasPinnedLocation,
-                          isLocating: _isLocating,
-                          onCurrentLocationTap:
-                              _openMapPickerFromCurrentLocation,
-                        ),
-                        _AddressHeader(
-                          buttonLabel: _hasPinnedLocation ? 'Change' : 'Pick',
-                          statusMessage: _pincodeMessage,
-                          statusColor: switch (_pincodeStatus) {
-                            _PincodeValidationStatus.valid =>
-                              AppColors.primaryGreen,
-                            _PincodeValidationStatus.invalid =>
-                              AppColors.errorRed,
-                            _PincodeValidationStatus.loading =>
-                              AppColors.textSecondary,
-                            _PincodeValidationStatus.idle =>
-                              AppColors.textSecondary,
-                          },
-                          onChangeTap: _openMapPicker,
-                        ),
-                        const Divider(height: 1, color: AppColors.divider),
-                      ],
-                    ),
-                  ),
-                  Padding(
-                    padding: EdgeInsets.fromLTRB(16.w, 18.h, 16.w, 0),
-                    child: Text(
-                      'Add Address',
-                      style: AppTextStyles.labelLarge.copyWith(
-                        fontFamily: 'Poppins',
-                        fontSize: 14.sp,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 0),
+              behavior: HitTestBehavior.translucent,
+              onTap: () => FocusScope.of(context).unfocus(),
+              child: SafeArea(
+                top: false,
+                child: SingleChildScrollView(
+                  // resizeToAvoidBottomInset is off (see comment above), so this
+                  // scroll view's viewport never actually shrinks when the
+                  // keyboard opens — without the extra bottomInset here, there is
+                  // no genuine scrollable room below a lower field for
+                  // Scrollable.ensureVisible (in _FormField) to scroll into, and
+                  // it silently does nothing. Reported: focusing Receiver's Phone
+                  // Number left it hidden behind the keyboard with only the
+                  // floating SAVE ADDRESS button visible above it.
+                  padding: EdgeInsets.only(bottom: 120.h + bottomInset),
+                  child: Form(
+                    key: _formKey,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        _FormField(
-                          controller: _houseNoController,
-                          label: 'House No. & Floor *',
-                          textInputAction: TextInputAction.next,
-                          validator: (String? value) {
-                            if ((value ?? '').trim().isEmpty) {
-                              return 'House no. and floor are required.';
-                            }
-                            return null;
-                          },
+                        Container(
+                          color: Colors.white,
+                          child: Column(
+                            children: <Widget>[
+                              _CompactMapPreview(
+                                point: _previewPoint,
+                                hasPinnedLocation: _hasPinnedLocation,
+                                isLocating: _isLocating,
+                                onCurrentLocationTap:
+                                    _openMapPickerFromCurrentLocation,
+                              ),
+                              _AddressHeader(
+                                buttonLabel:
+                                    _hasPinnedLocation ? 'Change' : 'Pick',
+                                statusMessage: _pincodeMessage,
+                                statusColor: switch (_pincodeStatus) {
+                                  _PincodeValidationStatus.valid =>
+                                    AppColors.primaryGreen,
+                                  _PincodeValidationStatus.invalid =>
+                                    AppColors.errorRed,
+                                  _PincodeValidationStatus.loading =>
+                                    AppColors.textSecondary,
+                                  _PincodeValidationStatus.idle =>
+                                    AppColors.textSecondary,
+                                },
+                                onChangeTap: _openMapPicker,
+                              ),
+                              const Divider(
+                                  height: 1, color: AppColors.divider),
+                            ],
+                          ),
                         ),
-                        Gap(12.h),
-                        _FormField(
-                          controller: _buildingController,
-                          label: 'Building & Block No. (Optional)',
-                          textInputAction: TextInputAction.next,
+                        Padding(
+                          padding: EdgeInsets.fromLTRB(16.w, 18.h, 16.w, 0),
+                          child: Text(
+                            'Add Address',
+                            style: AppTextStyles.labelLarge.copyWith(
+                              fontFamily: 'Poppins',
+                              fontSize: 14.sp,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ),
-                        Gap(12.h),
-                        _FormField(
-                          controller: _addressController,
-                          label: 'Address *',
-                          textInputAction: TextInputAction.next,
-                          validator: (String? value) {
-                            if ((value ?? '').trim().isEmpty) {
-                              return 'Address is required.';
-                            }
-                            return null;
-                          },
-                        ),
-                        Gap(12.h),
-                        _FormField(
-                          controller: _landmarkController,
-                          label: 'Landmark & Area Name (Optional)',
-                          textInputAction: TextInputAction.next,
-                        ),
-                        Gap(12.h),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: <Widget>[
-                            Expanded(
-                              child: _FormField(
-                                controller: _cityController,
-                                label: 'City *',
+                        Padding(
+                          padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              _FormField(
+                                controller: _houseNoController,
+                                label: 'House No. & Floor *',
                                 textInputAction: TextInputAction.next,
                                 validator: (String? value) {
                                   if ((value ?? '').trim().isEmpty) {
-                                    return 'City is required.';
+                                    return 'House no. and floor are required.';
                                   }
                                   return null;
                                 },
                               ),
-                            ),
-                            Gap(12.w),
-                            Expanded(
-                              child: _FormField(
-                                controller: _pincodeController,
-                                label: 'PIN Code *',
-                                keyboardType: TextInputType.number,
+                              Gap(12.h),
+                              _FormField(
+                                controller: _buildingController,
+                                label: 'Building & Block No. (Optional)',
                                 textInputAction: TextInputAction.next,
-                                maxLength: 6,
+                              ),
+                              Gap(12.h),
+                              _FormField(
+                                controller: _addressController,
+                                label: 'Address *',
+                                textInputAction: TextInputAction.next,
                                 validator: (String? value) {
-                                  final trimmed = (value ?? '').trim();
-                                  if (trimmed.isEmpty) {
-                                    return 'PIN code is required.';
+                                  if ((value ?? '').trim().isEmpty) {
+                                    return 'Address is required.';
                                   }
-                                  return Validators.validatePincode(trimmed);
+                                  return null;
                                 },
                               ),
-                            ),
-                          ],
-                        ),
-                        Gap(12.h),
-                        _FormField(
-                          controller: _stateController,
-                          label: 'State *',
-                          textInputAction: TextInputAction.done,
-                          validator: (String? value) {
-                            if ((value ?? '').trim().isEmpty) {
-                              return 'State is required.';
-                            }
-                            return null;
-                          },
-                        ),
-                        Gap(20.h),
-                        Text(
-                          'Add Address Label',
-                          style: AppTextStyles.labelLarge.copyWith(
-                            fontFamily: 'Poppins',
-                            fontSize: 14.sp,
-                            fontWeight: FontWeight.w600,
+                              Gap(12.h),
+                              _FormField(
+                                controller: _landmarkController,
+                                label: 'Landmark & Area Name (Optional)',
+                                textInputAction: TextInputAction.next,
+                              ),
+                              Gap(12.h),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: <Widget>[
+                                  Expanded(
+                                    child: _FormField(
+                                      controller: _cityController,
+                                      label: 'City *',
+                                      textInputAction: TextInputAction.next,
+                                      validator: (String? value) {
+                                        if ((value ?? '').trim().isEmpty) {
+                                          return 'City is required.';
+                                        }
+                                        return null;
+                                      },
+                                    ),
+                                  ),
+                                  Gap(12.w),
+                                  Expanded(
+                                    child: _FormField(
+                                      controller: _pincodeController,
+                                      label: 'PIN Code *',
+                                      keyboardType: TextInputType.number,
+                                      textInputAction: TextInputAction.next,
+                                      maxLength: 6,
+                                      validator: (String? value) {
+                                        final trimmed = (value ?? '').trim();
+                                        if (trimmed.isEmpty) {
+                                          return 'PIN code is required.';
+                                        }
+                                        return Validators.validatePincode(
+                                            trimmed);
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Gap(12.h),
+                              _FormField(
+                                controller: _stateController,
+                                label: 'State *',
+                                textInputAction: TextInputAction.done,
+                                validator: (String? value) {
+                                  if ((value ?? '').trim().isEmpty) {
+                                    return 'State is required.';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              Gap(20.h),
+                              Text(
+                                'Add Address Label',
+                                style: AppTextStyles.labelLarge.copyWith(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 14.sp,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              Gap(12.h),
+                              _LabelChipSelector(
+                                labels: _labels,
+                                selectedLabel: _selectedLabel,
+                                onSelected: (String label) {
+                                  setState(() {
+                                    _selectedLabel = label;
+                                  });
+                                },
+                              ),
+                              Gap(22.h),
+                              _ReceiverSection(
+                                nameController: _receiverNameController,
+                                phoneController: _receiverPhoneController,
+                                onContactTap: _prefillReceiverFromAccount,
+                              ),
+                            ],
                           ),
-                        ),
-                        Gap(12.h),
-                        _LabelChipSelector(
-                          labels: _labels,
-                          selectedLabel: _selectedLabel,
-                          onSelected: (String label) {
-                            setState(() {
-                              _selectedLabel = label;
-                            });
-                          },
-                        ),
-                        Gap(22.h),
-                        _ReceiverSection(
-                          nameController: _receiverNameController,
-                          phoneController: _receiverPhoneController,
-                          onContactTap: _prefillReceiverFromAccount,
                         ),
                       ],
                     ),
                   ),
-                ],
+                ),
               ),
-            ),
-          ),
-        ),
             ),
             // Floats directly above the software keyboard, sliding smoothly
             // back down to the screen edge when it closes — bottomNavigationBar
@@ -938,7 +977,10 @@ class _AddEditAddressScreenState extends ConsumerState<AddEditAddressScreen> {
                   16.w,
                   12.h,
                   16.w,
-                  12.h + (bottomInset == 0 ? MediaQuery.of(context).padding.bottom : 0),
+                  12.h +
+                      (bottomInset == 0
+                          ? MediaQuery.of(context).padding.bottom
+                          : 0),
                 ),
                 decoration: const BoxDecoration(
                   color: Colors.white,
@@ -953,7 +995,8 @@ class _AddEditAddressScreenState extends ConsumerState<AddEditAddressScreen> {
                       disabledBackgroundColor: const Color(0xFFE8E8E8),
                       disabledForegroundColor: AppColors.textTertiary,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+                        borderRadius:
+                            BorderRadius.circular(AppDimensions.radiusMd),
                       ),
                     ),
                     child: _isSaving
@@ -1000,7 +1043,12 @@ class _CompactMapPreview extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final styleAsync = ref.watch(olaMapsStyleProvider);
+    final urlAsync = ref.watch(
+      olaMapsStaticMapUrlProvider(
+        point,
+        zoom: hasPinnedLocation ? 16 : 13.6,
+      ),
+    );
 
     return SizedBox(
       height: 180.h,
@@ -1010,22 +1058,16 @@ class _CompactMapPreview extends ConsumerWidget {
             borderRadius: BorderRadius.vertical(
               bottom: Radius.circular(AppDimensions.radiusXl.r),
             ),
-            child: styleAsync.maybeWhen(
-              data: (style) => style.configured && style.styleUrl != null
-                  ? MapLibreMap(
-                      key: ValueKey<String>('map-${point.lat}-${point.lng}'),
-                      styleString: style.styleUrl!,
-                      initialCameraPosition: CameraPosition(
-                        target: LatLng(point.lat, point.lng),
-                        zoom: hasPinnedLocation ? 16 : 13.6,
-                      ),
-                      compassEnabled: false,
-                      rotateGesturesEnabled: false,
-                      scrollGesturesEnabled: false,
-                      tiltGesturesEnabled: false,
-                      zoomGesturesEnabled: false,
-                      doubleClickZoomEnabled: false,
-                      dragEnabled: false,
+            child: urlAsync.maybeWhen(
+              data: (url) => url != null
+                  ? Image.network(
+                      url,
+                      key: ValueKey<String>(url),
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      height: double.infinity,
+                      errorBuilder: (_, __, ___) =>
+                          Container(color: AppColors.bgInput),
                     )
                   : Container(color: AppColors.bgInput),
               orElse: () => Container(color: AppColors.bgInput),

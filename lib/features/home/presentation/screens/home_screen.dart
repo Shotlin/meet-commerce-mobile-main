@@ -43,6 +43,7 @@ import 'package:bakaloo_flutter_app/shared/widgets/product_card.dart';
 import 'package:bakaloo_flutter_app/shared/widgets/skeleton_loader.dart';
 import 'package:bakaloo_flutter_app/features/products/presentation/widgets/show_product_options.dart';
 import 'package:bakaloo_flutter_app/features/location/presentation/providers/location_prompt_provider.dart';
+import 'package:bakaloo_flutter_app/features/location/presentation/providers/non_serviceable_location_provider.dart';
 import 'package:bakaloo_flutter_app/features/notifications/presentation/providers/notification_provider.dart';
 import 'package:bakaloo_flutter_app/features/location/presentation/widgets/location_prompt_sheet.dart';
 import 'package:bakaloo_flutter_app/features/profile/presentation/providers/profile_provider.dart';
@@ -396,7 +397,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   }
 
   Future<void> _maybeShowLocationPrompt() async {
-    if (!mounted || _locationPromptShownThisSession || _locationPromptInFlight) {
+    if (!mounted ||
+        _locationPromptShownThisSession ||
+        _locationPromptInFlight) {
       return;
     }
     // Checked synchronously, before the flag below — HomeScreen can be
@@ -454,6 +457,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         autoTrigger: permissionGranted && serviceEnabled,
         mandatory: true,
       );
+      if (mounted && ref.read(nonServiceableLocationProvider)) {
+        context.push(RouteNames.locationUnavailable);
+      }
     } catch (_) {
       // Non-critical — silently ignore
     } finally {
@@ -850,6 +856,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         activeTabThemeProvider
             .select((theme) => theme.sections.topBar.textColor),
       ),
+      colorEnabled: ref.watch(
+        activeTabThemeProvider
+            .select((theme) => theme.sections.topBar.colorEnabled),
+      ),
     );
     final searchZoneTheme = SearchZoneTheme(
       backgroundColor: ref.watch(
@@ -876,6 +886,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         activeTabThemeProvider.select(
           (theme) => theme.sections.searchZone.promoBoxImageUrl,
         ),
+      ),
+      colorEnabled: ref.watch(
+        activeTabThemeProvider
+            .select((theme) => theme.sections.searchZone.colorEnabled),
+      ),
+    );
+    final headerBackgroundImageUrl = ref.watch(
+      activeTabThemeProvider.select(
+        (theme) => theme.sections.headerBackground.imageUrl,
       ),
     );
     final activeTabKey = ref.watch(activeTabKeyProvider);
@@ -906,6 +925,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             theme.sections.categoryTabs.backgroundColor ??
             theme.sections.searchZone.backgroundColor,
       ),
+    );
+    final categoryTabsColorEnabled = ref.watch(
+      activeTabThemeProvider
+          .select((theme) => theme.sections.categoryTabs.colorEnabled),
     );
     final homeAsync = ref.watch(homeProvider);
     final deliveryEtaMinutes = ref.watch(
@@ -963,147 +986,208 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                         ),
                         slivers: <Widget>[
                           SliverToBoxAdapter(
-                            child: ValueListenableBuilder<bool>(
-                              valueListenable: _isTopChromeMotionEnabled,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: <Widget>[
-                                  Consumer(
-                                    builder: (context, ref, _) {
-                                      final currentUser = ref.watch(
-                                        currentUserProvider,
-                                      );
-                                      final addresses = currentUser == null
-                                          ? null
-                                          : ref
-                                              .watch(addressProvider)
-                                              .asData
-                                              ?.value;
-                                      final hasTrackingBanner = ref
-                                          .watch(orderTrackingBannerProvider)
-                                          .isNotEmpty;
-                                      return Column(
+                            child: Stack(
+                              children: <Widget>[
+                                // Shared background image behind the top
+                                // bar + search zone + category tabs block
+                                // below. The Stack sizes itself to that
+                                // Column's natural height, so Positioned.fill
+                                // matches it with no hardcoded height.
+                                if (headerBackgroundImageUrl != null &&
+                                    headerBackgroundImageUrl.isNotEmpty)
+                                  Positioned.fill(
+                                    child: AppImage(
+                                      imageUrl: headerBackgroundImageUrl,
+                                      memCacheWidth: MediaQuery.sizeOf(context)
+                                          .width
+                                          .round(),
+                                      memCacheHeight: 900,
+                                      fit: BoxFit.cover,
+                                      // Any cropping from a shorter-than-image
+                                      // device (smaller status bar, tabs
+                                      // hidden, etc.) should trim the bottom
+                                      // of the image, not the top — the
+                                      // delivery-address text sits right at
+                                      // the top of this block.
+                                      alignment: Alignment.topCenter,
+                                    ),
+                                  ),
+                                Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: <Widget>[
+                                    ValueListenableBuilder<bool>(
+                                      valueListenable:
+                                          _isTopChromeMotionEnabled,
+                                      child: Column(
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: <Widget>[
-                                          const OrderTrackingTopBanner(),
-                                          HomeHeader(
-                                            addressText: resolveAddressLabel(
-                                              isLoggedIn: currentUser != null,
-                                              addresses: addresses,
-                                            ),
-                                            onAddressTap: () =>
-                                                showAddressSheet(context),
-                                            onNotificationTap: () => context
-                                                .go(RouteNames.notifications),
-                                            onWalletTap: () =>
-                                                context.go(RouteNames.wallet),
-                                            topBarTheme: topBarTheme,
-                                            searchZoneColor: searchZoneTheme
-                                                .backgroundColor,
-                                            deliveryEtaMinutes:
-                                                deliveryEtaMinutes,
-                                            topPaddingOverride:
-                                                hasTrackingBanner ? 0 : null,
+                                          Consumer(
+                                            builder: (context, ref, _) {
+                                              final currentUser = ref.watch(
+                                                currentUserProvider,
+                                              );
+                                              final addresses = currentUser ==
+                                                      null
+                                                  ? null
+                                                  : ref
+                                                      .watch(addressProvider)
+                                                      .asData
+                                                      ?.value;
+                                              final hasTrackingBanner = ref
+                                                  .watch(
+                                                      orderTrackingBannerProvider)
+                                                  .isNotEmpty;
+                                              return Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: <Widget>[
+                                                  const OrderTrackingTopBanner(),
+                                                  HomeHeader(
+                                                    addressText:
+                                                        resolveAddressLabel(
+                                                      isLoggedIn:
+                                                          currentUser != null,
+                                                      addresses: addresses,
+                                                    ),
+                                                    onAddressTap: () =>
+                                                        showAddressSheet(
+                                                            context),
+                                                    topBarTheme: topBarTheme,
+                                                    searchZoneColor:
+                                                        searchZoneTheme
+                                                                .colorEnabled
+                                                            ? searchZoneTheme
+                                                                .backgroundColor
+                                                            : Colors
+                                                                .transparent,
+                                                    deliveryEtaMinutes:
+                                                        deliveryEtaMinutes,
+                                                    topPaddingOverride:
+                                                        hasTrackingBanner
+                                                            ? 0
+                                                            : null,
+                                                  ),
+                                                ],
+                                              );
+                                            },
                                           ),
                                         ],
-                                      );
-                                    },
-                                  ),
-                                ],
-                              ),
-                              builder: (
-                                context,
-                                isTopChromeMotionEnabled,
-                                child,
-                              ) {
-                                return ColoredBox(
-                                  color: topBarTheme.backgroundColor,
-                                  child: TickerMode(
-                                    enabled: isTopChromeMotionEnabled,
-                                    child: child!,
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                          SliverToBoxAdapter(
-                            child: ValueListenableBuilder<bool>(
-                              valueListenable: _isTopChromeMotionEnabled,
-                              builder: (
-                                context,
-                                isTopChromeMotionEnabled,
-                                _,
-                              ) {
-                                return Container(
-                                  key: _topSearchZoneKey,
-                                  color: Colors.transparent,
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: <Widget>[
-                                      // Search zone — uses searchZone.backgroundColor
-                                      ColoredBox(
-                                        color: searchZoneTheme.backgroundColor,
-                                        child: TickerMode(
-                                          enabled: isTopChromeMotionEnabled,
+                                      ),
+                                      builder: (
+                                        context,
+                                        isTopChromeMotionEnabled,
+                                        child,
+                                      ) {
+                                        return ColoredBox(
+                                          color: topBarTheme.colorEnabled
+                                              ? topBarTheme.backgroundColor
+                                              : Colors.transparent,
+                                          child: TickerMode(
+                                            enabled: isTopChromeMotionEnabled,
+                                            child: child!,
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                    ValueListenableBuilder<bool>(
+                                      valueListenable:
+                                          _isTopChromeMotionEnabled,
+                                      builder: (
+                                        context,
+                                        isTopChromeMotionEnabled,
+                                        _,
+                                      ) {
+                                        return Container(
+                                          key: _topSearchZoneKey,
+                                          color: Colors.transparent,
                                           child: Column(
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.start,
+                                            mainAxisSize: MainAxisSize.min,
                                             children: <Widget>[
-                                              const SizedBox.shrink(),
-                                              HomeSearchBar(
-                                                onSearchTap: _openSearch,
-                                                animateHints:
-                                                    isTopChromeMotionEnabled,
-                                                searchTheme: searchZoneTheme,
-                                                outerPadding:
-                                                    EdgeInsets.fromLTRB(
-                                                  12.w,
-                                                  0,
-                                                  12.w,
-                                                  10.h,
+                                              // Search zone — uses searchZone.backgroundColor
+                                              ColoredBox(
+                                                color:
+                                                    searchZoneTheme.colorEnabled
+                                                        ? searchZoneTheme
+                                                            .backgroundColor
+                                                        : Colors.transparent,
+                                                child: TickerMode(
+                                                  enabled:
+                                                      isTopChromeMotionEnabled,
+                                                  child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: <Widget>[
+                                                      const SizedBox.shrink(),
+                                                      HomeSearchBar(
+                                                        onSearchTap:
+                                                            _openSearch,
+                                                        animateHints:
+                                                            isTopChromeMotionEnabled,
+                                                        searchTheme:
+                                                            searchZoneTheme,
+                                                        outerPadding:
+                                                            EdgeInsets.fromLTRB(
+                                                          12.w,
+                                                          0,
+                                                          12.w,
+                                                          10.h,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
                                                 ),
                                               ),
+                                              // Store-closed banner — sits directly
+                                              // under the search bar (above category
+                                              // tabs) so it reads as a status line
+                                              // right below the primary nav action,
+                                              // not buried after tab browsing.
+                                              const StoreClosedBanner(),
+                                              // Category tabs — independent backgroundColor
+                                              // (falls back to searchZone color for legacy themes)
+                                              if (showCategoryTabs) ...<Widget>[
+                                                ColoredBox(
+                                                  color:
+                                                      categoryTabsColorEnabled
+                                                          ? categoryTabsBgColor
+                                                          : Colors.transparent,
+                                                  child: TickerMode(
+                                                    enabled:
+                                                        isTopChromeMotionEnabled,
+                                                    child: Column(
+                                                      crossAxisAlignment:
+                                                          CrossAxisAlignment
+                                                              .start,
+                                                      children: <Widget>[
+                                                        Gap(4.h),
+                                                        const CategoryTabsRow(),
+                                                        Gap(6.h),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ),
+                                              ] else
+                                                ColoredBox(
+                                                  color: searchZoneTheme
+                                                          .colorEnabled
+                                                      ? searchZoneTheme
+                                                          .backgroundColor
+                                                      : Colors.transparent,
+                                                  child: Gap(10.h),
+                                                ),
                                             ],
                                           ),
-                                        ),
-                                      ),
-                                      // Store-closed banner — sits directly
-                                      // under the search bar (above category
-                                      // tabs) so it reads as a status line
-                                      // right below the primary nav action,
-                                      // not buried after tab browsing.
-                                      const StoreClosedBanner(),
-                                      // Category tabs — independent backgroundColor
-                                      // (falls back to searchZone color for legacy themes)
-                                      if (showCategoryTabs) ...<Widget>[
-                                        ColoredBox(
-                                          color: categoryTabsBgColor,
-                                          child: TickerMode(
-                                            enabled: isTopChromeMotionEnabled,
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: <Widget>[
-                                                Gap(4.h),
-                                                const CategoryTabsRow(),
-                                                Gap(6.h),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      ] else
-                                        ColoredBox(
-                                          color:
-                                              searchZoneTheme.backgroundColor,
-                                          child: Gap(10.h),
-                                        ),
-                                    ],
-                                  ),
-                                );
-                              },
+                                        );
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
                           ),
                           // PHASE 1 FIX: Never render old summer/campaign
@@ -1711,7 +1795,7 @@ class _ThreeColumnProductGrid<T> extends StatelessWidget {
     // Three columns with two 10-unit gaps and 32 units total horizontal padding
     // (16 each side) — matching _threeColumnCardWidth logic.
     const double columnGapTotal = 20.0; // 10 × 2 gaps
-    const double sidePadTotal = 32.0;   // 16 × 2 sides
+    const double sidePadTotal = 32.0; // 16 × 2 sides
     final double cardPx = (availableWidth - columnGapTotal - sidePadTotal) / 3;
     final double imageHeight = cardPx * 0.84;
     // Below-box: unit row(~28) + divider(1) + price(~22) + discount(~16) +
@@ -1753,8 +1837,7 @@ class _ThreeColumnProductGrid<T> extends StatelessWidget {
                       Expanded(
                         child: columnIndex < rows[rowIndex].length
                             ? RepaintBoundary(
-                                child:
-                                    itemBuilder(rows[rowIndex][columnIndex]),
+                                child: itemBuilder(rows[rowIndex][columnIndex]),
                               )
                             : const SizedBox.shrink(),
                       ),
@@ -1825,15 +1908,16 @@ class _StagedCategorySectionState
     // below the fold anyway — the scroll has just reached the threshold).
     if (!_activated) return const SizedBox.shrink();
 
-    final catProducts =
-        ref.watch(homeCategoryProductsProvider(widget.category.id)).asData?.value;
+    final catProducts = ref
+        .watch(homeCategoryProductsProvider(widget.category.id))
+        .asData
+        ?.value;
     if (catProducts == null || catProducts.isEmpty) {
       return const SizedBox.shrink();
     }
 
-    final renderable = catProducts
-        .where((product) => product.inStock)
-        .toList(growable: false);
+    final renderable =
+        catProducts.where((product) => product.inStock).toList(growable: false);
     if (renderable.length < 2) {
       return const SizedBox.shrink();
     }
@@ -1913,15 +1997,21 @@ class _HomeLoadingView extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
                       SkeletonLoader(
-                          width: 190.w, height: 24.h, radius: 12,
+                          width: 190.w,
+                          height: 24.h,
+                          radius: 12,
                           useOwnShimmer: false),
                       Gap(8.h),
                       SkeletonLoader(
-                          width: 168.w, height: 24.h, radius: 12,
+                          width: 168.w,
+                          height: 24.h,
+                          radius: 12,
                           useOwnShimmer: false),
                       Gap(12.h),
                       SkeletonLoader(
-                          width: 220.w, height: 14.h, radius: 10,
+                          width: 220.w,
+                          height: 14.h,
+                          radius: 10,
                           useOwnShimmer: false),
                     ],
                   ),
@@ -1934,23 +2024,22 @@ class _HomeLoadingView extends StatelessWidget {
             ),
             Gap(24.h),
             SkeletonLoader(
-                width: double.infinity, height: 192.h, radius: 30,
+                width: double.infinity,
+                height: 192.h,
+                radius: 30,
                 useOwnShimmer: false),
             Gap(12.h),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: <Widget>[
                 SkeletonLoader(
-                    width: 24.w, height: 8.h, radius: 99,
-                    useOwnShimmer: false),
+                    width: 24.w, height: 8.h, radius: 99, useOwnShimmer: false),
                 Gap(6.w),
                 SkeletonLoader(
-                    width: 8.w, height: 8.h, radius: 99,
-                    useOwnShimmer: false),
+                    width: 8.w, height: 8.h, radius: 99, useOwnShimmer: false),
                 Gap(6.w),
                 SkeletonLoader(
-                    width: 8.w, height: 8.h, radius: 99,
-                    useOwnShimmer: false),
+                    width: 8.w, height: 8.h, radius: 99, useOwnShimmer: false),
               ],
             ),
             Gap(18.h),
@@ -1975,8 +2064,7 @@ class _HomeLoadingView extends StatelessWidget {
             ),
             Gap(28.h),
             SkeletonLoader(
-                width: 180.w, height: 18.h, radius: 12,
-                useOwnShimmer: false),
+                width: 180.w, height: 18.h, radius: 12, useOwnShimmer: false),
             Gap(14.h),
             SizedBox(
               height: 306.h,
@@ -2036,13 +2124,14 @@ class _HomeSectionsSkeleton extends StatelessWidget {
           children: <Widget>[
             // Banner skeleton
             SkeletonLoader(
-                width: double.infinity, height: 160.h, radius: 24,
+                width: double.infinity,
+                height: 160.h,
+                radius: 24,
                 useOwnShimmer: false),
             Gap(16.h),
             // Section header skeleton
             SkeletonLoader(
-                width: 160.w, height: 18.h, radius: 10,
-                useOwnShimmer: false),
+                width: 160.w, height: 18.h, radius: 10, useOwnShimmer: false),
             Gap(12.h),
             // Horizontal product rail skeleton
             SizedBox(
@@ -2067,8 +2156,7 @@ class _HomeSectionsSkeleton extends StatelessWidget {
             ),
             Gap(20.h),
             SkeletonLoader(
-                width: 140.w, height: 18.h, radius: 10,
-                useOwnShimmer: false),
+                width: 140.w, height: 18.h, radius: 10, useOwnShimmer: false),
             Gap(12.h),
             SizedBox(
               height: 200.h,

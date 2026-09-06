@@ -61,6 +61,16 @@ abstract class ApiClient {
   @GET(ApiConstants.olaMapsStyleUrl)
   Future<HttpResponse<dynamic>> getOlaMapsStyleUrl();
 
+  @GET(ApiConstants.olaMapsStaticMapUrl)
+  Future<HttpResponse<dynamic>> getOlaMapsStaticMapUrl(
+    @Query('lat') double lat,
+    @Query('lng') double lng,
+    @Query('zoom') double zoom,
+    @Query('width') int width,
+    @Query('height') int height,
+    @Query('marker') bool marker,
+  );
+
   @GET(ApiConstants.olaMapsGeocode)
   Future<HttpResponse<dynamic>> getOlaMapsGeocode(
     @Query('address') String address,

@@ -3,19 +3,23 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
+import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
 import 'package:bakaloo_flutter_app/core/theme/remote_theme_model.dart';
 
 const List<String> _searchHints = <String>[
+  'chicken',
+  'eggs',
+  'mutton',
+  'fish',
+  'grocery',
   'vegetables',
   'Milk',
   'fruits',
   'snacks',
-  'ice cream',
-  'grocery',
 ];
 const String _searchIconAsset = 'assets/icon/bakaloo-search-icon.png';
-const String _scanIconAsset = 'assets/icon/bakaloo-scan-icon.png';
 
 class HomeSearchBar extends StatefulWidget {
   const HomeSearchBar({
@@ -39,7 +43,6 @@ class _HomeSearchBarState extends State<HomeSearchBar> {
   int _hintIndex = 0;
   Timer? _hintTimer;
 
-  static const Color _brandRed = Color(0xFFD02428);
   static const Color _borderColor = Color(0xFFF0DEDE);
   static const Color _hintColor = Color(0xFF6B6770);
 
@@ -146,22 +149,12 @@ class _HomeSearchBarState extends State<HomeSearchBar> {
               children: <Widget>[
                 Image.asset(
                   _searchIconAsset,
-                  width: 28.w,
-                  height: 28.w,
-                  cacheWidth: 224,
-                  cacheHeight: 224,
+                  width: 22.w,
+                  height: 22.w,
+                  cacheWidth: 176,
+                  cacheHeight: 176,
                   fit: BoxFit.contain,
                   filterQuality: FilterQuality.high,
-                ),
-                Gap(10.w),
-                // Thin purple divider.
-                Container(
-                  width: 1.5,
-                  height: 20.h,
-                  decoration: BoxDecoration(
-                    color: _brandRed,
-                    borderRadius: BorderRadius.circular(2.r),
-                  ),
                 ),
                 Gap(10.w),
                 Expanded(
@@ -191,16 +184,20 @@ class _HomeSearchBarState extends State<HomeSearchBar> {
                         )
                       : hintLabel,
                 ),
-                Gap(8.w),
-                // Scan icon.
-                Image.asset(
-                  _scanIconAsset,
-                  width: 34.w,
-                  height: 34.w,
-                  cacheWidth: 272,
-                  cacheHeight: 272,
-                  fit: BoxFit.contain,
-                  filterQuality: FilterQuality.high,
+                Gap(10.w),
+                Container(
+                  width: 1,
+                  height: 22.h,
+                  color: _borderColor,
+                ),
+                Gap(10.w),
+                // Voice search — mirrors the mic already on the full
+                // search screen (speech_to_text); replaces the old
+                // QR-style scan icon, which nothing in the app used.
+                PhosphorIcon(
+                  PhosphorIcons.microphoneBold,
+                  size: 22.sp,
+                  color: AppColors.brandRed,
                 ),
               ],
             ),

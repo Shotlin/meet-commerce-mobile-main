@@ -143,7 +143,10 @@ GoRouter appRouter(Ref ref) {
       GoRoute(
         path: RouteNames.locationUnavailable,
         builder: (BuildContext context, GoRouterState state) {
-          return const LocationUnavailableScreen();
+          return LocationUnavailableScreen(
+            attemptedLocationLabel:
+                state.extra is String ? state.extra! as String : null,
+          );
         },
       ),
       GoRoute(

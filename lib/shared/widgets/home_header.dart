@@ -2,24 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
+import 'package:go_router/go_router.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
-import 'package:bakaloo_flutter_app/core/branding/branding_provider.dart';
+import 'package:bakaloo_flutter_app/core/providers/price_mode_provider.dart';
 import 'package:bakaloo_flutter_app/core/providers/store_provider.dart';
 import 'package:bakaloo_flutter_app/core/theme/remote_theme_model.dart';
-import 'package:bakaloo_flutter_app/features/notifications/presentation/providers/unread_count_provider.dart';
-import 'package:bakaloo_flutter_app/features/wallet/presentation/providers/wallet_provider.dart';
-import 'package:bakaloo_flutter_app/shared/widgets/app_image.dart';
-
-const String _defaultLogoAsset = 'assets/icon/brand_logo.png';
+import 'package:bakaloo_flutter_app/routing/route_names.dart';
+import 'package:bakaloo_flutter_app/shared/widgets/b2b_segment_toggle.dart';
 
 /// Premium white-lavender top header.
 class HomeHeader extends ConsumerWidget {
   const HomeHeader({
     required this.addressText,
     required this.onAddressTap,
-    required this.onNotificationTap,
-    this.onWalletTap,
     this.topBarTheme,
     this.searchZoneColor,
     this.deliveryEtaMinutes,
@@ -29,16 +25,17 @@ class HomeHeader extends ConsumerWidget {
 
   final String addressText;
   final VoidCallback onAddressTap;
-  final VoidCallback onNotificationTap;
-  final VoidCallback? onWalletTap;
   final TopBarTheme? topBarTheme;
+
   /// Color used by the curved bottom strip so it matches the search zone
   /// background beneath it. Defaults to white when not provided.
   final Color? searchZoneColor;
+
   /// Admin-set delivery-time badge (e.g. 45 → "⚡ 45 mins delivery"), shown
   /// only on the main Zepto store front in place of its static "6 mins"
   /// tagline. Other store fronts keep their own static taglines.
   final int? deliveryEtaMinutes;
+
   /// When something is already occupying the status-bar area above this
   /// header (e.g. [OrderTrackingTopBanner]), that widget passes 0 here so
   /// the header doesn't also pad for it — avoiding a doubled gap. Null
@@ -53,13 +50,12 @@ class HomeHeader extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final topInset = topPaddingOverride ?? MediaQuery.paddingOf(context).top;
     final store = ref.watch(selectedStoreProvider);
-    final logoImageUrl = ref.watch(
-      brandingProvider.select((config) => config.logoImageUrl),
-    );
 
     // Use the dashboard-configured top bar color when available.
     // Fall back to the default lavender gradient only when no theme is provided.
-    final Color? themeColor = topBarTheme?.backgroundColor;
+    final bool topBarColorEnabled = topBarTheme?.colorEnabled ?? true;
+    final Color? themeColor =
+        topBarColorEnabled ? topBarTheme?.backgroundColor : null;
     // Dashboard's "Top bar text color" — was previously only ever applied to
     // the background above; the delivery-eta/address text and its icons
     // stayed hardcoded black regardless of this setting, so a dark top bar
@@ -67,15 +63,21 @@ class HomeHeader extends ConsumerWidget {
     // text over it. Falls back to black to match the light default header.
     final Color topTextColor = topBarTheme?.textColor ?? Colors.black;
 
-    final Decoration headerDecoration = themeColor != null
-        ? BoxDecoration(color: themeColor)
-        : const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: <Color>[_lavenderTop, _lavenderBottom],
-            ),
-          );
+    final Decoration headerDecoration = !topBarColorEnabled
+        // Admin explicitly disabled this row's color (pairs with a
+        // Header Background image set behind it) — paint nothing so
+        // that image shows through instead of falling back to the
+        // lavender default, which would just be a different opaque color.
+        ? const BoxDecoration(color: Colors.transparent)
+        : themeColor != null
+            ? BoxDecoration(color: themeColor)
+            : const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: <Color>[_lavenderTop, _lavenderBottom],
+                ),
+              );
 
     return Container(
       width: double.infinity,
@@ -88,41 +90,9 @@ class HomeHeader extends ConsumerWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
-                // Centered brand logo on top.
-                SizedBox(
-                  height: 40.h,
-                  child: logoImageUrl == null
-                      ? Image.asset(
-                          _defaultLogoAsset,
-                          height: 40.h,
-                          cacheHeight: 160,
-                          fit: BoxFit.contain,
-                          filterQuality: FilterQuality.medium,
-                        )
-                      : AppImage(
-                          imageUrl: logoImageUrl,
-                          memCacheWidth: 320,
-                          memCacheHeight: 160,
-                          fit: BoxFit.contain,
-                          filterQuality: FilterQuality.medium,
-                          placeholder: Image.asset(
-                            _defaultLogoAsset,
-                            height: 40.h,
-                            fit: BoxFit.contain,
-                          ),
-                          errorWidget: Image.asset(
-                            _defaultLogoAsset,
-                            height: 40.h,
-                            fit: BoxFit.contain,
-                          ),
-                        ),
-                ),
-                // Pull the bottom row up so it sits tight under the logo.
-                Transform.translate(
-                  offset: Offset(0, -10.h),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: <Widget>[
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: <Widget>[
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -182,12 +152,8 @@ class HomeHeader extends ConsumerWidget {
                       ),
                     ),
                     Gap(10.w),
-                    _HeaderActions(
-                      onWalletTap: onWalletTap,
-                      onNotificationTap: onNotificationTap,
-                    ),
+                    const _HeaderActions(),
                   ],
-                  ),
                 ),
                 Gap(2.h),
               ],
@@ -231,218 +197,59 @@ class _HeaderBottomCurveClipper extends CustomClipper<Path> {
   bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
 }
 
-/// Wallet + profile circular actions kept on a shared baseline so both
-/// circles align, while the wallet balance pill overhangs below.
+/// B2B/B2C browsing toggle + profile shortcut — replaces the previous
+/// wallet/notification icons, which now live inside the Profile tab
+/// instead of the home header.
 class _HeaderActions extends StatelessWidget {
-  const _HeaderActions({
-    required this.onWalletTap,
-    required this.onNotificationTap,
-  });
-
-  final VoidCallback? onWalletTap;
-  final VoidCallback onNotificationTap;
+  const _HeaderActions();
 
   @override
   Widget build(BuildContext context) {
-    final double circle = 46.w;
-    final double gap = 12.w;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        const _PriceModeToggle(),
+        Gap(10.w),
+        _ProfileButton(
+          size: 42.w,
+          onTap: () => context.go(RouteNames.profile),
+        ),
+      ],
+    );
+  }
+}
+
+/// Self-service B2B/B2C browsing toggle. See [PriceModeNotifier] — this
+/// only tracks and persists the customer's chosen mode; it doesn't change
+/// any prices yet (that needs a separate, carefully-tested pass through
+/// product listing, cart and checkout).
+class _PriceModeToggle extends ConsumerWidget {
+  const _PriceModeToggle();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final mode = ref.watch(priceModeProvider);
+    final isWholesale = mode == PriceMode.wholesale;
 
     return SizedBox(
-      width: circle * 2 + gap,
-      height: circle + 14.h,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: <Widget>[
-          // Both circles aligned on the same top baseline.
-          Positioned(
-            top: 0,
-            left: 0,
-            child: Row(
-              children: <Widget>[
-                _CircleIconButton(
-                  asset: 'assets/icon/wallet_icon.png',
-                  size: circle,
-                  iconSize: 38.w,
-                  onTap: onWalletTap,
-                ),
-                Gap(gap),
-                _CircleNotificationButton(
-                  size: circle,
-                  onTap: onNotificationTap,
-                ),
-              ],
-            ),
-          ),
-          // Balance pill, centered under the wallet (left) circle.
-          Positioned(
-            bottom: 0,
-            left: -10.w,
-            width: circle + 20.w,
-            child: const Center(child: _WalletPill()),
-          ),
-        ],
+      width: 96.w,
+      child: B2BSegmentToggle(
+        value: isWholesale ? BusinessMode.b2b : BusinessMode.b2c,
+        onChanged: (next) {
+          final notifier = ref.read(priceModeProvider.notifier);
+          final wantsWholesale = next == BusinessMode.b2b;
+          if (wantsWholesale != isWholesale) notifier.toggle();
+        },
       ),
     );
   }
 }
 
-class _WalletPill extends ConsumerWidget {
-  const _WalletPill();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // FIX: Use walletProvider (WalletNotifier, keepAlive) so the pill shows
-    // the same balance already loaded by the wallet screen/profile — no
-    // separate fetch, no independent error state.
-    // `.value` (not `.asData?.value`) so the pill keeps showing the last
-    // known balance while a refetch is in flight (e.g. right after a
-    // wallet-funded order invalidates this provider) instead of vanishing —
-    // `.asData` is strictly null during AsyncLoading even when the loading
-    // state is carrying forward a previous value.
-    final balance = ref.watch(walletProvider).value?.balance;
-    if (balance == null || balance <= 0) return const SizedBox.shrink();
-
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 9.w, vertical: 3.h),
-      decoration: BoxDecoration(
-        color: const Color(0xFFD02428),
-        borderRadius: BorderRadius.circular(20.r),
-        boxShadow: <BoxShadow>[
-          BoxShadow(
-            color: const Color(0xFFD02428).withValues(alpha: 0.32),
-            blurRadius: 7,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Text(
-        '\u20b9${_formatBalance(balance)}',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontFamily: 'Inter',
-          fontSize: 11.sp,
-          fontWeight: FontWeight.w700,
-          color: Colors.white,
-          height: 1.0,
-        ),
-      ),
-    );
-  }
-
-  String _formatBalance(double value) {
-    final intVal = value.round();
-    final str = intVal.toString();
-    if (str.length <= 3) return str;
-    final lastThree = str.substring(str.length - 3);
-    var rest = str.substring(0, str.length - 3);
-    final groups = <String>[];
-    while (rest.length > 2) {
-      groups.insert(0, rest.substring(rest.length - 2));
-      rest = rest.substring(0, rest.length - 2);
-    }
-    if (rest.isNotEmpty) groups.insert(0, rest);
-    return '${groups.join(',')},$lastThree';
-  }
-}
-
-class _CircleNotificationButton extends ConsumerWidget {
-  const _CircleNotificationButton({
-    required this.size,
-    required this.onTap,
-  });
+class _ProfileButton extends StatelessWidget {
+  const _ProfileButton({required this.size, required this.onTap});
 
   final double size;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // This bell is the app's only always-visible notification affordance
-    // (shown on the home screen, not just inside the Notifications list
-    // itself) — it previously never reflected unread state at all, on
-    // either platform, so a customer had no way to tell a notification had
-    // arrived without opening the tab proactively.
-    final unread = ref.watch(unreadCountProvider);
-
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: SizedBox(
-        width: size,
-        height: size,
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: <Widget>[
-            Container(
-              width: size,
-              height: size,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                boxShadow: <BoxShadow>[
-                  BoxShadow(
-                    color: Color(0x242A1A47),
-                    blurRadius: 12,
-                    offset: Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: ClipOval(
-                child: ColoredBox(
-                  color: Colors.white,
-                  child: Center(
-                    child: PhosphorIcon(
-                      PhosphorIcons.bell,
-                      size: 22.sp,
-                      color: const Color(0xFF2A1A47),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            if (unread > 0)
-              Positioned(
-                top: -2.h,
-                right: -2.w,
-                child: Container(
-                  padding: EdgeInsets.symmetric(horizontal: 5.w, vertical: 2.h),
-                  constraints: BoxConstraints(minWidth: 18.w, minHeight: 18.w),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE23744),
-                    borderRadius: BorderRadius.circular(999.r),
-                    border: Border.all(color: Colors.white, width: 1.5.w),
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    unread > 9 ? '9+' : '$unread',
-                    style: TextStyle(
-                      fontSize: 10.sp,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                      height: 1,
-                      fontFamily: 'Inter',
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CircleIconButton extends StatelessWidget {
-  const _CircleIconButton({
-    required this.asset,
-    required this.size,
-    required this.iconSize,
-    required this.onTap,
-  });
-
-  final String asset;
-  final double size;
-  final double iconSize;
-  final VoidCallback? onTap;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -466,14 +273,10 @@ class _CircleIconButton extends StatelessWidget {
           child: ColoredBox(
             color: Colors.white,
             child: Center(
-              child: Image.asset(
-                asset,
-                width: iconSize,
-                height: iconSize,
-                cacheWidth: (iconSize * 6).round(),
-                cacheHeight: (iconSize * 6).round(),
-                fit: BoxFit.contain,
-                filterQuality: FilterQuality.high,
+              child: PhosphorIcon(
+                PhosphorIcons.userCircle,
+                size: 26.sp,
+                color: const Color(0xFF2A1A47),
               ),
             ),
           ),

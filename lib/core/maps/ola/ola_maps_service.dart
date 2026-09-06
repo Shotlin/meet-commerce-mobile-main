@@ -22,6 +22,26 @@ Future<OlaMapsStyle> olaMapsStyle(Ref ref) {
   return ref.watch(olaMapsServiceProvider).getStyle();
 }
 
+/// A static (raster) map image URL centered on [point] — the fallback for
+/// non-interactive map previews (see OlaMapsService.getStaticMapUrl for why
+/// interactive MapLibreMap isn't used). autoDispose, not keepAlive: unlike
+/// the style URL (one shared value for the whole app), a distinct point
+/// means a distinct image, so nothing here is worth holding onto once its
+/// last watcher goes away.
+@riverpod
+Future<String?> olaMapsStaticMapUrl(
+  Ref ref,
+  GeoPoint point, {
+  double zoom = 16,
+  bool marker = false,
+}) {
+  return ref.watch(olaMapsServiceProvider).getStaticMapUrl(
+        point,
+        zoom: zoom,
+        marker: marker,
+      );
+}
+
 /// A style URL fetched from the backend, plus whether it issued one
 /// (unset until an admin saves a working key from the dashboard).
 class OlaMapsStyle {
@@ -70,6 +90,44 @@ class OlaMapsService {
         debugPrint('$stackTrace');
       }
       return const OlaMapsStyle(configured: false);
+    }
+  }
+
+  /// A key-embedded static (raster) map image URL centered on [point], with
+  /// a marker drawn at that point server-side. Fallback for the address
+  /// picker's interactive MapLibreMap, which renders a solid black surface
+  /// on some Android devices/OS versions — a confirmed upstream
+  /// maplibre-native rendering bug (maplibre/maplibre-native#4079), not
+  /// something fixable from this app. Returns null if Ola Maps isn't
+  /// configured or the request fails; callers should fall back further
+  /// (e.g. a plain "map preview unavailable" placeholder).
+  Future<String?> getStaticMapUrl(
+    GeoPoint point, {
+    double zoom = 16,
+    int width = 640,
+    int height = 400,
+    bool marker = true,
+  }) async {
+    try {
+      final response = await _apiClient.getOlaMapsStaticMapUrl(
+        point.lat,
+        point.lng,
+        zoom,
+        width,
+        height,
+        marker,
+      );
+      final data = _extractData(response.data);
+      if (data['configured'] != true) {
+        return null;
+      }
+      return (data['url'] as String?)?.trim();
+    } catch (error, stackTrace) {
+      if (kDebugMode) {
+        debugPrint('OlaMapsService.getStaticMapUrl exception: $error');
+        debugPrint('$stackTrace');
+      }
+      return null;
     }
   }
 
