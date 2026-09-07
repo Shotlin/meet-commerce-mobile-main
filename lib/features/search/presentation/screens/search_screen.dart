@@ -859,6 +859,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(priceModeProvider, (previous, next) {
+      if (previous != next) {
+        _allProducts.clear();
+        _displayProducts = <ProductEntity>[];
+        ref.read(searchProvider.notifier).retry();
+      }
+    });
     final searchState = ref.watch(searchProvider);
     final history = ref.watch(searchHistoryProvider);
     final categoriesAsync = ref.watch(categoryCollectionProvider);

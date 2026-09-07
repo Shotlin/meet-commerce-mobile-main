@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'package:bakaloo_flutter_app/core/storage/hive_service.dart';
+import 'package:bakaloo_flutter_app/core/constants/storage_keys.dart';
 
 import 'package:dartz/dartz.dart';
 import 'package:dio/dio.dart';
@@ -23,6 +25,8 @@ class ProductRepositoryImpl implements ProductRepository {
 
   final ProductRemoteDataSource _remoteDataSource;
   final ProductLocalDataSource _localDataSource;
+  String get _priceScope => '${AppCacheManager.currentShopScope}_${HiveService.settingsBox.get(StorageKeys.priceMode, defaultValue: 'retail')}';
+
   static const Duration _pageCacheTtl = Duration(minutes: 10);
 
   @override
@@ -37,7 +41,7 @@ class ProductRepositoryImpl implements ProductRepository {
     // after the customer's real allocation resolves, regardless of when/if
     // an invalidation happens to run first. See AppCacheManager.currentShopScope.
     final cacheKey =
-        'products_page_${page}_${limit}_${AppCacheManager.currentShopScope}';
+        'products_page_${page}_${limit}_$_priceScope';
 
     if (page == 1) {
       final cached = _cachedPage(cacheKey);
@@ -126,7 +130,8 @@ class ProductRepositoryImpl implements ProductRepository {
     // serving it whenever it happened to still be "fresh" meant every
     // check right after a dashboard edit showed the pre-edit value, one
     // visit behind, since the fix only landed in the cache for next time.
-    final cachedJson = _localDataSource.getCachedProduct(productId);
+    final detailKey = '${productId}_$_priceScope';
+    final cachedJson = _localDataSource.getCachedProduct(detailKey);
     final cachedEntity = cachedJson == null
         ? null
         : ProductModel.fromJson(cachedJson).toEntity();
@@ -134,7 +139,7 @@ class ProductRepositoryImpl implements ProductRepository {
     try {
       final remoteProduct = await _remoteDataSource.getProductDetail(productId);
       await _localDataSource.cacheProduct(
-        productId: productId,
+        productId: detailKey,
         product: remoteProduct.toJson(),
       );
       return Right(remoteProduct.toEntity());
@@ -264,7 +269,7 @@ class ProductRepositoryImpl implements ProductRepository {
   }) async {
     // See the matching comment in getProducts — these lists are shop-scoped
     // server-side too, so the cache key must be as well.
-    cacheKey = '${cacheKey}_${AppCacheManager.currentShopScope}';
+    cacheKey = '${cacheKey}_$_priceScope';
     final cachedJson = _localDataSource.getCachedList(cacheKey);
     final cachedItems =
         (cachedJson?['items'] as List<dynamic>? ?? const <dynamic>[])

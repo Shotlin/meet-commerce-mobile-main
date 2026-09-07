@@ -7,6 +7,8 @@ import 'package:bakaloo_flutter_app/features/products/domain/usecases/get_pair_w
 import 'package:bakaloo_flutter_app/features/products/domain/usecases/get_related.dart';
 import 'package:bakaloo_flutter_app/features/products/presentation/providers/product_list_provider.dart';
 
+import 'package:bakaloo_flutter_app/core/providers/price_mode_provider.dart';
+
 part 'product_detail_provider.g.dart';
 
 final getProductDetailUseCaseProvider = Provider<GetProductDetailUseCase>((
@@ -25,6 +27,7 @@ final getPairWithUseCaseProvider = Provider<GetPairWithUseCase>((Ref ref) {
 
 @riverpod
 Future<ProductEntity> productDetail(Ref ref, String productId) async {
+  ref.watch(priceModeProvider);
   final result =
       await ref.read(getProductDetailUseCaseProvider).call(productId);
   return result.fold(

@@ -1,11 +1,10 @@
-import 'dart:async';
-
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import 'package:bakaloo_flutter_app/core/constants/storage_keys.dart';
 import 'package:bakaloo_flutter_app/core/storage/app_cache_manager.dart';
 import 'package:bakaloo_flutter_app/core/storage/hive_service.dart';
 import 'package:bakaloo_flutter_app/features/home/presentation/providers/home_provider.dart';
+import 'package:bakaloo_flutter_app/features/home/presentation/providers/banner_provider.dart';
 
 part 'price_mode_provider.g.dart';
 
@@ -27,20 +26,13 @@ class PriceModeNotifier extends _$PriceModeNotifier {
     return stored == 'wholesale' ? PriceMode.wholesale : PriceMode.retail;
   }
 
-  void toggle() {
+  Future<void> toggle() async {
     final next = state == PriceMode.retail ? PriceMode.wholesale : PriceMode.retail;
+    await HiveService.settingsBox.put(StorageKeys.priceMode, next.name);
+    await AppCacheManager.clearShopScopedCaches();
     state = next;
-    unawaited(HiveService.settingsBox.put(StorageKeys.priceMode, next.name));
 
-    // The local Hive product-list cache (ProductRepositoryImpl) is keyed by
-    // shop scope only, not price mode — without clearing it here, switching
-    // modes would keep serving whichever mode happened to populate the
-    // cache first. Also invalidate the currently-visible home providers so
-    // an open Home screen re-fetches immediately instead of only on next
-    // cold start (mirrors auth_notifier.dart's
-    // _invalidateShopScopedHomeProviders, which does the same for shop
-    // allocation changes).
-    unawaited(AppCacheManager.clearShopScopedCaches());
+    // Refresh visible home sections after the persisted mode and caches change.
     try {
       ref.invalidate(homeProvider);
     } catch (_) {}
