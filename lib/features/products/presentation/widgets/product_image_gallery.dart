@@ -13,7 +13,6 @@ class ProductImageGallery extends StatefulWidget {
     required this.avgRating,
     required this.ratingCount,
     required this.isCollapsed,
-    required this.scrollOffset,
     required this.isWishlisted,
     required this.onWishlistToggle,
     this.pageController,
@@ -48,7 +47,6 @@ class ProductImageGallery extends StatefulWidget {
   final VoidCallback? onBack;
   final ValueChanged<int>? onImageChanged;
   final VoidCallback? onHighlightsToggle;
-  final double scrollOffset;
 
   @override
   State<ProductImageGallery> createState() => _ProductImageGalleryState();
@@ -57,7 +55,6 @@ class ProductImageGallery extends StatefulWidget {
 class _ProductImageGalleryState extends State<ProductImageGallery> {
   late final PageController _pageController;
   bool _ownsController = false;
-  int _currentPage = 0;
   bool _showHighlights = false;
 
   List<String> get _galleryImages {
@@ -134,7 +131,7 @@ class _ProductImageGalleryState extends State<ProductImageGallery> {
   Widget build(BuildContext context) {
     return SliverAppBar(
       pinned: true,
-      expandedHeight: 420.h,
+      expandedHeight: 382.h,
       automaticallyImplyLeading: false,
       backgroundColor:
           widget.isCollapsed ? const Color(0xFFFFFFFF) : Colors.transparent,
@@ -160,57 +157,48 @@ class _ProductImageGalleryState extends State<ProductImageGallery> {
               background: Stack(
                 fit: StackFit.expand,
                 children: <Widget>[
-                  Transform.translate(
-                    // Vertical parallax: 0.18x — tuned for subtle depth vs promo's 0.3x horizontal
-                    offset: Offset(0, widget.scrollOffset * 0.18),
-                    child: PageView.builder(
-                      controller: _pageController,
-                      physics: const BouncingScrollPhysics(),
-                      itemCount:
-                          _galleryImages.isEmpty ? 1 : _galleryImages.length,
-                      onPageChanged: (index) {
-                        setState(() {
-                          _currentPage = index;
-                        });
-                        widget.onImageChanged?.call(index);
-                      },
-                      itemBuilder: (context, index) {
-                        final imageUrl = _galleryImages.isEmpty
-                            ? null
-                            : _galleryImages[index];
-                        return Container(
-                          color: const Color(0xFFF2F2F2),
-                          child: imageUrl == null
-                              ? Center(
+                  PageView.builder(
+                    controller: _pageController,
+                    physics: const BouncingScrollPhysics(),
+                    itemCount:
+                        _galleryImages.isEmpty ? 1 : _galleryImages.length,
+                    onPageChanged: (index) {
+                      widget.onImageChanged?.call(index);
+                    },
+                    itemBuilder: (context, index) {
+                      final imageUrl =
+                          _galleryImages.isEmpty ? null : _galleryImages[index];
+                      return Container(
+                        color: const Color(0xFFF2F2F2),
+                        child: imageUrl == null
+                            ? Center(
+                                child: PhosphorIcon(
+                                  PhosphorIcons.image,
+                                  size: 42.sp,
+                                  color: const Color(0xFFBBBBBB),
+                                ),
+                              )
+                            : CachedNetworkImage(
+                                imageUrl: imageUrl,
+                                fit: BoxFit.cover,
+                                memCacheWidth: _decodeDimension(context),
+                                memCacheHeight: _decodeDimension(context),
+                                fadeInDuration: Duration.zero,
+                                filterQuality: FilterQuality.high,
+                                placeholder: (context, url) => const ColoredBox(
+                                  color: Color(0xFFF2F2F2),
+                                  child: SizedBox.expand(),
+                                ),
+                                errorWidget: (context, url, error) => Center(
                                   child: PhosphorIcon(
-                                    PhosphorIcons.image,
-                                    size: 42.sp,
+                                    PhosphorIcons.imageBroken,
+                                    size: 36.sp,
                                     color: const Color(0xFFBBBBBB),
                                   ),
-                                )
-                              : CachedNetworkImage(
-                                  imageUrl: imageUrl,
-                                  fit: BoxFit.cover,
-                                  memCacheWidth: _decodeDimension(context),
-                                  memCacheHeight: _decodeDimension(context),
-                                  fadeInDuration: Duration.zero,
-                                  filterQuality: FilterQuality.high,
-                                  placeholder: (context, url) =>
-                                      const ColoredBox(
-                                    color: Color(0xFFF2F2F2),
-                                    child: SizedBox.expand(),
-                                  ),
-                                  errorWidget: (context, url, error) => Center(
-                                    child: PhosphorIcon(
-                                      PhosphorIcons.imageBroken,
-                                      size: 36.sp,
-                                      color: const Color(0xFFBBBBBB),
-                                    ),
-                                  ),
                                 ),
-                        );
-                      },
-                    ),
+                              ),
+                      );
+                    },
                   ),
                   Positioned(
                     left: 0,
@@ -260,81 +248,8 @@ class _ProductImageGalleryState extends State<ProductImageGallery> {
                                 ),
                               ],
                             ),
-                            const Spacer(),
-                            _CircleActionButton(
-                              icon: PhosphorIcons.shareNetworkBold,
-                              onTap: widget.onShare,
-                            ),
-                            SizedBox(width: 8.w),
-                            _CircleActionButton(
-                              icon: widget.isWishlisted
-                                  ? PhosphorIcons.heartFill
-                                  : PhosphorIcons.heart,
-                              iconColor: widget.isWishlisted
-                                  ? const Color(0xFFD02428)
-                                  : null,
-                              onTap: widget.onWishlistToggle,
-                            ),
                           ],
                         ),
-                      ),
-                    ),
-                  ),
-                  // "100% Fresh Cuts" badge, top-right of the photo.
-                  Positioned(
-                    top: 66.h,
-                    right: 16.w,
-                    child: Container(
-                      padding:
-                          EdgeInsets.symmetric(horizontal: 12.w, vertical: 7.h),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.92),
-                        borderRadius: BorderRadius.circular(100.r),
-                        boxShadow: <BoxShadow>[
-                          BoxShadow(
-                            color: const Color(0x14000000),
-                            blurRadius: 8.r,
-                            offset: Offset(0, 2.h),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: <Widget>[
-                          PhosphorIcon(
-                            PhosphorIcons.leafBold,
-                            size: 13.sp,
-                            color: const Color(0xFF0C831F),
-                          ),
-                          SizedBox(width: 5.w),
-                          Text(
-                            '100%\nFresh Cuts',
-                            style: TextStyle(
-                              fontFamily: 'Inter',
-                              fontSize: 10.sp,
-                              fontWeight: FontWeight.w700,
-                              color: const Color(0xFF1A1414),
-                              height: 1.15,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  // Decorative script-style tagline.
-                  Positioned(
-                    right: 16.w,
-                    bottom: 58.h,
-                    child: Text(
-                      'Good Food\nBrings People\nCloser',
-                      textAlign: TextAlign.right,
-                      style: TextStyle(
-                        fontFamily: 'Inter',
-                        fontStyle: FontStyle.italic,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 11.sp,
-                        color: const Color(0xFFD02428),
-                        height: 1.25,
                       ),
                     ),
                   ),
@@ -344,85 +259,31 @@ class _ProductImageGalleryState extends State<ProductImageGallery> {
                     bottom: 18.h,
                     child: Row(
                       children: <Widget>[
+                        _FreshnessPill(),
                         if ((widget.highlights ?? const <String, dynamic>{})
-                            .isNotEmpty)
-                          GestureDetector(
-                            behavior: HitTestBehavior.opaque,
+                            .isNotEmpty) ...<Widget>[
+                          SizedBox(width: 8.w),
+                          _CircleActionButton(
+                            icon: PhosphorIcons.sparkle,
                             onTap: _toggleHighlights,
-                            child: Container(
-                              width: 38.w,
-                              height: 38.w,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: const Color(0xFF333333)
-                                    .withValues(alpha: 0.85),
-                              ),
-                              child: Center(
-                                child: PhosphorIcon(
-                                  PhosphorIcons.sparkle,
-                                  size: 18.sp,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          )
-                        else
-                          SizedBox(width: 38.w, height: 38.w),
-                        const Spacer(),
-                        // "‹ 1/5 ›" pagination pill, matching the reference.
-                        if (_galleryImages.length > 1)
-                          Container(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 4.w,
-                              vertical: 4.h,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.45),
-                              borderRadius: BorderRadius.circular(100.r),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: <Widget>[
-                                _GalleryArrowButton(
-                                  icon: PhosphorIcons.caretLeftBold,
-                                  onTap: _currentPage > 0
-                                      ? () => _pageController.previousPage(
-                                            duration: const Duration(
-                                              milliseconds: 220,
-                                            ),
-                                            curve: Curves.easeOut,
-                                          )
-                                      : null,
-                                ),
-                                Container(
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: 8.w,
-                                  ),
-                                  child: Text(
-                                    '${_currentPage + 1}/${_galleryImages.length}',
-                                    style: TextStyle(
-                                      fontFamily: 'Inter',
-                                      fontSize: 11.5.sp,
-                                      fontWeight: FontWeight.w700,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ),
-                                _GalleryArrowButton(
-                                  icon: PhosphorIcons.caretRightBold,
-                                  onTap:
-                                      _currentPage < _galleryImages.length - 1
-                                          ? () => _pageController.nextPage(
-                                                duration: const Duration(
-                                                  milliseconds: 220,
-                                                ),
-                                                curve: Curves.easeOut,
-                                              )
-                                          : null,
-                                ),
-                              ],
-                            ),
+                            dark: true,
                           ),
+                        ],
+                        const Spacer(),
+                        _CircleActionButton(
+                          icon: PhosphorIcons.shareNetworkBold,
+                          onTap: widget.onShare,
+                        ),
+                        SizedBox(width: 8.w),
+                        _CircleActionButton(
+                          icon: widget.isWishlisted
+                              ? PhosphorIcons.heartFill
+                              : PhosphorIcons.heart,
+                          iconColor: widget.isWishlisted
+                              ? const Color(0xFFD02428)
+                              : null,
+                          onTap: widget.onWishlistToggle,
+                        ),
                       ],
                     ),
                   ),
@@ -589,11 +450,13 @@ class _CircleActionButton extends StatelessWidget {
     required this.icon,
     this.onTap,
     this.iconColor,
+    this.dark = false,
   });
 
   final PhosphorIconData icon;
   final VoidCallback? onTap;
   final Color? iconColor;
+  final bool dark;
 
   @override
   Widget build(BuildContext context) {
@@ -604,7 +467,9 @@ class _CircleActionButton extends StatelessWidget {
         width: 40.w,
         height: 40.w,
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: dark
+              ? const Color(0xFF1A1A1A).withValues(alpha: 0.82)
+              : Colors.white,
           shape: BoxShape.circle,
           boxShadow: <BoxShadow>[
             BoxShadow(
@@ -618,7 +483,7 @@ class _CircleActionButton extends StatelessWidget {
           child: PhosphorIcon(
             icon,
             size: 20.sp,
-            color: iconColor ?? const Color(0xFF1A1A1A),
+            color: iconColor ?? (dark ? Colors.white : const Color(0xFF1A1A1A)),
           ),
         ),
       ),
@@ -626,29 +491,41 @@ class _CircleActionButton extends StatelessWidget {
   }
 }
 
-class _GalleryArrowButton extends StatelessWidget {
-  const _GalleryArrowButton({required this.icon, required this.onTap});
-
-  final PhosphorIconData icon;
-  final VoidCallback? onTap;
-
+class _FreshnessPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: SizedBox(
-        width: 24.w,
-        height: 24.w,
-        child: Center(
-          child: PhosphorIcon(
-            icon,
-            size: 13.sp,
-            color: onTap == null
-                ? Colors.white.withValues(alpha: 0.35)
-                : Colors.white,
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 8.h),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.94),
+        borderRadius: BorderRadius.circular(100.r),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: const Color(0x14000000),
+            blurRadius: 8.r,
+            offset: Offset(0, 2.h),
           ),
-        ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          PhosphorIcon(
+            PhosphorIcons.leafBold,
+            size: 14.sp,
+            color: const Color(0xFF0C831F),
+          ),
+          SizedBox(width: 5.w),
+          Text(
+            '100% Fresh',
+            style: TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 11.sp,
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFF1A1414),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -11,6 +11,7 @@ import 'package:bakaloo_flutter_app/core/utils/location_service_resolver.dart';
 import 'package:bakaloo_flutter_app/features/addresses/domain/entities/address_entity.dart';
 import 'package:bakaloo_flutter_app/features/addresses/presentation/providers/address_provider.dart';
 import 'package:bakaloo_flutter_app/features/location/presentation/providers/location_prompt_provider.dart';
+import 'package:bakaloo_flutter_app/features/location/presentation/providers/guest_storefront_provider.dart';
 import 'package:bakaloo_flutter_app/features/location/presentation/widgets/location_permission_denied_dialog.dart';
 import 'package:bakaloo_flutter_app/routing/route_names.dart';
 
@@ -43,6 +44,7 @@ Future<AddressEntity?> showLocationPromptSheet(
   BuildContext context, {
   bool autoTrigger = false,
   bool mandatory = false,
+  bool guestStorefront = false,
 }) async {
   return showModalBottomSheet<AddressEntity>(
     context: context,
@@ -55,6 +57,7 @@ Future<AddressEntity?> showLocationPromptSheet(
     builder: (_) => _LocationPromptSheet(
       autoTrigger: autoTrigger,
       mandatory: mandatory,
+      guestStorefront: guestStorefront,
     ),
   );
 }
@@ -63,10 +66,12 @@ class _LocationPromptSheet extends ConsumerStatefulWidget {
   const _LocationPromptSheet({
     this.autoTrigger = false,
     this.mandatory = false,
+    this.guestStorefront = false,
   });
 
   final bool autoTrigger;
   final bool mandatory;
+  final bool guestStorefront;
 
   @override
   ConsumerState<_LocationPromptSheet> createState() =>
@@ -101,6 +106,22 @@ class _LocationPromptSheetState extends ConsumerState<_LocationPromptSheet> {
       _state = _SheetState.loading;
       _statusMessage = 'Detecting your location…';
     });
+
+    if (widget.guestStorefront) {
+      await ref.read(guestStorefrontProvider.notifier).resolveCurrentLocation();
+      if (!mounted) return;
+      final guestState = ref.read(guestStorefrontProvider);
+      if (guestState.isReady) {
+        Navigator.of(context).pop();
+        return;
+      }
+      setState(() {
+        _state = _SheetState.idle;
+        _statusMessage = guestState.message ??
+            'Could not verify your location. Please try again.';
+      });
+      return;
+    }
 
     await _detectAndHandleResult();
   }
@@ -257,11 +278,12 @@ class _LocationPromptSheetState extends ConsumerState<_LocationPromptSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final addressesAsync = ref.watch(addressProvider);
-    final AddressEntity? savedAddress = addressesAsync.maybeWhen(
-      data: (addresses) => addresses.isEmpty ? null : addresses.first,
-      orElse: () => null,
-    );
+    final AddressEntity? savedAddress = widget.guestStorefront
+        ? null
+        : ref.watch(addressProvider).maybeWhen(
+              data: (addresses) => addresses.isEmpty ? null : addresses.first,
+              orElse: () => null,
+            );
 
     final bool canDismiss = !widget.mandatory;
 
@@ -427,19 +449,21 @@ class _LocationPromptSheetState extends ConsumerState<_LocationPromptSheet> {
                         loading: _state == _SheetState.loading,
                         onTap: _state == _SheetState.loading ? null : _onEnable,
                       ),
-                      Gap(12.h),
-                      _PromptButton(
-                        label: savedAddress != null
-                            ? 'View Saved Address'
-                            : 'Enter Location Manually',
-                        icon: savedAddress != null
-                            ? PhosphorIcons.mapPinFill
-                            : PhosphorIcons.pencilSimpleLineFill,
-                        filled: false,
-                        onTap: savedAddress != null
-                            ? _onSeeAllAddresses
-                            : _onAddManually,
-                      ),
+                      if (!widget.guestStorefront) ...<Widget>[
+                        Gap(12.h),
+                        _PromptButton(
+                          label: savedAddress != null
+                              ? 'View Saved Address'
+                              : 'Enter Location Manually',
+                          icon: savedAddress != null
+                              ? PhosphorIcons.mapPinFill
+                              : PhosphorIcons.pencilSimpleLineFill,
+                          filled: false,
+                          onTap: savedAddress != null
+                              ? _onSeeAllAddresses
+                              : _onAddManually,
+                        ),
+                      ],
                       Gap(16.h),
                       Text(
                         'You can change your location anytime later.',

@@ -18,6 +18,7 @@ import 'package:bakaloo_flutter_app/core/theme/tab_home_content_model.dart';
 import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
 import 'package:bakaloo_flutter_app/core/theme/app_text_styles.dart';
 import 'package:bakaloo_flutter_app/features/addresses/presentation/providers/address_provider.dart';
+import 'package:bakaloo_flutter_app/features/location/presentation/providers/guest_storefront_provider.dart';
 import 'package:bakaloo_flutter_app/features/auth/presentation/providers/auth_notifier.dart';
 import 'package:bakaloo_flutter_app/features/auth/presentation/providers/auth_state.dart';
 import 'package:bakaloo_flutter_app/shared/utils/address_utils.dart';
@@ -43,9 +44,11 @@ import 'package:bakaloo_flutter_app/shared/widgets/product_card.dart';
 import 'package:bakaloo_flutter_app/shared/widgets/skeleton_loader.dart';
 import 'package:bakaloo_flutter_app/features/products/presentation/widgets/show_product_options.dart';
 import 'package:bakaloo_flutter_app/features/location/presentation/providers/location_prompt_provider.dart';
+import 'package:bakaloo_flutter_app/features/location/presentation/providers/guest_storefront_provider.dart';
 import 'package:bakaloo_flutter_app/features/location/presentation/providers/non_serviceable_location_provider.dart';
 import 'package:bakaloo_flutter_app/features/notifications/presentation/providers/notification_provider.dart';
 import 'package:bakaloo_flutter_app/features/location/presentation/widgets/location_prompt_sheet.dart';
+import 'package:bakaloo_flutter_app/features/location/presentation/widgets/guest_location_gate.dart';
 import 'package:bakaloo_flutter_app/features/profile/presentation/providers/profile_provider.dart';
 import 'package:bakaloo_flutter_app/features/profile/presentation/widgets/name_prompt_dialog.dart';
 import 'package:bakaloo_flutter_app/shared/widgets/address_bottom_sheet.dart';
@@ -846,6 +849,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
   @override
   Widget build(BuildContext context) {
+    final authState = ref.watch(authStateProvider);
+    final guestStorefront = ref.watch(guestStorefrontProvider);
+    // Do this before subscribing to remote home-theme/content providers.
+    // A new guest must not fetch or see a master catalogue before the
+    // location resolver has assigned a serviceable store.
+    if (authState is! AuthAuthenticated && !guestStorefront.isReady) {
+      return GuestLocationGate(state: guestStorefront);
+    }
     final topBarTheme = TopBarTheme(
       backgroundColor: ref.watch(
         activeTabThemeProvider.select(
@@ -1035,6 +1046,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                                                       .watch(addressProvider)
                                                       .asData
                                                       ?.value;
+                                              final guestLocation =
+                                                  currentUser == null
+                                                      ? ref.watch(
+                                                          guestStorefrontProvider)
+                                                      : null;
                                               final hasTrackingBanner = ref
                                                   .watch(
                                                       orderTrackingBannerProvider)
@@ -1050,10 +1066,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                                                       isLoggedIn:
                                                           currentUser != null,
                                                       addresses: addresses,
+                                                      guestAddressLine1:
+                                                          guestLocation
+                                                              ?.addressLine1,
+                                                      guestCity:
+                                                          guestLocation?.city,
+                                                      guestPincode:
+                                                          guestLocation
+                                                              ?.pincode,
                                                     ),
                                                     onAddressTap: () =>
-                                                        showAddressSheet(
-                                                            context),
+                                                        currentUser == null
+                                                            ? context.go(
+                                                                RouteNames
+                                                                    .phone)
+                                                            : showAddressSheet(
+                                                                context),
                                                     topBarTheme: topBarTheme,
                                                     searchZoneColor:
                                                         searchZoneTheme

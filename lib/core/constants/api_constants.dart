@@ -177,6 +177,7 @@ class ApiConstants {
   static const allocationMyShops = '/allocation/my-shops';
   static const allocationAutoAssign = '/allocation/auto-assign';
   static const allocationRecompute = '/allocation/recompute';
+  static const storefrontResolveLocation = '/storefront/resolve-location';
 
   static const uploadImage = '/uploads/image';
 

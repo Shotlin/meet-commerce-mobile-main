@@ -3,8 +3,16 @@ import 'package:bakaloo_flutter_app/features/addresses/domain/entities/address_e
 String resolveAddressLabel({
   required bool isLoggedIn,
   required List<AddressEntity>? addresses,
+  String? guestAddressLine1,
+  String? guestCity,
+  String? guestPincode,
 }) {
   if (!isLoggedIn) {
+    final city = guestCity?.trim() ?? '';
+    final pincode = guestPincode?.trim() ?? '';
+    final line = guestAddressLine1?.trim() ?? '';
+    if (city.isNotEmpty && pincode.isNotEmpty) return '$city, $pincode';
+    if (line.isNotEmpty) return line;
     return 'Log in to add your delivery address';
   }
   if (addresses == null || addresses.isEmpty) {

@@ -3,8 +3,11 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:bakaloo_flutter_app/core/constants/storage_keys.dart';
 import 'package:bakaloo_flutter_app/core/storage/app_cache_manager.dart';
 import 'package:bakaloo_flutter_app/core/storage/hive_service.dart';
+import 'package:bakaloo_flutter_app/core/theme/remote_theme_provider.dart';
+import 'package:bakaloo_flutter_app/core/theme/section_manifest_provider.dart';
 import 'package:bakaloo_flutter_app/features/home/presentation/providers/home_provider.dart';
 import 'package:bakaloo_flutter_app/features/home/presentation/providers/banner_provider.dart';
+import 'package:bakaloo_flutter_app/features/cart/presentation/providers/cart_provider.dart';
 
 part 'price_mode_provider.g.dart';
 
@@ -22,12 +25,14 @@ enum PriceMode { retail, wholesale }
 class PriceModeNotifier extends _$PriceModeNotifier {
   @override
   PriceMode build() {
-    final stored = HiveService.settingsBox.get(StorageKeys.priceMode) as String?;
+    final stored =
+        HiveService.settingsBox.get(StorageKeys.priceMode) as String?;
     return stored == 'wholesale' ? PriceMode.wholesale : PriceMode.retail;
   }
 
   Future<void> toggle() async {
-    final next = state == PriceMode.retail ? PriceMode.wholesale : PriceMode.retail;
+    final next =
+        state == PriceMode.retail ? PriceMode.wholesale : PriceMode.retail;
     await HiveService.settingsBox.put(StorageKeys.priceMode, next.name);
     await AppCacheManager.clearShopScopedCaches();
     state = next;
@@ -36,6 +41,9 @@ class PriceModeNotifier extends _$PriceModeNotifier {
     try {
       ref.invalidate(homeProvider);
     } catch (_) {}
+    // Each mode owns a separate cart. Refresh immediately so the cart badge,
+    // cart screen, and checkout cannot display lines from the previous mode.
+    ref.invalidate(cartProvider);
     try {
       ref.invalidate(homeFeaturedProductsProvider);
     } catch (_) {}
@@ -47,6 +55,13 @@ class PriceModeNotifier extends _$PriceModeNotifier {
     } catch (_) {}
     try {
       ref.invalidate(homeNewArrivalsProvider);
+    } catch (_) {}
+    try {
+      ref.invalidate(selectedTabHomeContentProvider);
+      ref.invalidate(
+        sectionManifestProvider(ref.read(activeTabKeyProvider)),
+      );
+      ref.invalidate(activeSectionManifestProvider);
     } catch (_) {}
   }
 }

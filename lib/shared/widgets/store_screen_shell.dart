@@ -12,6 +12,7 @@ import 'package:bakaloo_flutter_app/core/theme/remote_theme_provider.dart';
 import 'package:bakaloo_flutter_app/core/theme/section_manifest_provider.dart';
 import 'package:bakaloo_flutter_app/features/addresses/domain/entities/address_entity.dart';
 import 'package:bakaloo_flutter_app/features/addresses/presentation/providers/address_provider.dart';
+import 'package:bakaloo_flutter_app/features/location/presentation/providers/guest_storefront_provider.dart';
 import 'package:bakaloo_flutter_app/features/home/presentation/providers/home_provider.dart';
 import 'package:bakaloo_flutter_app/features/home/presentation/widgets/dynamic_home_sections.dart';
 import 'package:bakaloo_flutter_app/routing/app_router.dart';
@@ -270,9 +271,16 @@ class _StoreScreenShellState extends ConsumerState<StoreScreenShell>
                                             .watch(addressProvider)
                                             .asData
                                             ?.value;
+                                final guestLocation = currentUser == null
+                                    ? ref.watch(guestStorefrontProvider)
+                                    : null;
                                 final addressText = resolveAddressLabel(
                                   isLoggedIn: currentUser != null,
                                   addresses: addresses,
+                                  guestAddressLine1:
+                                      guestLocation?.addressLine1,
+                                  guestCity: guestLocation?.city,
+                                  guestPincode: guestLocation?.pincode,
                                 );
                                 final deliveryEtaMinutes = ref.watch(
                                   tabThemesProvider.select(
@@ -282,8 +290,9 @@ class _StoreScreenShellState extends ConsumerState<StoreScreenShell>
                                 );
                                 return HomeHeader(
                                   addressText: addressText,
-                                  onAddressTap: () =>
-                                      showAddressSheet(context),
+                                  onAddressTap: () => currentUser == null
+                                      ? context.go(RouteNames.phone)
+                                      : showAddressSheet(context),
                                   topBarTheme: chromeTheme.topBarTheme,
                                   searchZoneColor: chromeTheme.searchZoneColor,
                                   deliveryEtaMinutes: deliveryEtaMinutes,

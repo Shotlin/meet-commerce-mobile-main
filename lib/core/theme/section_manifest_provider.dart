@@ -7,9 +7,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 import 'package:bakaloo_flutter_app/core/constants/api_constants.dart';
+import 'package:bakaloo_flutter_app/core/constants/storage_keys.dart';
+import 'package:bakaloo_flutter_app/core/network/api_interceptor.dart';
 import 'package:bakaloo_flutter_app/core/providers/store_provider.dart';
 import 'package:bakaloo_flutter_app/core/socket/socket_service.dart';
 import 'package:bakaloo_flutter_app/core/storage/hive_service.dart';
+import 'package:bakaloo_flutter_app/core/storage/app_cache_manager.dart';
+import 'package:bakaloo_flutter_app/core/storage/secure_storage_service.dart';
 import 'package:bakaloo_flutter_app/core/theme/remote_theme_model.dart';
 import 'package:bakaloo_flutter_app/core/theme/remote_theme_provider.dart';
 import 'package:bakaloo_flutter_app/core/theme/section_manifest_model.dart';
@@ -278,7 +282,7 @@ Future<Box<dynamic>> _openSectionManifestBox() async {
 }
 
 Dio _buildDio() {
-  return Dio(
+  final dio = Dio(
     BaseOptions(
       baseUrl: ApiConstants.baseUrl,
       // Use the same generous timeout as the main DioClient so the emulator's
@@ -289,6 +293,8 @@ Dio _buildDio() {
       receiveTimeout: const Duration(seconds: 40),
     ),
   );
+  dio.interceptors.add(ApiInterceptor(SecureStorageService()));
+  return dio;
 }
 
 Map<String, dynamic> _decodeToMap(dynamic cached) {
@@ -312,10 +318,17 @@ Map<String, dynamic> _decodeToMap(dynamic cached) {
   return <String, dynamic>{};
 }
 
-String _cacheKey(String storeKey, String tabKey) => '$storeKey::$tabKey';
+String _cacheKey(String storeKey, String tabKey) =>
+    '$storeKey::$tabKey::${_catalogContextKey()}';
 
 String _manifestCacheKey(String storeKey, String tabKey) =>
-    'section_manifest_${storeKey}_$tabKey';
+    'section_manifest_${storeKey}_${tabKey}_${_catalogContextKey()}';
+
+String _catalogContextKey() {
+  final scope = AppCacheManager.currentShopScope.replaceAll(',', '_');
+  final mode = HiveService.settingsBox.get(StorageKeys.priceMode) as String?;
+  return '${scope}_${mode == 'wholesale' ? 'wholesale' : 'retail'}';
+}
 
 String? _parseNullableString(dynamic value) {
   if (value == null) {

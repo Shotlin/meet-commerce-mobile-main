@@ -30,7 +30,8 @@ class AppCacheManager {
 
   /// Bump this whenever ANY cached payload schema changes in a way that would
   /// render stale/wrong UI from an older build.
-  static const int appCacheSchemaVersion = 3;
+  // Store-scoped catalog pricing replaced older master-catalog cache entries.
+  static const int appCacheSchemaVersion = 4;
 
   static const String _schemaVersionKey = 'bakaloo_app_cache_schema_version';
   static const String _apiBaseUrlKey = 'bakaloo_app_cache_api_base_url';

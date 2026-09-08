@@ -25,6 +25,7 @@ class StorageKeys {
   static const nonServiceableLocationDetected =
       'non_serviceable_location_detected';
   static const priceMode = 'price_mode';
+  static const guestStorefrontLocation = 'guest_storefront_location';
 
   static const cacheCategories = 'cache_categories';
   static const cacheFeatured = 'cache_featured';

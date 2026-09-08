@@ -13,6 +13,10 @@ import 'package:bakaloo_flutter_app/core/notifications/notification_router.dart'
 import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
 import 'package:bakaloo_flutter_app/core/theme/app_text_styles.dart';
 import 'package:bakaloo_flutter_app/features/auth/presentation/providers/auth_gate_controller.dart';
+import 'package:bakaloo_flutter_app/features/auth/presentation/providers/auth_notifier.dart';
+import 'package:bakaloo_flutter_app/features/auth/presentation/providers/auth_state.dart';
+import 'package:bakaloo_flutter_app/features/location/presentation/providers/guest_storefront_provider.dart';
+import 'package:bakaloo_flutter_app/features/location/presentation/widgets/guest_location_gate.dart';
 import 'package:bakaloo_flutter_app/features/cart/domain/entities/bill_summary_entity.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/providers/cart_enhancement_providers.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/providers/cart_provider.dart';
@@ -119,6 +123,25 @@ class _AppShellState extends ConsumerState<AppShell>
 
   @override
   Widget build(BuildContext context) {
+    final authState = ref.watch(authStateProvider);
+    final guestStorefront = ref.watch(guestStorefrontProvider);
+
+    // Do not rely on the asynchronous storefront-access wrapper for guests:
+    // it can retain its initial `false` value while the locally saved guest
+    // storefront token has already restored. Watching the source state here
+    // makes a cold reopen immediately leave the skeleton without a second
+    // location prompt or location API call.
+    if (authState is! AuthAuthenticated) {
+      if (!guestStorefront.isReady) {
+        return GuestLocationGate(state: guestStorefront);
+      }
+    } else {
+      final storefrontAccess = ref.watch(storefrontAccessProvider);
+      if (storefrontAccess.value != true) {
+        return GuestLocationGate(state: guestStorefront);
+      }
+    }
+
     final navigationShell = widget.navigationShell;
     final branchNavigatorKeys = widget.branchNavigatorKeys;
     final bottomInset = MediaQuery.paddingOf(context).bottom;
@@ -417,17 +440,21 @@ class _CartPillHostState extends ConsumerState<_CartPillHost> {
       final free = billSummary?.freeDelivery;
       final nextTier = billSummary?.cartMilestone.next;
       final unlockedTier = billSummary?.cartMilestone.unlocked;
-      final rewardLadder = billSummary?.cartMilestone.ladder ?? const <CartMilestoneLadderStep>[];
+      final rewardLadder = billSummary?.cartMilestone.ladder ??
+          const <CartMilestoneLadderStep>[];
 
-      final freeDeliveryAmount =
-          (free != null && free.enabled && !free.unlocked && free.amountToUnlock > 0)
-              ? free.amountToUnlock
-              : null;
+      final freeDeliveryAmount = (free != null &&
+              free.enabled &&
+              !free.unlocked &&
+              free.amountToUnlock > 0)
+          ? free.amountToUnlock
+          : null;
 
       // Show whichever goal is closer — the more motivating "almost there"
       // message — rather than always defaulting to free delivery.
       final showMilestone = nextTier != null &&
-          (freeDeliveryAmount == null || nextTier.amountToUnlock <= freeDeliveryAmount);
+          (freeDeliveryAmount == null ||
+              nextTier.amountToUnlock <= freeDeliveryAmount);
 
       if (showMilestone) {
         final threshold = nextTier.minCartAmount;
@@ -452,13 +479,16 @@ class _CartPillHostState extends ConsumerState<_CartPillHost> {
           cartCount: cartCount,
           amountToUnlock: freeDeliveryAmount,
           progress: progress,
-          message: 'Add ₹${freeDeliveryAmount.toStringAsFixed(0)} more to unlock FREE DELIVERY',
+          message:
+              'Add ₹${freeDeliveryAmount.toStringAsFixed(0)} more to unlock FREE DELIVERY',
           ladder: rewardLadder,
         );
       } else if (unlockedTier != null) {
         state = _SmartBarState.unlocked(
           cartCount: cartCount,
-          message: unlockedTier.message.isNotEmpty ? unlockedTier.message : '${unlockedTier.name} unlocked',
+          message: unlockedTier.message.isNotEmpty
+              ? unlockedTier.message
+              : '${unlockedTier.name} unlocked',
           ladder: rewardLadder,
         );
       } else if (free != null && free.unlocked) {
@@ -544,7 +574,6 @@ class _CartPillHostState extends ConsumerState<_CartPillHost> {
       },
     );
   }
-
 }
 
 class _SmartBottomBar extends StatelessWidget {
@@ -757,7 +786,8 @@ class _LadderSegment extends StatelessWidget {
         builder: (context, value, _) {
           return Stack(
             children: <Widget>[
-              Container(height: 5.h, color: Colors.white.withValues(alpha: 0.25)),
+              Container(
+                  height: 5.h, color: Colors.white.withValues(alpha: 0.25)),
               FractionallySizedBox(
                 widthFactor: value,
                 child: Container(
@@ -766,7 +796,9 @@ class _LadderSegment extends StatelessWidget {
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(4.r),
                     boxShadow: <BoxShadow>[
-                      BoxShadow(color: Colors.white.withValues(alpha: 0.6), blurRadius: 4),
+                      BoxShadow(
+                          color: Colors.white.withValues(alpha: 0.6),
+                          blurRadius: 4),
                     ],
                   ),
                 ),

@@ -27,7 +27,6 @@ import 'package:bakaloo_flutter_app/features/products/presentation/widgets/produ
 import 'package:bakaloo_flutter_app/features/products/presentation/widgets/product_delivery_banner.dart';
 import 'package:bakaloo_flutter_app/features/products/presentation/widgets/product_image_gallery.dart';
 import 'package:bakaloo_flutter_app/features/products/presentation/widgets/product_info_header.dart';
-import 'package:bakaloo_flutter_app/features/products/presentation/widgets/product_promo_banner.dart';
 import 'package:bakaloo_flutter_app/features/products/presentation/widgets/product_quality_grid.dart';
 import 'package:bakaloo_flutter_app/features/products/presentation/widgets/product_quantity_row.dart';
 import 'package:bakaloo_flutter_app/features/products/presentation/widgets/product_recommendation_wrappers.dart';
@@ -59,7 +58,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   late final PageController _galleryPageController;
   late ProductDetailSocketDelegate _socketDelegate;
   bool _isAppBarCollapsed = false;
-  double _scrollOffset = 0;
+  bool _hasReachedRecommendations = false;
   bool _hasLoggedView = false;
   int _currentImageIndex = 0;
   // Which family member is currently displayed. Starts as widget.id but can
@@ -120,10 +119,15 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       return;
     }
 
-    _scrollOffset = _scrollController.offset;
-    final collapsed = _scrollOffset > 260;
-    if (collapsed != _isAppBarCollapsed) {
-      setState(() => _isAppBarCollapsed = collapsed);
+    final offset = _scrollController.offset;
+    final collapsed = offset > 240;
+    final reachedRecommendations = offset >= 180;
+    if (collapsed != _isAppBarCollapsed ||
+        reachedRecommendations != _hasReachedRecommendations) {
+      setState(() {
+        _isAppBarCollapsed = collapsed;
+        _hasReachedRecommendations = reachedRecommendations;
+      });
     }
   }
 
@@ -199,193 +203,185 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
           ),
           child: Scaffold(
             backgroundColor: AppColors.bgPrimary,
-            body: AnimatedBuilder(
-              animation: _scrollController,
-              builder: (context, _) => CustomScrollView(
-                controller: _scrollController,
-                slivers: <Widget>[
-                  ProductImageGallery(
-                    images: effectiveProduct.images,
-                    thumbnailUrl: effectiveProduct.thumbnailUrl,
-                    productName: effectiveProduct.name,
-                    price: effectiveProduct.price,
-                    salePrice: effectiveProduct.salePrice,
-                    avgRating: effectiveProduct.avgRating,
-                    ratingCount: effectiveProduct.ratingCount,
-                    highlights: effectiveProduct.highlights,
-                    isCollapsed: _isAppBarCollapsed,
-                    scrollOffset: _scrollOffset,
-                    isWishlisted: ref.watch(
-                      wishlistIdsProvider
-                          .select((ids) => ids.contains(effectiveProduct.id)),
-                    ),
-                    onWishlistToggle: () => _toggleWishlist(effectiveProduct),
-                    pageController: _galleryPageController,
-                    onSearch: _navigateToSearch,
-                    onShare: () => _shareProduct(effectiveProduct),
-                    onBack: _handleBack,
-                    onImageChanged: (index) {
-                      setState(() => _currentImageIndex = index);
-                      _logProductImageSwipe(effectiveProduct, index);
-                    },
-                    onHighlightsToggle: () => _logProductHighlightsView(
-                      effectiveProduct,
+            body: CustomScrollView(
+              controller: _scrollController,
+              physics: const BouncingScrollPhysics(),
+              slivers: <Widget>[
+                ProductImageGallery(
+                  images: effectiveProduct.images,
+                  thumbnailUrl: effectiveProduct.thumbnailUrl,
+                  productName: effectiveProduct.name,
+                  price: effectiveProduct.price,
+                  salePrice: effectiveProduct.salePrice,
+                  avgRating: effectiveProduct.avgRating,
+                  ratingCount: effectiveProduct.ratingCount,
+                  highlights: effectiveProduct.highlights,
+                  isCollapsed: _isAppBarCollapsed,
+                  isWishlisted: ref.watch(
+                    wishlistIdsProvider
+                        .select((ids) => ids.contains(effectiveProduct.id)),
+                  ),
+                  onWishlistToggle: () => _toggleWishlist(effectiveProduct),
+                  pageController: _galleryPageController,
+                  onSearch: _navigateToSearch,
+                  onShare: () => _shareProduct(effectiveProduct),
+                  onBack: _handleBack,
+                  onImageChanged: (index) {
+                    setState(() => _currentImageIndex = index);
+                    _logProductImageSwipe(effectiveProduct, index);
+                  },
+                  onHighlightsToggle: () => _logProductHighlightsView(
+                    effectiveProduct,
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  child: RepaintBoundary(
+                    child: ProductThumbnailStrip(
+                      images: effectiveProduct.images,
+                      selectedIndex: _currentImageIndex,
+                      onSelect: (index) {
+                        _galleryPageController.animateToPage(
+                          index,
+                          duration: const Duration(milliseconds: 260),
+                          curve: Curves.easeOut,
+                        );
+                      },
                     ),
                   ),
+                ),
+                SliverToBoxAdapter(
+                  child: RepaintBoundary(
+                    child: ProductInfoHeader(product: effectiveProduct),
+                  ),
+                ),
+                if (effectiveProduct.hasMultipleOptions)
                   SliverToBoxAdapter(
                     child: RepaintBoundary(
-                      child: ProductThumbnailStrip(
-                        images: effectiveProduct.images,
-                        selectedIndex: _currentImageIndex,
-                        onSelect: (index) {
-                          _galleryPageController.animateToPage(
-                            index,
-                            duration: const Duration(milliseconds: 260),
-                            curve: Curves.easeOut,
-                          );
-                        },
+                      child: ProductVariantSelector(
+                        familyProductId: widget.id,
+                        selectedProductId: _selectedProductId,
+                        onSelect: _selectVariant,
                       ),
                     ),
                   ),
-                  SliverToBoxAdapter(
-                    child: RepaintBoundary(
-                      child: ProductPromoBanner(scrollOffset: _scrollOffset),
-                    ),
-                  ),
-                  SliverToBoxAdapter(
-                    child: RepaintBoundary(
-                      child: ProductInfoHeader(product: effectiveProduct),
-                    ),
-                  ),
-                  if (effectiveProduct.hasMultipleOptions)
-                    SliverToBoxAdapter(
-                      child: RepaintBoundary(
-                        child: ProductVariantSelector(
-                          familyProductId: widget.id,
-                          selectedProductId: _selectedProductId,
-                          onSelect: _selectVariant,
-                        ),
+                SliverToBoxAdapter(
+                  child: RepaintBoundary(
+                    child: ProductQuantityRow(
+                      quantity: cartQty,
+                      price: effectiveProduct.effectivePrice,
+                      disableIncrement: isAtPurchaseLimit,
+                      onIncrement: () => isAtPurchaseLimit
+                          ? AppToast.show(
+                              context,
+                              'Maximum product order complete',
+                            )
+                          : _updateCart(effectiveProduct, cartQty + 1),
+                      onDecrement: () => _updateCart(
+                        effectiveProduct,
+                        cartQty > 0 ? cartQty - 1 : 0,
                       ),
+                      onAddToCart: () =>
+                          _addSelectedVariantToCart(effectiveProduct),
                     ),
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  child: RepaintBoundary(
+                    child: ProductDeliveryBanner(product: effectiveProduct),
+                  ),
+                ),
+                const SliverToBoxAdapter(
+                  child: RepaintBoundary(child: ProductQualityGrid()),
+                ),
+                SliverToBoxAdapter(
+                  child: RepaintBoundary(
+                    child: ProductStoreRow(productId: effectiveProduct.id),
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  child: RepaintBoundary(
+                    child: ProductTrustBadges(
+                      product: effectiveProduct,
+                      onBrandTap: () => _navigateToBrand(effectiveProduct),
+                    ),
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  child: RepaintBoundary(
+                    child: ProductDetailTabs(product: effectiveProduct),
+                  ),
+                ),
+                if (effectiveAttributes.isNotEmpty)
                   SliverToBoxAdapter(
                     child: RepaintBoundary(
-                      child: ProductQuantityRow(
-                        quantity: cartQty,
-                        price: effectiveProduct.effectivePrice,
-                        disableIncrement: isAtPurchaseLimit,
-                        onIncrement: () => isAtPurchaseLimit
-                            ? AppToast.show(
-                                context,
-                                'Maximum product order complete',
-                              )
-                            : _updateCart(effectiveProduct, cartQty + 1),
-                        onDecrement: () => _updateCart(
+                      child: ProductDetailsSection(
+                        attributes: effectiveAttributes,
+                        onExpand: () => _logProductDetailsExpand(
                           effectiveProduct,
-                          cartQty > 0 ? cartQty - 1 : 0,
-                        ),
-                        onAddToCart: () =>
-                            _addSelectedVariantToCart(effectiveProduct),
-                      ),
-                    ),
-                  ),
-                  SliverToBoxAdapter(
-                    child: RepaintBoundary(
-                      child: ProductDeliveryBanner(product: effectiveProduct),
-                    ),
-                  ),
-                  const SliverToBoxAdapter(
-                    child: RepaintBoundary(child: ProductQualityGrid()),
-                  ),
-                  SliverToBoxAdapter(
-                    child: RepaintBoundary(
-                      child: ProductStoreRow(productId: effectiveProduct.id),
-                    ),
-                  ),
-                  SliverToBoxAdapter(
-                    child: RepaintBoundary(
-                      child: ProductTrustBadges(
-                        product: effectiveProduct,
-                        onBrandTap: () => _navigateToBrand(effectiveProduct),
-                      ),
-                    ),
-                  ),
-                  SliverToBoxAdapter(
-                    child: RepaintBoundary(
-                      child: ProductDetailTabs(product: effectiveProduct),
-                    ),
-                  ),
-                  if (effectiveAttributes.isNotEmpty)
-                    SliverToBoxAdapter(
-                      child: RepaintBoundary(
-                        child: ProductDetailsSection(
-                          attributes: effectiveAttributes,
-                          onExpand: () => _logProductDetailsExpand(
-                            effectiveProduct,
-                            'details',
-                          ),
+                          'details',
                         ),
                       ),
                     ),
-                  if (effectiveProduct.hasVendorDetails)
-                    SliverToBoxAdapter(
-                      child: RepaintBoundary(
-                        child: ProductVendorSection(
-                          vendorName: effectiveProduct.vendorName,
-                          vendorAddress: effectiveProduct.vendorAddress,
-                          vendorFssai: effectiveProduct.vendorFssai,
-                          onExpand: () => _logProductDetailsExpand(
-                            effectiveProduct,
-                            'vendor',
-                          ),
-                        ),
-                      ),
-                    ),
+                  ),
+                if (effectiveProduct.hasVendorDetails)
                   SliverToBoxAdapter(
                     child: RepaintBoundary(
-                      child: SimilarWrapper(
-                        productId: effectiveProduct.id,
-                        enabled: _scrollOffset >= 80,
-                        onProductTap: (targetProduct) => _handleSimilarTap(
+                      child: ProductVendorSection(
+                        vendorName: effectiveProduct.vendorName,
+                        vendorAddress: effectiveProduct.vendorAddress,
+                        vendorFssai: effectiveProduct.vendorFssai,
+                        onExpand: () => _logProductDetailsExpand(
                           effectiveProduct,
-                          targetProduct,
+                          'vendor',
                         ),
-                        onSeeAll: () => _openSimilarProducts(effectiveProduct),
-                        onAddToCart: _addToCart,
                       ),
                     ),
                   ),
-                  SliverToBoxAdapter(
-                    child: RepaintBoundary(
-                      child: RecentlyViewedWrapper(
-                        productId: effectiveProduct.id,
-                        enabled: _scrollOffset >= 180,
-                        onProductTap: (targetProduct) =>
-                            _openProduct(targetProduct),
-                        onAddToCart: _addToCart,
+                SliverToBoxAdapter(
+                  child: RepaintBoundary(
+                    child: SimilarWrapper(
+                      productId: effectiveProduct.id,
+                      enabled: _hasReachedRecommendations,
+                      onProductTap: (targetProduct) => _handleSimilarTap(
+                        effectiveProduct,
+                        targetProduct,
                       ),
+                      onSeeAll: () => _openSimilarProducts(effectiveProduct),
+                      onAddToCart: _addToCart,
                     ),
                   ),
-                  SliverToBoxAdapter(
-                    child: RepaintBoundary(
-                      child: PairWithWrapper(
-                        productId: effectiveProduct.id,
-                        enabled: _scrollOffset >= 180,
-                        onProductTap: (targetProduct) => _handlePairWithTap(
-                          effectiveProduct,
-                          targetProduct,
-                        ),
-                        onSeeAll: _openRecommendedProducts,
-                        onAddToCart: _addToCart,
+                ),
+                SliverToBoxAdapter(
+                  child: RepaintBoundary(
+                    child: RecentlyViewedWrapper(
+                      productId: effectiveProduct.id,
+                      enabled: _hasReachedRecommendations,
+                      onProductTap: (targetProduct) =>
+                          _openProduct(targetProduct),
+                      onAddToCart: _addToCart,
+                    ),
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  child: RepaintBoundary(
+                    child: PairWithWrapper(
+                      productId: effectiveProduct.id,
+                      enabled: _hasReachedRecommendations,
+                      onProductTap: (targetProduct) => _handlePairWithTap(
+                        effectiveProduct,
+                        targetProduct,
                       ),
+                      onSeeAll: _openRecommendedProducts,
+                      onAddToCart: _addToCart,
                     ),
                   ),
-                  const SliverToBoxAdapter(
-                    child: RepaintBoundary(
-                      child: SizedBox(height: 80),
-                    ),
+                ),
+                const SliverToBoxAdapter(
+                  child: RepaintBoundary(
+                    child: SizedBox(height: 80),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
             bottomNavigationBar: ProductBottomBar(
               product: effectiveProduct,

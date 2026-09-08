@@ -6,6 +6,7 @@ import 'package:bakaloo_flutter_app/features/home/domain/entities/banner_entity.
 import 'package:bakaloo_flutter_app/features/home/presentation/providers/banner_provider.dart';
 import 'package:bakaloo_flutter_app/features/products/domain/entities/product_entity.dart';
 import 'package:bakaloo_flutter_app/features/products/presentation/providers/product_list_provider.dart';
+import 'package:bakaloo_flutter_app/features/location/presentation/providers/guest_storefront_provider.dart';
 
 part 'home_provider.g.dart';
 
@@ -28,6 +29,10 @@ class HomeScreenData {
 
 @riverpod
 Future<HomeScreenData> home(Ref ref) async {
+  if (!ref.watch(storefrontReadyProvider)) {
+    return const HomeScreenData(
+        banners: [], categories: [], featuredProducts: []);
+  }
   final futures = await Future.wait<Object?>(<Future<Object?>>[
     ref.watch(bannerProvider.future),
     ref.watch(categoryCollectionProvider.future),
@@ -43,18 +48,21 @@ Future<HomeScreenData> home(Ref ref) async {
 
 @riverpod
 Future<List<ProductEntity>> homeNewArrivals(Ref ref) async {
+  if (!ref.watch(storefrontReadyProvider)) return const <ProductEntity>[];
   final result = await ref.read(getNewArrivalsUseCaseProvider).call(limit: 12);
   return result.fold((_) => const <ProductEntity>[], (data) => data);
 }
 
 @riverpod
 Future<List<ProductEntity>> homeDeals(Ref ref) async {
+  if (!ref.watch(storefrontReadyProvider)) return const <ProductEntity>[];
   final result = await ref.read(getDealsUseCaseProvider).call(limit: 12);
   return result.fold((_) => const <ProductEntity>[], (data) => data);
 }
 
 @riverpod
 Future<List<ProductEntity>> homeTrendingProducts(Ref ref) async {
+  if (!ref.watch(storefrontReadyProvider)) return const <ProductEntity>[];
   // PHASE 4C: Reduced limit 20 → 12. Sections cap trending at 8–12 items;
   // fetching 20 was wasted JSON decode work.
   // The redundant Dart re-sort is also removed: the backend query orders by
@@ -75,6 +83,7 @@ Future<List<ProductEntity>> homeCategoryProducts(
   Ref ref,
   String categoryId,
 ) async {
+  if (!ref.watch(storefrontReadyProvider)) return const <ProductEntity>[];
   // PHASE 5C: Limit reduced 10 → 6.
   // The home category preview grid renders at most 6 products (2 rows × 3
   // columns). Fetching 10 was wasted network/decode work; the backend already

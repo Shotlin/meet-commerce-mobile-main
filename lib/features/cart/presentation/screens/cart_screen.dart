@@ -16,6 +16,7 @@ import 'package:bakaloo_flutter_app/features/cart/domain/entities/cart_item_enti
 import 'package:bakaloo_flutter_app/features/cart/domain/entities/savings_breakdown_entity.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/providers/cart_enhancement_providers.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/providers/cart_provider.dart';
+import 'package:bakaloo_flutter_app/core/providers/price_mode_provider.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/add_to_wishlist_prompt_sheet.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_address_header.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_bill_summary.dart';
@@ -259,6 +260,8 @@ class _CartScreenState extends ConsumerState<CartScreen> {
   }
 
   PreferredSizeWidget _buildAppBar(BuildContext context, int itemCount) {
+    final mode = ref.watch(priceModeProvider);
+    final modeLabel = mode == PriceMode.wholesale ? 'B2B' : 'B2C';
     return AppBar(
       backgroundColor: Colors.white,
       elevation: 0,
@@ -287,7 +290,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
         },
       ),
       title: Text(
-        'My Cart${itemCount > 0 ? ' ($itemCount)' : ''}',
+        '$modeLabel Cart${itemCount > 0 ? ' ($itemCount)' : ''}',
         style: TextStyle(
           fontSize: 20.sp,
           fontWeight: FontWeight.w700,

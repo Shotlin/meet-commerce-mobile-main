@@ -12,6 +12,7 @@ import 'package:bakaloo_flutter_app/core/theme/app_dimensions.dart';
 import 'package:bakaloo_flutter_app/core/theme/app_shadows.dart';
 import 'package:bakaloo_flutter_app/core/theme/app_text_styles.dart';
 import 'package:bakaloo_flutter_app/core/constants/api_constants.dart';
+import 'package:bakaloo_flutter_app/core/providers/price_mode_provider.dart';
 import 'package:bakaloo_flutter_app/core/utils/extensions/double_extensions.dart';
 import 'package:bakaloo_flutter_app/features/addresses/domain/entities/address_entity.dart';
 import 'package:bakaloo_flutter_app/features/addresses/presentation/providers/address_provider.dart';
@@ -225,6 +226,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen>
 
   PreferredSizeWidget _buildAppBar(CheckoutState state) {
     final address = state.selectedAddress;
+    final mode = ref.watch(priceModeProvider);
+    final modeLabel = mode == PriceMode.wholesale ? 'B2B' : 'B2C';
     return AppBar(
       backgroundColor: Colors.white,
       elevation: 0,
@@ -232,7 +235,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen>
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text('Payment Options', style: AppTextStyles.h3),
+          Text('$modeLabel Order · Payment Options', style: AppTextStyles.h3),
           if (address != null)
             Text(
               'Delivering to ${address.label}',

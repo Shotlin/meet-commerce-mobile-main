@@ -26,6 +26,7 @@ import 'package:bakaloo_flutter_app/features/auth/domain/usecases/refresh_token_
 import 'package:bakaloo_flutter_app/features/auth/domain/usecases/send_otp_usecase.dart';
 import 'package:bakaloo_flutter_app/features/auth/domain/usecases/verify_otp_usecase.dart';
 import 'package:bakaloo_flutter_app/features/auth/presentation/providers/auth_state.dart';
+import 'package:bakaloo_flutter_app/features/addresses/presentation/providers/address_provider.dart';
 import 'package:bakaloo_flutter_app/core/theme/remote_theme_provider.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/providers/cart_provider.dart';
 import 'package:bakaloo_flutter_app/features/home/presentation/providers/banner_provider.dart';
@@ -112,7 +113,7 @@ class AuthNotifier extends _$AuthNotifier {
         _invalidateUserScopedProviders();
 
         state = AuthAuthenticated(user: authEntity.user);
-
+        await _importGuestLocationIfNeeded();
         unawaited(_triggerAllocationAutoAssign());
       },
     );
@@ -173,6 +174,8 @@ class AuthNotifier extends _$AuthNotifier {
 
     state = AuthAuthenticated(user: user);
     ref.read(socketServiceProvider).connect(accessToken);
+
+    await _importGuestLocationIfNeeded();
 
     // FIX: Also trigger auto-assign on session restore so that a user
     // who last opened the app before the fix now gets allocation resolved.
@@ -368,8 +371,8 @@ class AuthNotifier extends _$AuthNotifier {
   /// but never had allocation triggered.
   ///
   /// Fire-and-forget — auth state is already set before this runs.
-  /// If it fails (network error, server error), the product service fallback
-  /// (anonymous unscoped visibility) still allows browsing.
+  /// If it fails, the home stays empty until an allocation is resolved. This
+  /// deliberately prevents a customer from seeing another shop's catalogue.
   Future<void> _triggerAllocationAutoAssign() async {
     try {
       // Dio's BaseOptions set contentType: 'application/json' globally, so a
@@ -379,9 +382,9 @@ class AuthNotifier extends _$AuthNotifier {
       // runs. An explicit empty object avoids that; see
       // order_remote_datasource.dart's reorder() for the same pattern.
       final response = await ref.read(dioClientProvider).post<dynamic>(
-            ApiConstants.allocationAutoAssign,
-            data: <String, dynamic>{},
-          );
+        ApiConstants.allocationAutoAssign,
+        data: <String, dynamic>{},
+      );
       // Persist the resolved shop scope BEFORE invalidating providers below,
       // so the refetch they trigger reads/writes the local cache under the
       // correct (new) scope key instead of the stale one. See
@@ -400,6 +403,49 @@ class AuthNotifier extends _$AuthNotifier {
       }
     } catch (_) {
       // Non-fatal — ignore.
+    }
+  }
+
+  /// A guest location is encrypted local device state, never a backend guest
+  /// record. Once that guest signs in, promote it to a real delivery address
+  /// only when this account has no address at all; existing accounts keep
+  /// their own selected/default address untouched.
+  Future<void> _importGuestLocationIfNeeded() async {
+    try {
+      final raw =
+          HiveService.settingsBox.get(StorageKeys.guestStorefrontLocation);
+      if (raw is! Map) return;
+      final pincode = raw['pincode'] as String?;
+      final lat = raw['lat'] as num?;
+      final lng = raw['lng'] as num?;
+      if (pincode == null || pincode.isEmpty || lat == null || lng == null)
+        return;
+
+      final dio = ref.read(dioClientProvider);
+      final existingResponse = await dio.get<dynamic>(ApiConstants.addresses);
+      final payload = existingResponse.data;
+      final data = payload is Map ? payload['data'] : null;
+      if (data is List && data.isNotEmpty) return;
+
+      await dio.post<dynamic>(ApiConstants.addresses, data: {
+        'label': 'Home',
+        'addressLine1':
+            (raw['addressLine1'] as String?)?.trim().isNotEmpty == true
+                ? raw['addressLine1']
+                : 'My Location',
+        'city': (raw['city'] as String?)?.trim().isNotEmpty == true
+            ? raw['city']
+            : 'Local Area',
+        'state': raw['state'] ?? '',
+        'pincode': pincode,
+        'lat': lat.toDouble(),
+        'lng': lng.toDouble(),
+        'isDefault': true,
+      });
+      ref.invalidate(addressProvider);
+    } catch (_) {
+      // Login succeeds even if the network fails. The guest location stays
+      // local and a later authenticated app open retries the normal flow.
     }
   }
 

@@ -7,10 +7,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:bakaloo_flutter_app/core/constants/api_constants.dart';
 import 'package:bakaloo_flutter_app/core/constants/storage_keys.dart';
+import 'package:bakaloo_flutter_app/core/network/api_interceptor.dart';
 import 'package:bakaloo_flutter_app/core/network/app_availability_provider.dart';
 import 'package:bakaloo_flutter_app/core/providers/store_provider.dart';
 import 'package:bakaloo_flutter_app/core/socket/socket_service.dart';
 import 'package:bakaloo_flutter_app/core/storage/hive_service.dart';
+import 'package:bakaloo_flutter_app/core/storage/app_cache_manager.dart';
+import 'package:bakaloo_flutter_app/core/storage/secure_storage_service.dart';
 import 'package:bakaloo_flutter_app/core/theme/remote_theme_model.dart';
 import 'package:bakaloo_flutter_app/core/theme/section_manifest_provider.dart';
 import 'package:bakaloo_flutter_app/core/theme/tab_home_content_model.dart';
@@ -160,7 +163,7 @@ final tabHomeContentProvider =
         (Ref ref, String providerKey) async {
   ref.watch(_tabHomeEpochProvider);
   final List<String> parts = providerKey.split('::');
-  if (parts.length != 2) {
+  if (parts.length < 2) {
     return null;
   }
 
@@ -748,7 +751,7 @@ TabThemesResponse? _readCachedManifestSnapshot(String storeKey) {
 }
 
 Dio _buildDio() {
-  return Dio(
+  final dio = Dio(
     BaseOptions(
       baseUrl: ApiConstants.baseUrl,
       // Match the main DioClient timeout so mobile-data / Cloudflare tunnel
@@ -757,18 +760,26 @@ Dio _buildDio() {
       receiveTimeout: const Duration(seconds: 40),
     ),
   );
+  dio.interceptors.add(ApiInterceptor(SecureStorageService()));
+  return dio;
 }
 
 String _manifestCacheKey(String storeKey) => 'tab_themes_data_$storeKey';
 
 String _tabHomeCacheKey(String storeKey, String tabKey) =>
-    'tab_home_data_${storeKey}_$tabKey';
+    'tab_home_data_${storeKey}_${tabKey}_${_catalogContextKey()}';
 
 String _tabHomeMemoryKey(String storeKey, String tabKey) =>
-    '$storeKey::$tabKey';
+    '$storeKey::$tabKey::${_catalogContextKey()}';
 
 String _tabHomeProviderKey(String storeKey, String tabKey) =>
-    '$storeKey::$tabKey';
+    '$storeKey::$tabKey::${_catalogContextKey()}';
+
+String _catalogContextKey() {
+  final scope = AppCacheManager.currentShopScope.replaceAll(',', '_');
+  final mode = HiveService.settingsBox.get(StorageKeys.priceMode) as String?;
+  return '${scope}_${mode == 'wholesale' ? 'wholesale' : 'retail'}';
+}
 
 String? _resolveTabKey(TabThemesResponse response, String selectedTabKey) {
   if (response.tabMap.containsKey(selectedTabKey)) {
