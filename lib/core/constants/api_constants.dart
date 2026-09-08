@@ -9,6 +9,7 @@ enum CustomerImageProfile {
   seasonalHeroArtwork,
   listProduct,
   detailGallery,
+  premiumProduct,
   cartThumb,
 }
 
@@ -429,6 +430,8 @@ class ApiConstants {
           height: 320,
           crop: 'fit',
         );
+      case CustomerImageProfile.premiumProduct:
+        return const _ImageProfileConfig(width: 1080, height: 740, crop: 'fit');
       case CustomerImageProfile.detailGallery:
         return const _ImageProfileConfig(
           width: 520,

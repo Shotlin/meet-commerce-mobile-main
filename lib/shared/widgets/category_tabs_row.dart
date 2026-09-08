@@ -34,8 +34,8 @@ class CategoryTabsRow extends ConsumerWidget {
       activeTabThemeProvider.select((t) => t.sections.categoryTabs),
     );
     // PERF: Only watch the tabs list, not the full async response.
-    final List<TabThemeEntry>? asyncTabs = ref
-        .watch(tabThemesProvider.select((a) => a.asData?.value.tabs));
+    final List<TabThemeEntry>? asyncTabs =
+        ref.watch(tabThemesProvider.select((a) => a.asData?.value.tabs));
     final List<TabThemeEntry>? snapshotTabs =
         ref.watch(tabThemesSnapshotProvider)?.tabs;
     final List<TabThemeEntry>? remoteTabs =

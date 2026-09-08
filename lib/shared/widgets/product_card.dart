@@ -27,7 +27,11 @@ enum ProductCardStyle { grid, scroll }
 ///   * [bakalooLegacyClean]  — the older, simpler/flatter card (plain price
 ///     text, minimal chrome). Kept so admins can opt back into the classic
 ///     look without a new widget.
-enum ProductCardVariant { quickCommerceCompact, bakalooLegacyClean }
+enum ProductCardVariant {
+  quickCommerceCompact,
+  bakalooLegacyClean,
+  premiumFresh
+}
 
 /// Resolve a [ProductCardVariant] from a backend config string.
 ///
@@ -37,6 +41,8 @@ enum ProductCardVariant { quickCommerceCompact, bakalooLegacyClean }
 /// themes and forward-incompatible values render the default safely.
 ProductCardVariant productCardVariantFromString(String? raw) {
   switch ((raw ?? '').trim().toUpperCase()) {
+    case 'PREMIUM_FRESH':
+      return ProductCardVariant.premiumFresh;
     case 'BAKALOO_LEGACY_CLEAN':
       return ProductCardVariant.bakalooLegacyClean;
     case 'QUICK_COMMERCE_COMPACT':
@@ -95,8 +101,11 @@ class _ProductCardState extends State<ProductCard> {
     final style = widget.style ?? _inferStyle(context);
     final isGridStyle = style == ProductCardStyle.grid;
 
-    final Widget card =
-        isGridStyle ? _buildGridCard(context) : _buildScrollCard(context);
+    final Widget card = widget.variant == ProductCardVariant.premiumFresh
+        ? _buildPremiumCard(context, isGridStyle)
+        : isGridStyle
+            ? _buildGridCard(context)
+            : _buildScrollCard(context);
 
     return RepaintBoundary(
       child: GestureDetector(
@@ -111,6 +120,188 @@ class _ProductCardState extends State<ProductCard> {
           child: SizedBox(width: widget.width.w, child: card),
         ),
       ),
+    );
+  }
+
+  Widget _buildPremiumCard(BuildContext context, bool boxed) {
+    final product = widget.product;
+    const ink = Color(0xFF141414);
+    const muted = Color(0xFF888888);
+    const crimson = Color(0xFFD51043);
+    const green = Color(0xFF299367);
+    TextStyle type(
+      double size, {
+      Color color = ink,
+      FontWeight weight = FontWeight.w400,
+    }) =>
+        TextStyle(
+          fontFamily: 'DMSans',
+          fontSize: size.sp,
+          height: 1.35,
+          color: color,
+          fontWeight: weight,
+        );
+    final details = <String>[
+      if (product.displayUnit.trim().isNotEmpty) product.displayUnit,
+      if (product.highlights?['pieces'] != null)
+        '${product.highlights!['pieces']} pieces',
+      if (product.highlights?['serves'] != null)
+        'Serves ${product.highlights!['serves']}',
+    ].join(' | ');
+    Widget cart() => _IsolatedCartButton(
+          style: boxed ? ProductCardStyle.grid : ProductCardStyle.scroll,
+          compact: false,
+          tight: false,
+          product: product,
+          onAdd: widget.onAdd,
+          onOptionsTap: widget.onOptionsTap,
+          accentColor: crimson,
+          premium: true,
+        );
+    Widget price() => Wrap(
+          spacing: 5.w,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(
+              '₹${product.effectivePrice.toStringAsFixed(product.effectivePrice % 1 == 0 ? 0 : 2)}',
+              style: type(boxed ? 18 : 14, weight: FontWeight.w700),
+            ),
+            if (product.isOnSale) ...[
+              Text(
+                '₹${product.price.toStringAsFixed(product.price % 1 == 0 ? 0 : 2)}',
+                style: type(13, color: muted)
+                    .copyWith(decoration: TextDecoration.lineThrough),
+              ),
+              Text(
+                '${product.discountPercent}% off',
+                style: type(13, color: green),
+              ),
+            ],
+          ],
+        );
+    final body = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Stack(
+          clipBehavior: Clip.none,
+          children: [
+            ClipRRect(
+              borderRadius: boxed
+                  ? BorderRadius.vertical(top: Radius.circular(14.r))
+                  : BorderRadius.circular(13.r),
+              child: AspectRatio(
+                aspectRatio: 1.46,
+                child: _PremiumPhotoGallery(product: product, slides: boxed),
+              ),
+            ),
+            if (product.hasFoodMarker)
+              Positioned(
+                top: 10.h,
+                right: 10.w,
+                child: _FoodMarkerBox(product: product),
+              ),
+            if (!boxed) Positioned(right: 0, bottom: -10.h, child: cart()),
+          ],
+        ),
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+            boxed ? 13.w : 0,
+            boxed ? 14.h : 22.h,
+            boxed ? 13.w : 0,
+            boxed ? 16.h : 0,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                product.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: type(boxed ? 17 : 16, weight: FontWeight.w700),
+              ),
+              if (boxed &&
+                  (product.description?.trim().isNotEmpty ?? false)) ...[
+                Gap(4.h),
+                Text(
+                  product.description!,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: type(12, color: muted),
+                ),
+              ],
+              if (details.isNotEmpty) ...[
+                Gap(10.h),
+                Text(
+                  details,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: type(12, color: muted),
+                ),
+              ],
+              if (boxed && product.hasDeliveryTime) ...[
+                Gap(10.h),
+                Text(
+                  product.formattedDeliveryTime,
+                  style: type(12, color: const Color(0xFF555555)),
+                ),
+              ],
+              Gap(16.h),
+              if (boxed)
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    if (constraints.maxWidth < 220.w) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          price(),
+                          Gap(10.h),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: cart(),
+                          ),
+                        ],
+                      );
+                    }
+                    return Row(
+                      children: [
+                        Expanded(child: price()),
+                        Gap(8.w),
+                        cart(),
+                      ],
+                    );
+                  },
+                )
+              else
+                price(),
+              if (!boxed && product.hasDeliveryTime) ...[
+                Gap(12.h),
+                Text(
+                  product.formattedDeliveryTime,
+                  style: type(12, color: const Color(0xFF555555)),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14.r),
+        boxShadow: boxed
+            ? [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: .13),
+                  blurRadius: 7,
+                  offset: const Offset(0, 3),
+                ),
+              ]
+            : null,
+      ),
+      child: body,
     );
   }
 
@@ -235,8 +426,7 @@ class _ProductCardState extends State<ProductCard> {
               child: Container(
                 decoration: BoxDecoration(
                   color: AppColors.overlayDark,
-                  borderRadius:
-                      BorderRadius.circular(AppDimensions.radiusMd),
+                  borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
                 ),
                 alignment: Alignment.center,
                 child: Text(
@@ -435,7 +625,12 @@ class _ProductCardState extends State<ProductCard> {
                   showImageBorder: false,
                 ),
                 Padding(
-                  padding: EdgeInsets.fromLTRB(contentPadding, 6.h, contentPadding, 0),
+                  padding: EdgeInsets.fromLTRB(
+                    contentPadding,
+                    6.h,
+                    contentPadding,
+                    0,
+                  ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: <Widget>[
@@ -476,7 +671,12 @@ class _ProductCardState extends State<ProductCard> {
                 ),
                 if (offAmount != null && offAmount > 0)
                   Padding(
-                    padding: EdgeInsets.fromLTRB(contentPadding, 3.h, contentPadding, 0),
+                    padding: EdgeInsets.fromLTRB(
+                      contentPadding,
+                      3.h,
+                      contentPadding,
+                      0,
+                    ),
                     child: Text(
                       product.discountPercent > 0
                           ? '${product.discountPercent}% OFF on MRP'
@@ -509,10 +709,19 @@ class _ProductCardState extends State<ProductCard> {
                 ),
                 if (product.hasRating)
                   Padding(
-                    padding: EdgeInsets.fromLTRB(contentPadding, 3.h, contentPadding, 0),
+                    padding: EdgeInsets.fromLTRB(
+                      contentPadding,
+                      3.h,
+                      contentPadding,
+                      0,
+                    ),
                     child: Row(
                       children: <Widget>[
-                        Icon(Icons.star_rounded, size: 12.sp, color: const Color(0xFFFFA000)),
+                        Icon(
+                          Icons.star_rounded,
+                          size: 12.sp,
+                          color: const Color(0xFFFFA000),
+                        ),
                         Gap(2.w),
                         Expanded(
                           child: Text(
@@ -532,10 +741,19 @@ class _ProductCardState extends State<ProductCard> {
                   ),
                 if (product.hasDeliveryTime)
                   Padding(
-                    padding: EdgeInsets.fromLTRB(contentPadding, 2.h, contentPadding, 0),
+                    padding: EdgeInsets.fromLTRB(
+                      contentPadding,
+                      2.h,
+                      contentPadding,
+                      0,
+                    ),
                     child: Row(
                       children: <Widget>[
-                        PhosphorIcon(PhosphorIcons.clock, size: 11.sp, color: const Color(0xFF888888)),
+                        PhosphorIcon(
+                          PhosphorIcons.clock,
+                          size: 11.sp,
+                          color: const Color(0xFF888888),
+                        ),
                         Gap(3.w),
                         Text(
                           product.formattedDeliveryTime,
@@ -950,6 +1168,7 @@ class _IsolatedCartButton extends ConsumerWidget {
     this.onOptionsTap,
     this.forceCompactPlus = false,
     this.accentColor,
+    this.premium = false,
   });
 
   final ProductCardStyle style;
@@ -960,6 +1179,7 @@ class _IsolatedCartButton extends ConsumerWidget {
   final VoidCallback? onOptionsTap;
   final bool forceCompactPlus;
   final Color? accentColor;
+  final bool premium;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -981,6 +1201,7 @@ class _IsolatedCartButton extends ConsumerWidget {
       onOptionsTap: onOptionsTap,
       forceCompactPlus: forceCompactPlus,
       accentColor: accentColor,
+      premium: premium,
     );
   }
 }
@@ -997,6 +1218,7 @@ class _ZeptoAddQtyButton extends ConsumerWidget {
     this.onOptionsTap,
     this.forceCompactPlus = false,
     this.accentColor,
+    this.premium = false,
   });
 
   final ProductCardStyle style;
@@ -1009,6 +1231,7 @@ class _ZeptoAddQtyButton extends ConsumerWidget {
   final VoidCallback? onOptionsTap;
   final bool forceCompactPlus;
   final Color? accentColor;
+  final bool premium;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1019,15 +1242,25 @@ class _ZeptoAddQtyButton extends ConsumerWidget {
         ref.watch(purchaseLimitStatusProvider(product.id));
     final isAtLimit = purchaseLimitStatus?.isAtLimit ?? false;
     final greenBorder = accentColor ?? AppColors.primaryGreen;
-    final buttonHeight = tight ? 30.h : 32.h;
+    final buttonHeight = premium
+        ? 44.h * MediaQuery.textScalerOf(context).scale(1)
+        : tight
+            ? 30.h
+            : 32.h;
     // Inline grid ADD buttons sit next to the unit label in a narrow 3-col
     // cell, so they are kept compact to leave room for "200 g" / "6 eggs".
-    final gridButtonWidth = tight
-        ? 42.w
-        : compact
-            ? 48.w
-            : 56.w;
-    final controlWidth = tight ? 17.w : 19.w;
+    final gridButtonWidth = premium
+        ? 88.w * MediaQuery.textScalerOf(context).scale(1)
+        : tight
+            ? 42.w
+            : compact
+                ? 48.w
+                : 56.w;
+    final controlWidth = premium
+        ? 32.w
+        : tight
+            ? 17.w
+            : 19.w;
     final quantityWidth = tight ? 12.w : 14.w;
     final iconSize = tight ? 11.0 : 12.0;
     final addFontSize = tight
@@ -1158,7 +1391,7 @@ class _ZeptoAddQtyButton extends ConsumerWidget {
         ],
       ),
       child: Material(
-        color: Colors.white,
+        color: premium && isGrid ? greenBorder : Colors.white,
         borderRadius: BorderRadius.circular(8.r),
         child: InkWell(
           onTap: product.inStock
@@ -1201,65 +1434,154 @@ class _ZeptoAddQtyButton extends ConsumerWidget {
           child: Opacity(
             opacity: disableDirectAdd ? 0.4 : 1,
             child: Container(
-            // Multi-option grid buttons grow taller to stack "ADD" over the
-            // "N options" line INSIDE the green border (reference layout).
-            height: isGrid && showOptions ? buttonHeight + 16.h : buttonHeight,
-            width: compactPlus
-                ? buttonHeight
-                : isGrid
-                    ? gridButtonWidth
-                    : buttonHeight,
-            padding: EdgeInsets.symmetric(vertical: 3.h),
-            decoration: BoxDecoration(
-              border: Border.all(color: greenBorder, width: 1.5),
-              borderRadius: BorderRadius.circular(8.r),
-            ),
-            alignment: Alignment.center,
-            child: compactPlus
-                ? PhosphorIcon(
-                    PhosphorIcons.plusBold,
-                    size: tight ? 15.0 : 18.0,
-                    color: greenBorder,
-                  )
-                : isGrid
-                    ? Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        mainAxisSize: MainAxisSize.min,
-                        children: <Widget>[
-                          Text(
-                            'ADD',
-                            style: TextStyle(
-                              color: greenBorder,
-                              fontWeight: FontWeight.w700,
-                              fontSize: addFontSize,
-                              letterSpacing: 0.4,
-                              height: 1.0,
-                            ),
-                          ),
-                          if (showOptions)
+              // Multi-option grid buttons grow taller to stack "ADD" over the
+              // "N options" line INSIDE the green border (reference layout).
+              height:
+                  isGrid && showOptions ? buttonHeight + 16.h : buttonHeight,
+              width: compactPlus
+                  ? buttonHeight
+                  : isGrid
+                      ? gridButtonWidth
+                      : buttonHeight,
+              padding: EdgeInsets.symmetric(vertical: 3.h),
+              decoration: BoxDecoration(
+                border:
+                    premium ? null : Border.all(color: greenBorder, width: 1.5),
+                borderRadius: BorderRadius.circular(8.r),
+              ),
+              alignment: Alignment.center,
+              child: compactPlus
+                  ? PhosphorIcon(
+                      PhosphorIcons.plusBold,
+                      size: premium
+                          ? 25.0
+                          : tight
+                              ? 15.0
+                              : 18.0,
+                      color: greenBorder,
+                    )
+                  : isGrid
+                      ? Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
                             Text(
-                              '${product.optionCount} options',
-                              maxLines: 1,
-                              softWrap: false,
-                              overflow: TextOverflow.ellipsis,
+                              premium ? 'Add +' : 'ADD',
                               style: TextStyle(
-                                fontSize: 8.5.sp,
-                                fontWeight: FontWeight.w500,
-                                color: greenBorder,
-                                height: 1.2,
+                                color: premium ? Colors.white : greenBorder,
+                                fontWeight: FontWeight.w700,
+                                fontSize: premium ? 16.sp : addFontSize,
+                                letterSpacing: 0.4,
+                                height: 1.0,
                               ),
                             ),
-                        ],
-                      )
-                    : PhosphorIcon(
-                        PhosphorIcons.plusBold,
-                        size: tight ? 15.0 : 18.0,
-                        color: greenBorder,
-                      ),
-          ),
+                            if (showOptions)
+                              Text(
+                                '${product.optionCount} options',
+                                maxLines: 1,
+                                softWrap: false,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 8.5.sp,
+                                  fontWeight: FontWeight.w500,
+                                  color: premium ? Colors.white : greenBorder,
+                                  height: 1.2,
+                                ),
+                              ),
+                          ],
+                        )
+                      : PhosphorIcon(
+                          PhosphorIcons.plusBold,
+                          size: premium
+                              ? 25.0
+                              : tight
+                                  ? 15.0
+                                  : 18.0,
+                          color: greenBorder,
+                        ),
+            ),
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Uses the catalog's saved upload order; only the visible image is decoded.
+class _PremiumPhotoGallery extends StatefulWidget {
+  const _PremiumPhotoGallery({required this.product, required this.slides});
+  final ProductEntity product;
+  final bool slides;
+  @override
+  State<_PremiumPhotoGallery> createState() => _PremiumPhotoGalleryState();
+}
+
+class _PremiumPhotoGalleryState extends State<_PremiumPhotoGallery> {
+  int current = 0;
+  @override
+  Widget build(BuildContext context) {
+    final urls = <String>{
+      ...widget.product.images.where((url) => url.trim().isNotEmpty),
+      if (widget.product.images.isEmpty && widget.product.thumbnailUrl != null)
+        widget.product.thumbnailUrl!,
+    }.toList();
+    Widget photo(int index) => Semantics(
+          label: '${widget.product.name}, photo ${index + 1} of ${urls.length}',
+          image: true,
+          child: AppImage(
+            imageUrl: ApiConstants.optimizedMedia(
+                  urls[index],
+                  profile: CustomerImageProfile.premiumProduct,
+                ).url ??
+                urls[index],
+            memCacheWidth: 1080,
+            memCacheHeight: 740,
+            fit: BoxFit.cover,
+          ),
+        );
+    if (urls.isEmpty) {
+      return const ColoredBox(
+        color: Color(0xFFF8F5F1),
+        child: Center(
+          child: Icon(Icons.image_outlined, color: Color(0xFF888888)),
+        ),
+      );
+    }
+    if (!widget.slides || urls.length == 1) return photo(0);
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        PageView.builder(
+          key: ValueKey(urls.join('|')),
+          itemCount: urls.length,
+          onPageChanged: (index) => setState(() => current = index),
+          itemBuilder: (context, index) => photo(index),
+        ),
+        Positioned(
+          bottom: 10.h,
+          left: 0,
+          right: 0,
+          child: IgnorePointer(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(
+                urls.length,
+                (index) => Container(
+                  margin: EdgeInsets.symmetric(horizontal: 2.w),
+                  width: 6.w,
+                  height: 6.w,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: index == current.clamp(0, urls.length - 1)
+                        ? Colors.white
+                        : Colors.white54,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

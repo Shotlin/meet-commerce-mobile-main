@@ -139,15 +139,17 @@ Widget _buildSeasonalMosaic(
   // nothing" — not "not customized, fall back to the default text". Only
   // fall through to the legacy keys/defaults when the tile's own config
   // never had the key at all, so an explicit empty string is respected.
-  final String heroTitle = heroTileConfig != null && heroTileConfig.containsKey('title')
-      ? (_readString(heroTileConfig['title']) ?? '')
-      : _readString(entry.config['hero_title']) ??
-          entry.title ??
-          fallback.heroTile.title;
-  final String heroBadgeText = heroTileConfig != null && heroTileConfig.containsKey('badge_text')
-      ? (_readString(heroTileConfig['badge_text']) ?? '')
-      : _readString(entry.config['hero_badge_text']) ??
-          fallback.heroTile.badgeText;
+  final String heroTitle =
+      heroTileConfig != null && heroTileConfig.containsKey('title')
+          ? (_readString(heroTileConfig['title']) ?? '')
+          : _readString(entry.config['hero_title']) ??
+              entry.title ??
+              fallback.heroTile.title;
+  final String heroBadgeText =
+      heroTileConfig != null && heroTileConfig.containsKey('badge_text')
+          ? (_readString(heroTileConfig['badge_text']) ?? '')
+          : _readString(entry.config['hero_badge_text']) ??
+              fallback.heroTile.badgeText;
   final heroTheme = HeroTileTheme(
     title: heroTitle,
     gradient: heroGradient,
@@ -210,7 +212,9 @@ List<MiniTileTheme> _buildManifestMiniTiles(
         : fallback.miniTiles[index % fallback.miniTiles.length];
     return MiniTileTheme(
       // Same "explicit empty means no title" rule as the hero tile above.
-      title: map.containsKey('title') ? (_readString(map['title']) ?? '') : fb.title,
+      title: map.containsKey('title')
+          ? (_readString(map['title']) ?? '')
+          : fb.title,
       gradient: _resolveGradient(map['gradient'], fb.gradient),
       imageUrl: _readString(map['image_url']),
       action: MosaicTileAction.fromJson(map['action']),
@@ -277,7 +281,10 @@ Widget _buildCategoryProductGrid(
     return const SizedBox.shrink();
   }
 
-  final columns = (entry.columns ?? 3).clamp(2, 3);
+  final premium = entry.productCardStyle == null ||
+      entry.productCardStyle == 'PREMIUM_FRESH';
+  final columns = (entry.columns ?? (premium ? 1 : 3))
+      .clamp(premium ? 1 : 2, premium ? 2 : 3);
   return _ManifestProductGridSection(
     title: entry.title ?? 'Products for you',
     // Render every product the manifest already resolved (already capped by
@@ -285,7 +292,11 @@ Widget _buildCategoryProductGrid(
     // count here, or picks beyond 2 rows silently disappear.
     products: products,
     columns: columns,
-    variant: productCardVariantFromString(entry.productCardStyle),
+    variant:
+        productCardVariantFromString(entry.productCardStyle ?? 'PREMIUM_FRESH'),
+    subtitle: entry.config['subtitle'] is String
+        ? entry.config['subtitle'] as String
+        : null,
   );
 }
 
@@ -302,7 +313,11 @@ Widget _buildProductCarousel(
   return _ManifestHorizontalProductSection(
     title: entry.title ?? 'Fresh picks',
     products: products,
-    variant: productCardVariantFromString(entry.productCardStyle),
+    variant:
+        productCardVariantFromString(entry.productCardStyle ?? 'PREMIUM_FRESH'),
+    subtitle: entry.config['subtitle'] is String
+        ? entry.config['subtitle'] as String
+        : null,
   );
 }
 
@@ -514,7 +529,8 @@ List<ProductEntity> _resolveProducts(
   // "some products in a category-linked section don't show up": the
   // backend correctly sent every product, but this widget only rendered
   // the first 6-12 of them.
-  final List<ProductEntity> resolvedFromManifest = _parseManifestProducts(entry);
+  final List<ProductEntity> resolvedFromManifest =
+      _parseManifestProducts(entry);
   if (resolvedFromManifest.isNotEmpty) {
     return entry.productLimit != null
         ? resolvedFromManifest.take(entry.productLimit!).toList(growable: false)
@@ -632,8 +648,7 @@ List<_PromoItem> _resolvePromoItems(WidgetRef ref, SectionManifestEntry entry) {
   //               "custom"            → use inline images[] from config
   // Legacy sections without banner_source default to "system" for
   // backward compatibility (existing behaviour before this change).
-  final String source =
-      _readString(entry.config['banner_source']) ?? 'system';
+  final String source = _readString(entry.config['banner_source']) ?? 'system';
 
   if (source == 'custom') {
     // ── Custom mode: use images[] from section config ──────────────────────
@@ -1285,10 +1300,12 @@ class _ManifestProductGridSection extends StatelessWidget {
     required this.title,
     required this.products,
     required this.columns,
+    this.subtitle,
     this.variant = ProductCardVariant.quickCommerceCompact,
   });
 
   final String title;
+  final String? subtitle;
   final List<ProductEntity> products;
   final int columns;
   final ProductCardVariant variant;
@@ -1300,19 +1317,20 @@ class _ManifestProductGridSection extends StatelessWidget {
       children: <Widget>[
         Padding(
           padding: EdgeInsets.fromLTRB(18.w, 12.h, 18.w, 0),
-          child: _ManifestSectionHeader(title: title),
+          child: _productHeading(title, subtitle, variant),
         ),
         Gap(10.h),
         Padding(
           padding: EdgeInsets.symmetric(horizontal: 14.w),
           child: LayoutBuilder(
             builder: (BuildContext context, BoxConstraints constraints) {
-              final gap = 10.w;
+              final gap =
+                  variant == ProductCardVariant.premiumFresh ? 22.w : 10.w;
               final minItemWidth = 104.w;
               final maxColumnsForWidth =
                   ((constraints.maxWidth + gap) / (minItemWidth + gap))
                       .floor()
-                      .clamp(2, columns);
+                      .clamp(1, columns);
               final effectiveColumns = maxColumnsForWidth;
               final itemWidth =
                   (constraints.maxWidth - (gap * (effectiveColumns - 1))) /
@@ -1321,7 +1339,8 @@ class _ManifestProductGridSection extends StatelessWidget {
 
               return Wrap(
                 spacing: gap,
-                runSpacing: 12.h,
+                runSpacing:
+                    variant == ProductCardVariant.premiumFresh ? 30.h : 12.h,
                 children: products
                     .map(
                       (ProductEntity product) => SizedBox(
@@ -1353,11 +1372,13 @@ class _ManifestHorizontalProductSection extends StatelessWidget {
   const _ManifestHorizontalProductSection({
     required this.title,
     required this.products,
+    this.subtitle,
     this.accentColor,
     this.variant = ProductCardVariant.quickCommerceCompact,
   });
 
   final String title;
+  final String? subtitle;
   final List<ProductEntity> products;
   final Color? accentColor;
   final ProductCardVariant variant;
@@ -1369,14 +1390,18 @@ class _ManifestHorizontalProductSection extends StatelessWidget {
       children: <Widget>[
         Padding(
           padding: EdgeInsets.fromLTRB(18.w, 12.h, 18.w, 0),
-          child: _ManifestSectionHeader(
-            title: title,
+          child: _productHeading(
+            title,
+            subtitle,
+            variant,
             accentColor: accentColor,
           ),
         ),
         Gap(10.h),
         SizedBox(
-          height: 246.h,
+          height: variant == ProductCardVariant.premiumFresh
+              ? 164.w + 200.h * MediaQuery.textScalerOf(context).scale(1)
+              : 246.h,
           child: ListView.builder(
             padding: EdgeInsets.symmetric(horizontal: 14.w),
             scrollDirection: Axis.horizontal,
@@ -1385,18 +1410,21 @@ class _ManifestHorizontalProductSection extends StatelessWidget {
             itemExtentBuilder: (int index, _) => _horizontalSectionExtent(
               index,
               products.length,
-              132.w,
-              10.w,
+              variant == ProductCardVariant.premiumFresh ? 240.w : 132.w,
+              variant == ProductCardVariant.premiumFresh ? 24.w : 10.w,
             ),
             itemBuilder: (BuildContext context, int index) {
               final product = products[index];
               return Align(
-                alignment: Alignment.centerLeft,
+                alignment: Alignment.topLeft,
                 child: SizedBox(
-                  width: 132.w,
+                  width: variant == ProductCardVariant.premiumFresh
+                      ? 240.w
+                      : 132.w,
                   child: ProductCard(
                     product: product,
-                    width: 132,
+                    width:
+                        variant == ProductCardVariant.premiumFresh ? 240 : 132,
                     style: ProductCardStyle.scroll,
                     variant: variant,
                     showWishlist: true,
@@ -1413,6 +1441,47 @@ class _ManifestHorizontalProductSection extends StatelessWidget {
       ],
     );
   }
+}
+
+Widget _productHeading(
+  String title,
+  String? subtitle,
+  ProductCardVariant variant, {
+  Color? accentColor,
+}) {
+  if (variant != ProductCardVariant.premiumFresh) {
+    return _ManifestSectionHeader(title: title, accentColor: accentColor);
+  }
+  return Padding(
+    padding: EdgeInsets.only(top: 12.h, bottom: 6.h),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: TextStyle(
+            fontFamily: 'DMSans',
+            fontSize: 21.sp,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -.35,
+            color: const Color(0xFF141414),
+          ),
+        ),
+        if (subtitle != null && subtitle.trim().isNotEmpty) ...[
+          Gap(5.h),
+          Text(
+            subtitle,
+            style: TextStyle(
+              fontFamily: 'DMSans',
+              fontSize: 14.sp,
+              height: 1.4,
+              color: const Color(0xFF626262),
+            ),
+          ),
+        ],
+      ],
+    ),
+  );
 }
 
 class _ManifestSectionHeader extends StatelessWidget {
