@@ -84,8 +84,7 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
           if (viewState.items.isEmpty) {
             return const EmptyState(
               title: 'No products yet',
-              message:
-                  'Products will appear here when inventory is available.',
+              message: 'Products will appear here when inventory is available.',
             );
           }
 
@@ -131,18 +130,18 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                       crossAxisCount: 2,
                       crossAxisSpacing: 12.w,
                       mainAxisSpacing: 12.h,
-                      mainAxisExtent: 268.h,
+                      // The compact card is a single surface now; reserve
+                      // only the space its image and metadata actually need.
+                      mainAxisExtent: 236.h,
                     ),
                     itemBuilder: (context, index) {
                       final product = viewState.items[index];
                       final isNew = viewState.newItemCount > 0 &&
                           index >=
-                              viewState.items.length -
-                                  viewState.newItemCount;
+                              viewState.items.length - viewState.newItemCount;
                       final staggerIndex = isNew
                           ? index -
-                              (viewState.items.length -
-                                  viewState.newItemCount)
+                              (viewState.items.length - viewState.newItemCount)
                           : 0;
 
                       return RepaintBoundary(
@@ -153,8 +152,8 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                           child: ProductCard(
                             product: product,
                             style: ProductCardStyle.grid,
-                            onTap: () =>
-                                context.push('/product/${product.id}'),
+                            showWishlist: true,
+                            onTap: () => context.push('/product/${product.id}'),
                             onOptionsTap: product.hasMultipleOptions
                                 ? () => showProductOptionsSheet(
                                       context,
@@ -223,7 +222,7 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
         crossAxisCount: 2,
         crossAxisSpacing: 12.w,
         mainAxisSpacing: 12.h,
-        mainAxisExtent: 268.h,
+        mainAxisExtent: 236.h,
       ),
       itemCount: 8,
       itemBuilder: (_, __) => const Column(
@@ -307,5 +306,3 @@ class _AnimatedCardState extends State<_AnimatedCard>
     );
   }
 }
-
-

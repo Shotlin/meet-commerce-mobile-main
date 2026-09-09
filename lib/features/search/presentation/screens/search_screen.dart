@@ -35,6 +35,56 @@ import 'package:bakaloo_flutter_app/shared/widgets/skeleton_loader.dart';
 
 const String _allChipLabel = 'All';
 
+/// Responsive geometry for the 2-column premium product grid. Computed from
+/// the real device width (not ScreenUtil's design-size scaling) so the
+/// 12dp/16dp padding breakpoint and per-card image/content proportions stay
+/// accurate at every tested width (360/375/390/412/430).
+class _GridGeometry {
+  const _GridGeometry({
+    required this.horizontalPadding,
+    required this.crossAxisSpacing,
+    required this.mainAxisSpacing,
+    required this.cardWidth,
+    required this.mainAxisExtent,
+  });
+
+  final double horizontalPadding;
+  final double crossAxisSpacing;
+  final double mainAxisSpacing;
+  final double cardWidth;
+  final double mainAxisExtent;
+
+  static _GridGeometry of(BuildContext context) {
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final horizontalPadding = screenWidth <= 375 ? 12.0 : 16.0;
+    const crossAxisSpacing = 10.0;
+    const mainAxisSpacing = 12.0;
+    final cardWidth =
+        (screenWidth - horizontalPadding * 2 - crossAxisSpacing) / 2;
+    final imageHeight = cardWidth / 1.10;
+    // The card's own internal spacing scales with ScreenUtil's width ratio
+    // (.w, not .h) — see search_product_grid_card.dart — specifically so it
+    // tracks this same screenWidth/390 factor instead of device *height*,
+    // which varies independently of card width and would otherwise throw
+    // this estimate off. The full content stack (9dp padding, a reserved
+    // 2-line title, an optional subtitle, the variant-chip row, the price
+    // row and the 44dp delivery/add row) measures ~190dp at the 390dp
+    // design width at worst case (subtitle + two variant chips present);
+    // scaling it by the same ratio keeps this estimate accurate at every
+    // tested width so no card overflows.
+    final widthScale = screenWidth / 390.0;
+    final contentHeight = 235.0 * widthScale;
+    final mainAxisExtent = (imageHeight + contentHeight).clamp(320.0, 440.0);
+    return _GridGeometry(
+      horizontalPadding: horizontalPadding,
+      crossAxisSpacing: crossAxisSpacing,
+      mainAxisSpacing: mainAxisSpacing,
+      cardWidth: cardWidth,
+      mainAxisExtent: mainAxisExtent,
+    );
+  }
+}
+
 // ─── Sort & Filter enums ─────────────────────────────────────────────────────
 
 enum _SortOption {
@@ -1708,26 +1758,37 @@ class _DebouncingState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final geometry = _GridGeometry.of(context);
     return GridView.builder(
-      padding: EdgeInsets.fromLTRB(16.w, 4.h, 16.w, 24.h),
+      padding: EdgeInsets.fromLTRB(
+        geometry.horizontalPadding,
+        4.h,
+        geometry.horizontalPadding,
+        24.h,
+      ),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
-        crossAxisSpacing: 12.w,
-        mainAxisSpacing: 14.h,
-        mainAxisExtent: 300.h,
+        crossAxisSpacing: geometry.crossAxisSpacing,
+        mainAxisSpacing: geometry.mainAxisSpacing,
+        mainAxisExtent: geometry.mainAxisExtent,
       ),
       itemCount: 6,
       itemBuilder: (_, __) {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            SkeletonLoader(height: (170 / 1.22).h, radius: 18),
-            Gap(10.h),
-            const SkeletonLoader(height: 14, radius: 8),
-            Gap(6.h),
-            SkeletonLoader(height: 12, width: 90.w, radius: 8),
-            Gap(10.h),
-            SkeletonLoader(height: 34, width: 70.w, radius: 10),
+            SkeletonLoader(
+              height: geometry.cardWidth / 1.10,
+              radius: 16,
+            ),
+            Gap(9.w),
+            const SkeletonLoader(height: 15, radius: 6),
+            Gap(6.w),
+            SkeletonLoader(height: 12, width: 90.w, radius: 6),
+            Gap(6.w),
+            SkeletonLoader(height: 30, width: 100.w, radius: 9),
+            Gap(6.w),
+            SkeletonLoader(height: 20, width: 80.w, radius: 6),
           ],
         );
       },
@@ -1886,6 +1947,7 @@ class _SortedFilteredGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final geometry = _GridGeometry.of(context);
     // Listen to paging status to show a loader at the bottom for new pages
     return ValueListenableBuilder<PagingState<int, ProductEntity>>(
       valueListenable: pagingController,
@@ -1896,12 +1958,17 @@ class _SortedFilteredGrid extends StatelessWidget {
             pagingState.error != null && pagingState.nextPageKey != null;
 
         return GridView.builder(
-          padding: EdgeInsets.fromLTRB(16.w, 0, 16.w, 24.h),
+          padding: EdgeInsets.fromLTRB(
+            geometry.horizontalPadding,
+            0,
+            geometry.horizontalPadding,
+            24.h,
+          ),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 2,
-            crossAxisSpacing: 12.w,
-            mainAxisSpacing: 14.h,
-            mainAxisExtent: 300.h,
+            crossAxisSpacing: geometry.crossAxisSpacing,
+            mainAxisSpacing: geometry.mainAxisSpacing,
+            mainAxisExtent: geometry.mainAxisExtent,
           ),
           itemCount:
               displayProducts.length + (isLoadingMore || hasError ? 1 : 0),
@@ -1928,7 +1995,11 @@ class _SortedFilteredGrid extends StatelessWidget {
                 ),
               );
             }
-            return SearchProductGridCard(product: displayProducts[index]);
+            final product = displayProducts[index];
+            return SearchProductGridCard(
+              key: ValueKey<String>(product.id),
+              product: product,
+            );
           },
         );
       },

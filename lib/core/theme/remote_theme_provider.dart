@@ -65,7 +65,8 @@ final tabThemesForStoreProvider =
     FutureProvider.family<TabThemesResponse, String>(
         (Ref ref, String storeKey) async {
   ref.watch(_tabThemesEpochProvider);
-  final TabThemesResponse? memory = _themeMemoryCache[storeKey];
+  final String scopedKey = _themeCacheKey(storeKey);
+  final TabThemesResponse? memory = _themeMemoryCache[scopedKey];
   if (memory != null) {
     _scheduleThemeWarmAndPrefetch(ref, storeKey, memory);
     unawaited(_fetchAndCacheTabThemes(ref, storeKey));
@@ -83,16 +84,16 @@ final tabThemesForStoreProvider =
       final Map<String, dynamic> map = _decodeToMap(cached);
       if (map.isNotEmpty) {
         response = TabThemesResponse.fromJson(map);
-        _themeMemoryCache[storeKey] = response;
+        _themeMemoryCache[scopedKey] = response;
         _scheduleThemeWarmAndPrefetch(ref, storeKey, response);
       }
-    } else if (storeKey == 'zepto') {
+    } else if (storeKey == 'zepto' && _isGlobalThemeScope()) {
       final dynamic legacyManifest =
           HiveService.remoteThemeBox.get('tab_themes_data');
       final Map<String, dynamic> legacyMap = _decodeToMap(legacyManifest);
       if (legacyMap.isNotEmpty) {
         response = TabThemesResponse.fromJson(legacyMap);
-        _themeMemoryCache[storeKey] = response;
+        _themeMemoryCache[scopedKey] = response;
         _scheduleThemeWarmAndPrefetch(ref, storeKey, response);
       } else {
         final dynamic legacyTheme = HiveService.remoteThemeBox.get('data');
@@ -100,7 +101,7 @@ final tabThemesForStoreProvider =
             _decodeLegacyTheme(storeKey, legacyTheme);
         if (migrated != null) {
           response = migrated;
-          _themeMemoryCache[storeKey] = response;
+          _themeMemoryCache[scopedKey] = response;
           _scheduleThemeWarmAndPrefetch(ref, storeKey, response);
         }
       }
@@ -293,15 +294,16 @@ class _ManagedThemeRefreshNotifier extends Notifier<int> {
     final String storeKey = ref.read(selectedStoreProvider).id;
     final String selectedTabKey = ref.read(selectedCategoryIdProvider);
 
-    _themeMemoryCache.remove(storeKey);
+    _themeMemoryCache.remove(_themeCacheKey(storeKey));
 
     await _fetchAndCacheTabThemes(ref, storeKey);
 
-    final TabThemesResponse response = _themeMemoryCache[storeKey] ??
-        _readCachedManifestSnapshot(storeKey) ??
-        (storeKey == 'zepto'
-            ? TabThemesResponse.defaults(storeKey: storeKey)
-            : TabThemesResponse.empty(storeKey: storeKey));
+    final TabThemesResponse response =
+        _themeMemoryCache[_themeCacheKey(storeKey)] ??
+            _readCachedManifestSnapshot(storeKey) ??
+            (storeKey == 'zepto'
+                ? TabThemesResponse.defaults(storeKey: storeKey)
+                : TabThemesResponse.empty(storeKey: storeKey));
 
     final String? resolvedTabKey = _resolveTabKey(response, selectedTabKey);
     if (resolvedTabKey != null) {
@@ -339,8 +341,8 @@ Future<void> handleThemeSocketEvent(WidgetRef ref, Map data) async {
       _readSocketStoreKey(data) ?? ref.read(selectedStoreProvider).id;
   final String selectedStoreKey = ref.read(selectedStoreProvider).id;
 
-  _themeMemoryCache.remove(storeKey);
-  _tabThemesFetchInFlight.remove(storeKey);
+  _themeMemoryCache.remove(_themeCacheKey(storeKey));
+  _tabThemesFetchInFlight.remove(_themeCacheKey(storeKey));
   _tabHomePrefetchInFlight.remove(storeKey);
   _sectionManifestPrefetchInFlight.remove(storeKey);
   _clearTabHomeCachesForStore(storeKey);
@@ -422,26 +424,28 @@ Future<void> _prefetchTabHomeContent(
 }
 
 Future<void> _fetchAndCacheTabThemes(Ref ref, String storeKey) {
-  final Future<void>? inFlight = _tabThemesFetchInFlight[storeKey];
+  final String scopedKey = _themeCacheKey(storeKey);
+  final Future<void>? inFlight = _tabThemesFetchInFlight[scopedKey];
   if (inFlight != null) {
     return inFlight;
   }
 
   final Future<void> future = _runFetchAndCacheTabThemes(ref, storeKey);
-  _tabThemesFetchInFlight[storeKey] = future;
+  _tabThemesFetchInFlight[scopedKey] = future;
   future.whenComplete(() {
-    if (identical(_tabThemesFetchInFlight[storeKey], future)) {
-      _tabThemesFetchInFlight.remove(storeKey);
+    if (identical(_tabThemesFetchInFlight[scopedKey], future)) {
+      _tabThemesFetchInFlight.remove(scopedKey);
     }
   });
   return future;
 }
 
 Future<void> _runFetchAndCacheTabThemes(Ref ref, String storeKey) async {
+  final String scopedKey = _themeCacheKey(storeKey);
   try {
     final Dio dio = _buildDio();
     final Map<String, dynamic> headers = <String, dynamic>{};
-    final String? etag = _themeMemoryCache[storeKey]?.etag;
+    final String? etag = _themeMemoryCache[scopedKey]?.etag;
     if (etag != null && etag.isNotEmpty) {
       headers['If-None-Match'] = etag;
     }
@@ -495,7 +499,7 @@ Future<void> _runFetchAndCacheTabThemes(Ref ref, String storeKey) async {
     );
 
     final TabThemesResponse parsed = TabThemesResponse.fromJson(dataMap);
-    _themeMemoryCache[storeKey] = parsed;
+    _themeMemoryCache[scopedKey] = parsed;
     _scheduleThemeWarmAndPrefetch(ref, storeKey, parsed);
 
     // Successful fetch — clear any service-unavailable flag.
@@ -510,7 +514,7 @@ Future<void> _runFetchAndCacheTabThemes(Ref ref, String storeKey) async {
     // PHASE 6: If we have no valid cache AND the backend is down, surface the
     // proper offline/error screen instead of silently returning an empty
     // default theme which can render a blank or broken UI.
-    final bool hasCachedData = _themeMemoryCache.containsKey(storeKey) ||
+    final bool hasCachedData = _themeMemoryCache.containsKey(scopedKey) ||
         _hasHiveCacheForStore(storeKey);
     if (!hasCachedData) {
       _reportServiceUnavailableIfPossible(ref);
@@ -525,7 +529,7 @@ bool _hasHiveCacheForStore(String storeKey) {
         HiveService.remoteThemeBox.get(_manifestCacheKey(storeKey));
     if (cached != null) return true;
     // Also check legacy zepto keys.
-    if (storeKey == 'zepto') {
+    if (storeKey == 'zepto' && _isGlobalThemeScope()) {
       return HiveService.remoteThemeBox.get('tab_themes_data') != null ||
           HiveService.remoteThemeBox.get('data') != null;
     }
@@ -708,7 +712,8 @@ TabThemesResponse? _decodeLegacyTheme(String storeKey, dynamic cached) {
 }
 
 TabThemesResponse? _readCachedManifestSnapshot(String storeKey) {
-  final TabThemesResponse? memory = _themeMemoryCache[storeKey];
+  final String scopedKey = _themeCacheKey(storeKey);
+  final TabThemesResponse? memory = _themeMemoryCache[scopedKey];
   if (memory != null) {
     return memory;
   }
@@ -719,18 +724,18 @@ TabThemesResponse? _readCachedManifestSnapshot(String storeKey) {
     final Map<String, dynamic> map = _decodeToMap(cached);
     if (map.isNotEmpty) {
       final TabThemesResponse response = TabThemesResponse.fromJson(map);
-      _themeMemoryCache[storeKey] = response;
+      _themeMemoryCache[scopedKey] = response;
       return response;
     }
 
-    if (storeKey == 'zepto') {
+    if (storeKey == 'zepto' && _isGlobalThemeScope()) {
       final dynamic legacyManifest =
           HiveService.remoteThemeBox.get('tab_themes_data');
       final Map<String, dynamic> legacyMap = _decodeToMap(legacyManifest);
       if (legacyMap.isNotEmpty) {
         final TabThemesResponse response =
             TabThemesResponse.fromJson(legacyMap);
-        _themeMemoryCache[storeKey] = response;
+        _themeMemoryCache[scopedKey] = response;
         return response;
       }
 
@@ -739,7 +744,7 @@ TabThemesResponse? _readCachedManifestSnapshot(String storeKey) {
         HiveService.remoteThemeBox.get('data'),
       );
       if (migrated != null) {
-        _themeMemoryCache[storeKey] = migrated;
+        _themeMemoryCache[scopedKey] = migrated;
         return migrated;
       }
     }
@@ -764,7 +769,14 @@ Dio _buildDio() {
   return dio;
 }
 
-String _manifestCacheKey(String storeKey) => 'tab_themes_data_$storeKey';
+String _themeCacheKey(String storeKey) =>
+    '$storeKey::${AppCacheManager.currentShopScope.replaceAll(',', '_')}';
+
+bool _isGlobalThemeScope() =>
+    AppCacheManager.currentShopScope == AppCacheManager.anonShopScope;
+
+String _manifestCacheKey(String storeKey) =>
+    'tab_themes_data_${_themeCacheKey(storeKey)}';
 
 String _tabHomeCacheKey(String storeKey, String tabKey) =>
     'tab_home_data_${storeKey}_${tabKey}_${_catalogContextKey()}';

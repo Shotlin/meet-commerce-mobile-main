@@ -39,7 +39,8 @@ double _gridColumnWidth(double paneWidth) {
 /// work across both phone and tablet: iPad's 2-column grid is far wider per
 /// column, so the width-proportional image alone was blowing past the old
 /// fixed 256.h row height.
-double _gridRowExtent(double columnWidth) => columnWidth * 0.84 + 154.h;
+// ProductCard keeps image, title, unit, price, and CTA in one compact surface.
+double _gridRowExtent(double columnWidth) => columnWidth * 0.72 + 108.h;
 
 class CategoriesScreen extends ConsumerStatefulWidget {
   const CategoriesScreen({this.initialCategoryId, super.key});

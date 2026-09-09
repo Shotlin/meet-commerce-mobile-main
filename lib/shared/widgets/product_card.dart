@@ -12,6 +12,8 @@ import 'package:bakaloo_flutter_app/core/utils/app_toast.dart';
 import 'package:bakaloo_flutter_app/features/auth/presentation/providers/auth_gate_controller.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/providers/cart_provider.dart';
 import 'package:bakaloo_flutter_app/features/products/domain/entities/product_entity.dart';
+import 'package:bakaloo_flutter_app/features/products/data/models/product_options_response.dart';
+import 'package:bakaloo_flutter_app/features/products/presentation/providers/product_options_provider.dart';
 import 'package:bakaloo_flutter_app/features/purchase_limits/presentation/providers/purchase_limits_provider.dart';
 import 'package:bakaloo_flutter_app/features/wishlist/presentation/providers/wishlist_provider.dart';
 import 'package:bakaloo_flutter_app/shared/widgets/app_image.dart';
@@ -95,6 +97,7 @@ class ProductCard extends StatefulWidget {
 
 class _ProductCardState extends State<ProductCard> {
   bool _isPressed = false;
+  ProductEntity? _selectedFamilyProduct;
 
   @override
   Widget build(BuildContext context) {
@@ -124,7 +127,11 @@ class _ProductCardState extends State<ProductCard> {
   }
 
   Widget _buildPremiumCard(BuildContext context, bool boxed) {
-    final product = widget.product;
+    if (boxed) {
+      return _buildHomeFamilyCard(context);
+    }
+
+    final product = _selectedFamilyProduct ?? widget.product;
     const ink = Color(0xFF141414);
     const muted = Color(0xFF888888);
     const crimson = Color(0xFFD51043);
@@ -198,8 +205,17 @@ class _ProductCardState extends State<ProductCard> {
             if (product.hasFoodMarker)
               Positioned(
                 top: 10.h,
-                right: 10.w,
+                left: 10.w,
                 child: _FoodMarkerBox(product: product),
+              ),
+            if (widget.showWishlist)
+              Positioned(
+                top: 8.h,
+                right: 8.w,
+                child: _IsolatedWishlistButton(
+                  product: product,
+                  showWishlist: true,
+                ),
               ),
             if (!boxed) Positioned(right: 0, bottom: -10.h, child: cart()),
           ],
@@ -207,7 +223,7 @@ class _ProductCardState extends State<ProductCard> {
         Padding(
           padding: EdgeInsets.fromLTRB(
             boxed ? 13.w : 0,
-            boxed ? 14.h : 22.h,
+            boxed ? 12.h : 12.h,
             boxed ? 13.w : 0,
             boxed ? 16.h : 0,
           ),
@@ -232,7 +248,7 @@ class _ProductCardState extends State<ProductCard> {
                 ),
               ],
               if (details.isNotEmpty) ...[
-                Gap(10.h),
+                Gap(6.h),
                 Text(
                   details,
                   maxLines: 2,
@@ -241,13 +257,13 @@ class _ProductCardState extends State<ProductCard> {
                 ),
               ],
               if (boxed && product.hasDeliveryTime) ...[
-                Gap(10.h),
+                Gap(6.h),
                 Text(
                   product.formattedDeliveryTime,
                   style: type(12, color: const Color(0xFF555555)),
                 ),
               ],
-              Gap(16.h),
+              Gap(8.h),
               if (boxed)
                 LayoutBuilder(
                   builder: (context, constraints) {
@@ -276,7 +292,7 @@ class _ProductCardState extends State<ProductCard> {
               else
                 price(),
               if (!boxed && product.hasDeliveryTime) ...[
-                Gap(12.h),
+                Gap(6.h),
                 Text(
                   product.formattedDeliveryTime,
                   style: type(12, color: const Color(0xFF555555)),
@@ -305,34 +321,288 @@ class _ProductCardState extends State<ProductCard> {
     );
   }
 
-  // ───────────────────────────────────────────────────────────────────────
-  // Grid card (reference layout)
-  //
-  //   ┌───────────────────────────┐  ← white rounded box
-  //   │  image  (♡, veg)          │
-  //   │ ───────────────────────── │  ← faint divider
-  //   │  95 g            [ ADD ]  │
-  //   │                  3 options│
-  //   └───────────────────────────┘
-  //      ₹20   ₹25                   ← price (OUTSIDE the box)
-  //      5% OFF on MRP
-  //      Maggi Double Masala …
-  //      ★ 4.4  (104)
-  //      ◐ 28 mins
-  //
-  // The image + unit + ADD live inside ONE white box; price/name/rating/
-  // delivery sit on the page background below it.
-  // ───────────────────────────────────────────────────────────────────────
+  Widget _buildHomeFamilyCard(BuildContext context) {
+    final product = _selectedFamilyProduct ?? widget.product;
+    const crimson = Color(0xFFE71936);
+    const ink = Color(0xFF111B31);
+    const muted = Color(0xFF71809B);
+    final highlights = product.highlights ?? const <String, dynamic>{};
+    final lowerFamily = (product.familyName ?? product.name).toLowerCase();
+    final catalogueSubtitle = lowerFamily.contains('chicken')
+        ? 'Lean • High Protein'
+        : lowerFamily.contains('mutton')
+            ? 'Tender • Juicy'
+            : lowerFamily.contains('salmon')
+                ? 'Rich in Omega 3'
+                : lowerFamily.contains('egg')
+                    ? 'Nutritious • Healthy'
+                    : product.categoryName ?? '';
+    final subtitle = highlights['subtitle'] is String
+        ? highlights['subtitle'] as String
+        : catalogueSubtitle;
+    final qualityBadge = highlights['quality_badge'] is String
+        ? highlights['quality_badge'] as String
+        : 'Fresh Cut';
+    final title = product.familyName?.trim().isNotEmpty == true
+        ? product.familyName!
+        : product.name;
+    // Theme-builder one-column grids use the same family information, but
+    // reserve their wider footprint for a full-width purchase action.
+    final useFullAddButton = widget.width.w >= 260.w;
+    final priceDetails = Wrap(
+      spacing: 5.w,
+      runSpacing: 2.h,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: <Widget>[
+        Text(
+          '₹${product.effectivePrice.toStringAsFixed(0)}',
+          style: TextStyle(
+            fontFamily: 'DMSans',
+            fontSize: 17.sp,
+            height: 1,
+            fontWeight: FontWeight.w800,
+            color: ink,
+          ),
+        ),
+        if (product.isOnSale)
+          Text(
+            '₹${product.price.toStringAsFixed(0)}',
+            style: TextStyle(
+              fontSize: 9.5.sp,
+              color: const Color(0xFF9AA5B8),
+              decoration: TextDecoration.lineThrough,
+            ),
+          ),
+        if (product.isOnSale)
+          Text(
+            '${product.discountPercent}% off',
+            style: TextStyle(
+              fontSize: 9.5.sp,
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFF139A5A),
+            ),
+          ),
+      ],
+    );
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15.r),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: const Color(0xFF102044).withValues(alpha: 0.10),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(15.r),
+        child: Stack(
+          children: <Widget>[
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Stack(
+                  children: <Widget>[
+                    AspectRatio(
+                      aspectRatio: 1.28,
+                      child: _PremiumPhotoGallery(
+                        product: product,
+                        slides: false,
+                      ),
+                    ),
+                    Positioned(
+                      left: 8.w,
+                      bottom: 8.h,
+                      child: Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 8.w,
+                          vertical: 5.h,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.93),
+                          borderRadius: BorderRadius.circular(9.r),
+                        ),
+                        child: Text(
+                          qualityBadge,
+                          style: TextStyle(
+                            fontSize: 9.5.sp,
+                            fontWeight: FontWeight.w700,
+                            color: ink,
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (widget.showWishlist)
+                      Positioned(
+                        top: 8.h,
+                        right: 8.w,
+                        child: _IsolatedWishlistButton(
+                          product: product,
+                          showWishlist: true,
+                        ),
+                      ),
+                  ],
+                ),
+                Padding(
+                  padding: EdgeInsets.fromLTRB(10.w, 7.h, 10.w, 8.h),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Text(
+                        title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontFamily: 'DMSans',
+                          fontSize: 14.sp,
+                          height: 1.12,
+                          fontWeight: FontWeight.w800,
+                          color: ink,
+                        ),
+                      ),
+                      if (subtitle.isNotEmpty) ...<Widget>[
+                        SizedBox(height: 2.h),
+                        Text(
+                          subtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: 'DMSans',
+                            fontSize: 10.sp,
+                            height: 1.2,
+                            fontWeight: FontWeight.w500,
+                            color: muted,
+                          ),
+                        ),
+                      ],
+                      SizedBox(height: 4.h),
+                      _FamilyOptionChips(
+                        product: product,
+                        familyProductId: widget.product.id,
+                        selectedProductId: product.id,
+                        onSelected: (ProductOptionItem option) {
+                          setState(() {
+                            _selectedFamilyProduct = widget.product.copyWith(
+                              id: option.id,
+                              name: option.name,
+                              price: option.price,
+                              salePrice: option.salePrice,
+                              unit: option.unit,
+                              netQuantity: option.netQuantity,
+                              stockQuantity: option.stockQuantity ?? 0,
+                              shopProductId: option.shopProductId,
+                              shopId: option.shopId,
+                              optionLabel: option.optionLabel,
+                              // Retain the family count so the chip row stays
+                              // visible after changing to another option.
+                              optionCount: widget.product.optionCount,
+                              displayDeliveryMinutes:
+                                  option.displayDeliveryMinutes,
+                            );
+                          });
+                        },
+                      ),
+                      SizedBox(height: 5.h),
+                      if (useFullAddButton)
+                        priceDetails
+                      else
+                        Row(
+                          children: <Widget>[
+                            Expanded(child: priceDetails),
+                            _IsolatedCartButton(
+                              style: ProductCardStyle.grid,
+                              compact: false,
+                              tight: false,
+                              product: product,
+                              onAdd: widget.onAdd,
+                              onOptionsTap: null,
+                              forceCompactPlus: true,
+                              directFamilyAdd: true,
+                              accentColor: crimson,
+                              premium: true,
+                            ),
+                          ],
+                        ),
+                      if (useFullAddButton) ...<Widget>[
+                        SizedBox(height: 7.h),
+                        _IsolatedCartButton(
+                          style: ProductCardStyle.grid,
+                          compact: false,
+                          tight: false,
+                          product: product,
+                          onAdd: widget.onAdd,
+                          onOptionsTap: null,
+                          fullWidth: true,
+                          directFamilyAdd: true,
+                          accentColor: crimson,
+                          premium: true,
+                        ),
+                      ],
+                      if (product.hasDeliveryTime) ...<Widget>[
+                        SizedBox(height: 4.h),
+                        Row(
+                          children: <Widget>[
+                            PhosphorIcon(
+                              PhosphorIcons.lightningFill,
+                              size: 12.sp,
+                              color: crimson,
+                            ),
+                            SizedBox(width: 5.w),
+                            Text(
+                              '${product.formattedDeliveryTime} delivery',
+                              style: TextStyle(
+                                fontSize: 9.5.sp,
+                                fontWeight: FontWeight.w600,
+                                color: muted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (!product.inStock)
+              Positioned.fill(
+                child: ColoredBox(
+                  color: AppColors.overlayDark,
+                  child: Center(
+                    child: Text(
+                      'Out of stock',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 13.sp,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Compact premium grid card. Product details stay in one surface so the
+  // grid never creates a second, detached block of metadata below the card.
   Widget _buildGridCard(BuildContext context) {
     final product = widget.product;
     final cardWidth = widget.width.w;
     final tightGrid = widget.width < 112;
     final compactGrid = widget.width < 126;
-    final imageHeight = cardWidth * 0.84;
+    final imageHeight = cardWidth * 0.72;
     final unitFontSize = tightGrid ? 9.sp : 10.sp;
     final priceFontSize = tightGrid ? 14.sp : 16.sp;
     final comparePriceFontSize = tightGrid ? 10.sp : 11.5.sp;
-    final titleFontSize = tightGrid ? 11.6.sp : 12.8.sp;
+    final titleFontSize = tightGrid ? 11.2.sp : 13.2.sp;
     final offFontSize = tightGrid ? 10.sp : 11.sp;
     final imageUrl = product.thumbnailUrl ??
         (product.images.isNotEmpty ? product.images.first : null);
@@ -347,23 +617,28 @@ class _ProductCardState extends State<ProductCard> {
     final offAmount =
         isOnSale ? (product.price - product.salePrice!).toInt() : null;
 
-    // ── The white box (image + divider + unit/ADD row) ────────────────────
-    final whiteBox = DecoratedBox(
+    return DecoratedBox(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
-        border: Border.all(color: const Color(0xFFEDEDED), width: 0.8),
+        borderRadius: BorderRadius.circular(16.r),
+        border: Border.all(color: const Color(0xFFE6E8EC), width: 0.8),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      child: Stack(
-        children: <Widget>[
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              ClipRRect(
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(AppDimensions.radiusLg),
-                ),
-                child: _buildImageArea(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16.r),
+        child: Stack(
+          children: <Widget>[
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                _buildImageArea(
                   product: product,
                   imageUrl: imageUrl,
                   optimizedImage: optimizedImage,
@@ -375,199 +650,130 @@ class _ProductCardState extends State<ProductCard> {
                   compactGrid: compactGrid,
                   showImageBorder: widget.showImageBorder,
                 ),
-              ),
-              const Divider(height: 1, thickness: 1, color: Color(0xFFF0F0F0)),
-              // Unit label (left) + ADD button (right) — both inside the box.
-              Padding(
-                padding: EdgeInsets.fromLTRB(
-                  tightGrid ? 8.w : 10.w,
-                  8.h,
-                  tightGrid ? 7.w : 8.w,
-                  8.h,
-                ),
-                child: Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          product.displayUnit.trim().isNotEmpty
-                              ? product.displayUnit
-                              : product.unit,
-                          maxLines: 1,
-                          style: TextStyle(
-                            fontSize: unitFontSize,
-                            fontWeight: FontWeight.w600,
-                            color: const Color(0xFF5A5A5A),
-                            height: 1.1,
-                          ),
+                Padding(
+                  padding: EdgeInsets.fromLTRB(10.w, 9.h, 10.w, 10.h),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Text(
+                        product.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.labelLarge.copyWith(
+                          fontSize: titleFontSize,
+                          fontWeight: FontWeight.w700,
+                          height: 1.18,
+                          color: const Color(0xFF20242B),
                         ),
                       ),
-                    ),
-                    Gap(4.w),
-                    _IsolatedCartButton(
-                      style: ProductCardStyle.grid,
-                      compact: compactGrid,
-                      tight: tightGrid,
-                      product: product,
-                      onAdd: widget.onAdd,
-                      onOptionsTap: widget.onOptionsTap,
-                      forceCompactPlus: widget.useCompactAddButton,
-                      accentColor: widget.accentColor,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          if (!product.inStock)
-            Positioned.fill(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: AppColors.overlayDark,
-                  borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  'Out of stock',
-                  style: AppTextStyles.labelLarge.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-
-    // ── Below-box content (no border, on page background) ─────────────────
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        whiteBox,
-        Gap(8.h),
-        // Price + struck MRP
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: <Widget>[
-            Text(
-              '₹${effectivePrice.toInt()}',
-              style: TextStyle(
-                fontSize: priceFontSize,
-                fontWeight: FontWeight.w800,
-                color: const Color(0xFF1A1A1A),
-                height: 1.1,
-              ),
-            ),
-            if (isOnSale) ...<Widget>[
-              Gap(6.w),
-              Expanded(
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      '₹${product.price.toInt()}',
-                      maxLines: 1,
-                      style: TextStyle(
-                        fontSize: comparePriceFontSize,
-                        fontWeight: FontWeight.w500,
-                        color: const Color(0xFF999999),
-                        decoration: TextDecoration.lineThrough,
-                        decorationColor: const Color(0xFF999999),
+                      SizedBox(height: 4.h),
+                      Row(
+                        children: <Widget>[
+                          Expanded(
+                            child: Text(
+                              product.displayUnit.trim().isNotEmpty
+                                  ? product.displayUnit
+                                  : product.unit,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: unitFontSize,
+                                fontWeight: FontWeight.w500,
+                                color: const Color(0xFF737985),
+                              ),
+                            ),
+                          ),
+                          if (product.hasDeliveryTime)
+                            Text(
+                              product.formattedDeliveryTime,
+                              style: TextStyle(
+                                fontSize: 9.5.sp,
+                                color: const Color(0xFF737985),
+                              ),
+                            ),
+                        ],
                       ),
+                      SizedBox(height: 7.h),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: <Widget>[
+                          Text(
+                            '₹${effectivePrice.toInt()}',
+                            style: TextStyle(
+                              fontSize: priceFontSize,
+                              fontWeight: FontWeight.w800,
+                              color: const Color(0xFF151922),
+                              height: 1.0,
+                            ),
+                          ),
+                          if (isOnSale) ...<Widget>[
+                            SizedBox(width: 5.w),
+                            Flexible(
+                              child: Text(
+                                '₹${product.price.toInt()}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: comparePriceFontSize,
+                                  color: const Color(0xFF9AA0AA),
+                                  decoration: TextDecoration.lineThrough,
+                                ),
+                              ),
+                            ),
+                            if (offAmount != null && offAmount > 0) ...<Widget>[
+                              SizedBox(width: 4.w),
+                              Flexible(
+                                child: Text(
+                                  product.discountPercent > 0
+                                      ? '${product.discountPercent}% off'
+                                      : '₹$offAmount off',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: offFontSize,
+                                    fontWeight: FontWeight.w700,
+                                    color: const Color(0xFF238B62),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                          const Spacer(),
+                          _IsolatedCartButton(
+                            style: ProductCardStyle.grid,
+                            compact: compactGrid,
+                            tight: tightGrid,
+                            product: product,
+                            onAdd: widget.onAdd,
+                            onOptionsTap: null,
+                            forceCompactPlus: widget.useCompactAddButton,
+                            accentColor: widget.accentColor,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (!product.inStock)
+              Positioned.fill(
+                child: Container(
+                  color: AppColors.overlayDark,
+                  alignment: Alignment.center,
+                  child: Text(
+                    'Out of stock',
+                    style: AppTextStyles.labelLarge.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
               ),
-            ],
           ],
         ),
-        // Discount line — only when a real discount exists
-        if (offAmount != null && offAmount > 0) ...<Widget>[
-          Gap(3.h),
-          Text(
-            product.discountPercent > 0
-                ? '${product.discountPercent}% OFF on MRP'
-                : '₹$offAmount OFF',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: offFontSize,
-              fontWeight: FontWeight.w700,
-              color: const Color(0xFF2B7FFF),
-            ),
-          ),
-        ],
-        Gap(4.h),
-        // Product name
-        Text(
-          product.name,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: AppTextStyles.labelLarge.copyWith(
-            fontSize: titleFontSize,
-            fontWeight: FontWeight.w700,
-            height: 1.25,
-            color: const Color(0xFF222222),
-          ),
-        ),
-        // Rating row
-        if (product.hasRating) ...<Widget>[
-          Gap(4.h),
-          Row(
-            children: <Widget>[
-              Icon(
-                Icons.star_rounded,
-                size: 12.sp,
-                color: const Color(0xFFFFA000),
-              ),
-              Gap(2.w),
-              Expanded(
-                child: Text(
-                  product.formattedRating,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 10.sp,
-                    fontWeight: FontWeight.w500,
-                    color: const Color(0xFF666666),
-                    height: 1.2,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-        // Delivery time row
-        if (product.hasDeliveryTime) ...<Widget>[
-          Gap(3.h),
-          Row(
-            children: <Widget>[
-              PhosphorIcon(
-                PhosphorIcons.clock,
-                size: 11.sp,
-                color: const Color(0xFF888888),
-              ),
-              Gap(3.w),
-              Text(
-                product.formattedDeliveryTime,
-                style: TextStyle(
-                  fontSize: 10.sp,
-                  fontWeight: FontWeight.w400,
-                  color: const Color(0xFF888888),
-                  height: 1.2,
-                ),
-              ),
-            ],
-          ),
-        ],
-        Gap(4.h),
-      ],
+      ),
     );
   }
 
@@ -834,6 +1040,122 @@ class _ProductCardState extends State<ProductCard> {
       return ProductCardStyle.scroll;
     }
     return ProductCardStyle.grid;
+  }
+}
+
+class _FamilyOptionChips extends ConsumerWidget {
+  const _FamilyOptionChips({
+    required this.product,
+    required this.familyProductId,
+    required this.selectedProductId,
+    required this.onSelected,
+  });
+
+  final ProductEntity product;
+  final String familyProductId;
+  final String selectedProductId;
+  final ValueChanged<ProductOptionItem> onSelected;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (!product.hasMultipleOptions) {
+      return const SizedBox.shrink();
+    }
+    final options = ref
+        .watch(productOptionsProvider(familyProductId))
+        .asData
+        ?.value
+        .options
+        .where((option) => option.inStock)
+        .take(3)
+        .toList(growable: false);
+    if (options == null || options.length < 2) {
+      // The Home manifest already contains these admin-entered labels. Render
+      // them at once instead of leaving an empty gap while the option request
+      // warms in the background.
+      final rawLabels = product.highlights?['option_labels'];
+      final labels = rawLabels is List
+          ? rawLabels
+              .whereType<String>()
+              .where((label) => label.trim().isNotEmpty)
+              .take(3)
+              .toList(growable: false)
+          : const <String>[];
+      if (labels.length < 2) return const SizedBox.shrink();
+      return Wrap(
+        spacing: 5.w,
+        runSpacing: 4.h,
+        children: List<Widget>.generate(labels.length, (index) {
+          final selected = index == 0;
+          return Container(
+            constraints: BoxConstraints(minWidth: 46.w),
+            padding: EdgeInsets.symmetric(horizontal: 7.w, vertical: 3.h),
+            decoration: BoxDecoration(
+              color: selected ? Colors.white : const Color(0xFFF3F5F8),
+              borderRadius: BorderRadius.circular(8.r),
+              border: Border.all(
+                color: selected
+                    ? const Color(0xFFE71936)
+                    : const Color(0xFFF3F5F8),
+                width: selected ? 1.2 : 1,
+              ),
+            ),
+            child: Text(
+              labels[index],
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 9.sp,
+                fontWeight: FontWeight.w700,
+                color: selected
+                    ? const Color(0xFFE71936)
+                    : const Color(0xFF65728A),
+              ),
+            ),
+          );
+        }),
+      );
+    }
+
+    return Wrap(
+      spacing: 5.w,
+      runSpacing: 4.h,
+      children: List<Widget>.generate(options.length, (int index) {
+        final option = options[index];
+        final bool selected = option.id == selectedProductId;
+        return Material(
+          color: selected ? Colors.white : const Color(0xFFF3F5F8),
+          borderRadius: BorderRadius.circular(8.r),
+          child: InkWell(
+            onTap: () => onSelected(option),
+            borderRadius: BorderRadius.circular(8.r),
+            child: Container(
+              constraints: BoxConstraints(minWidth: 46.w),
+              padding: EdgeInsets.symmetric(horizontal: 7.w, vertical: 3.h),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8.r),
+                border: Border.all(
+                  color: selected
+                      ? const Color(0xFFE71936)
+                      : const Color(0xFFF3F5F8),
+                  width: selected ? 1.2 : 1,
+                ),
+              ),
+              child: Text(
+                option.displayUnit,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 9.sp,
+                  fontWeight: FontWeight.w700,
+                  color: selected
+                      ? const Color(0xFFE71936)
+                      : const Color(0xFF65728A),
+                ),
+              ),
+            ),
+          ),
+        );
+      }),
+    );
   }
 }
 
@@ -1127,9 +1449,15 @@ class _WishlistButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    const blush = Color(0xFFE86D83);
     return Material(
-      color: Colors.white.withValues(alpha: 0.96),
-      shape: const CircleBorder(),
+      color: isWishlisted ? const Color(0xFFE71946) : Colors.white,
+      shape: CircleBorder(
+        side: BorderSide(
+          color: isWishlisted ? const Color(0xFFE71946) : blush,
+          width: 1.2,
+        ),
+      ),
       child: InkWell(
         onTap: () async {
           final allowed = await authGate.protectWishlist(context, product);
@@ -1145,11 +1473,11 @@ class _WishlistButton extends ConsumerWidget {
         },
         customBorder: const CircleBorder(),
         child: Padding(
-          padding: EdgeInsets.all(6.w),
+          padding: EdgeInsets.all(5.w),
           child: PhosphorIcon(
             isWishlisted ? PhosphorIcons.heartFill : PhosphorIcons.heart,
             size: 18,
-            color: isWishlisted ? AppColors.errorRed : const Color(0xFF606060),
+            color: isWishlisted ? Colors.white : blush,
           ),
         ),
       ),
@@ -1167,6 +1495,8 @@ class _IsolatedCartButton extends ConsumerWidget {
     this.onAdd,
     this.onOptionsTap,
     this.forceCompactPlus = false,
+    this.fullWidth = false,
+    this.directFamilyAdd = false,
     this.accentColor,
     this.premium = false,
   });
@@ -1178,6 +1508,8 @@ class _IsolatedCartButton extends ConsumerWidget {
   final VoidCallback? onAdd;
   final VoidCallback? onOptionsTap;
   final bool forceCompactPlus;
+  final bool fullWidth;
+  final bool directFamilyAdd;
   final Color? accentColor;
   final bool premium;
 
@@ -1185,7 +1517,7 @@ class _IsolatedCartButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // Multi-option families never reflect a combined quantity on the card —
     // they always show ADD + "N options"; exact quantities live in the sheet.
-    final quantity = product.hasMultipleOptions
+    final quantity = product.hasMultipleOptions && !directFamilyAdd
         ? 0
         : ref.watch(cartItemQuantityProvider(product.id));
     final authGate = ref.read(authGateControllerProvider);
@@ -1200,6 +1532,8 @@ class _IsolatedCartButton extends ConsumerWidget {
       onAdd: onAdd,
       onOptionsTap: onOptionsTap,
       forceCompactPlus: forceCompactPlus,
+      fullWidth: fullWidth,
+      directFamilyAdd: directFamilyAdd,
       accentColor: accentColor,
       premium: premium,
     );
@@ -1217,6 +1551,8 @@ class _ZeptoAddQtyButton extends ConsumerWidget {
     this.onAdd,
     this.onOptionsTap,
     this.forceCompactPlus = false,
+    this.fullWidth = false,
+    this.directFamilyAdd = false,
     this.accentColor,
     this.premium = false,
   });
@@ -1230,6 +1566,8 @@ class _ZeptoAddQtyButton extends ConsumerWidget {
   final VoidCallback? onAdd;
   final VoidCallback? onOptionsTap;
   final bool forceCompactPlus;
+  final bool fullWidth;
+  final bool directFamilyAdd;
   final Color? accentColor;
   final bool premium;
 
@@ -1242,11 +1580,13 @@ class _ZeptoAddQtyButton extends ConsumerWidget {
         ref.watch(purchaseLimitStatusProvider(product.id));
     final isAtLimit = purchaseLimitStatus?.isAtLimit ?? false;
     final greenBorder = accentColor ?? AppColors.primaryGreen;
-    final buttonHeight = premium
-        ? 44.h * MediaQuery.textScalerOf(context).scale(1)
-        : tight
-            ? 30.h
-            : 32.h;
+    final buttonHeight = premium && forceCompactPlus
+        ? 26.h
+        : premium
+            ? 44.h * MediaQuery.textScalerOf(context).scale(1)
+            : tight
+                ? 30.h
+                : 32.h;
     // Inline grid ADD buttons sit next to the unit label in a narrow 3-col
     // cell, so they are kept compact to leave room for "200 g" / "6 eggs".
     final gridButtonWidth = premium
@@ -1256,11 +1596,13 @@ class _ZeptoAddQtyButton extends ConsumerWidget {
             : compact
                 ? 48.w
                 : 56.w;
-    final controlWidth = premium
-        ? 32.w
-        : tight
-            ? 17.w
-            : 19.w;
+    final controlWidth = premium && forceCompactPlus
+        ? 26.w
+        : premium
+            ? 32.w
+            : tight
+                ? 17.w
+                : 19.w;
     final quantityWidth = tight ? 12.w : 14.w;
     final iconSize = tight ? 11.0 : 12.0;
     final addFontSize = tight
@@ -1272,6 +1614,7 @@ class _ZeptoAddQtyButton extends ConsumerWidget {
     if (quantity > 0) {
       return Container(
         height: buttonHeight,
+        width: fullWidth ? double.infinity : null,
         decoration: BoxDecoration(
           color: greenBorder,
           borderRadius: BorderRadius.circular(8.r),
@@ -1287,7 +1630,9 @@ class _ZeptoAddQtyButton extends ConsumerWidget {
           ],
         ),
         child: Row(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisSize: fullWidth ? MainAxisSize.max : MainAxisSize.min,
+          mainAxisAlignment:
+              fullWidth ? MainAxisAlignment.center : MainAxisAlignment.start,
           children: <Widget>[
             InkWell(
               onTap: () async {
@@ -1368,9 +1713,13 @@ class _ZeptoAddQtyButton extends ConsumerWidget {
     }
 
     final bool isGrid = style == ProductCardStyle.grid;
-    final bool showOptions = product.hasMultipleOptions;
+    final bool showOptions = product.hasMultipleOptions && !directFamilyAdd;
     // Categories screen uses a compact square "+" button (no "ADD" label).
-    final bool compactPlus = forceCompactPlus && isGrid && !showOptions;
+    // The Home family design always keeps a clean square + control.  It can
+    // still open the option sheet for a multi-variant family; the button does
+    // not need to grow into an "Add / N options" label to communicate that.
+    final bool compactPlus =
+        forceCompactPlus && isGrid && (!showOptions || premium);
     // A multi-option family's ADD button opens a sheet of sibling options
     // rather than adding this exact representative product — this card's
     // own isAtLimit status shouldn't grey out (or block) that sheet, since
@@ -1434,15 +1783,21 @@ class _ZeptoAddQtyButton extends ConsumerWidget {
           child: Opacity(
             opacity: disableDirectAdd ? 0.4 : 1,
             child: Container(
-              // Multi-option grid buttons grow taller to stack "ADD" over the
-              // "N options" line INSIDE the green border (reference layout).
-              height:
-                  isGrid && showOptions ? buttonHeight + 16.h : buttonHeight,
-              width: compactPlus
+              // Multi-option grid buttons grow only when they render the
+              // textual ADD/options label. The Home family control remains a
+              // true square even though it opens the same option sheet.
+              height: fullWidth
                   ? buttonHeight
-                  : isGrid
-                      ? gridButtonWidth
+                  : isGrid && showOptions && !compactPlus
+                      ? buttonHeight + 16.h
                       : buttonHeight,
+              width: fullWidth
+                  ? double.infinity
+                  : compactPlus
+                      ? buttonHeight
+                      : isGrid
+                          ? gridButtonWidth
+                          : buttonHeight,
               padding: EdgeInsets.symmetric(vertical: 3.h),
               decoration: BoxDecoration(
                 border:
@@ -1450,55 +1805,67 @@ class _ZeptoAddQtyButton extends ConsumerWidget {
                 borderRadius: BorderRadius.circular(8.r),
               ),
               alignment: Alignment.center,
-              child: compactPlus
-                  ? PhosphorIcon(
-                      PhosphorIcons.plusBold,
-                      size: premium
-                          ? 25.0
-                          : tight
-                              ? 15.0
-                              : 18.0,
-                      color: greenBorder,
+              child: fullWidth
+                  ? Text(
+                      showOptions ? 'Choose size & add' : 'Add to cart',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13.sp,
+                      ),
                     )
-                  : isGrid
-                      ? Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          mainAxisSize: MainAxisSize.min,
-                          children: <Widget>[
-                            Text(
-                              premium ? 'Add +' : 'ADD',
-                              style: TextStyle(
-                                color: premium ? Colors.white : greenBorder,
-                                fontWeight: FontWeight.w700,
-                                fontSize: premium ? 16.sp : addFontSize,
-                                letterSpacing: 0.4,
-                                height: 1.0,
-                              ),
-                            ),
-                            if (showOptions)
-                              Text(
-                                '${product.optionCount} options',
-                                maxLines: 1,
-                                softWrap: false,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 8.5.sp,
-                                  fontWeight: FontWeight.w500,
-                                  color: premium ? Colors.white : greenBorder,
-                                  height: 1.2,
-                                ),
-                              ),
-                          ],
-                        )
-                      : PhosphorIcon(
+                  : compactPlus
+                      ? PhosphorIcon(
                           PhosphorIcons.plusBold,
                           size: premium
-                              ? 25.0
+                              ? 16.0
                               : tight
                                   ? 15.0
                                   : 18.0,
-                          color: greenBorder,
-                        ),
+                          color: premium ? Colors.white : greenBorder,
+                        )
+                      : isGrid
+                          ? Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.min,
+                              children: <Widget>[
+                                Text(
+                                  premium ? 'Add +' : 'ADD',
+                                  style: TextStyle(
+                                    color: premium ? Colors.white : greenBorder,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: premium ? 16.sp : addFontSize,
+                                    letterSpacing: 0.4,
+                                    height: 1.0,
+                                  ),
+                                ),
+                                if (showOptions)
+                                  Text(
+                                    '${product.optionCount} options',
+                                    maxLines: 1,
+                                    softWrap: false,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 8.5.sp,
+                                      fontWeight: FontWeight.w500,
+                                      color:
+                                          premium ? Colors.white : greenBorder,
+                                      height: 1.2,
+                                    ),
+                                  ),
+                              ],
+                            )
+                          : PhosphorIcon(
+                              PhosphorIcons.plusBold,
+                              size: premium && compactPlus
+                                  ? 16.0
+                                  : premium
+                                      ? 25.0
+                                      : tight
+                                          ? 15.0
+                                          : 18.0,
+                              color: greenBorder,
+                            ),
             ),
           ),
         ),

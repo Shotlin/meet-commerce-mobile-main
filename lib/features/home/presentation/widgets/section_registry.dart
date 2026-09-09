@@ -285,12 +285,18 @@ Widget _buildCategoryProductGrid(
       entry.productCardStyle == 'PREMIUM_FRESH';
   final columns = (entry.columns ?? (premium ? 1 : 3))
       .clamp(premium ? 1 : 2, premium ? 2 : 3);
+  // A premium section sells a product family, not every individual size as a
+  // separate tile.  This keeps Fish, Mutton and every other theme-builder
+  // grid consistent with the All tab: one card plus its size/pack chips.
+  final displayProducts = premium
+      ? _mergeUniqueProducts(<List<ProductEntity>>[products])
+      : products;
   return _ManifestProductGridSection(
     title: entry.title ?? 'Products for you',
     // Render every product the manifest already resolved (already capped by
     // entry.productLimit server-side) — don't re-truncate to a fixed row
     // count here, or picks beyond 2 rows silently disappear.
-    products: products,
+    products: displayProducts,
     columns: columns,
     variant:
         productCardVariantFromString(entry.productCardStyle ?? 'PREMIUM_FRESH'),
@@ -1325,7 +1331,7 @@ class _ManifestProductGridSection extends StatelessWidget {
           child: LayoutBuilder(
             builder: (BuildContext context, BoxConstraints constraints) {
               final gap =
-                  variant == ProductCardVariant.premiumFresh ? 22.w : 10.w;
+                  variant == ProductCardVariant.premiumFresh ? 12.w : 10.w;
               final minItemWidth = 104.w;
               final maxColumnsForWidth =
                   ((constraints.maxWidth + gap) / (minItemWidth + gap))
@@ -1340,7 +1346,7 @@ class _ManifestProductGridSection extends StatelessWidget {
               return Wrap(
                 spacing: gap,
                 runSpacing:
-                    variant == ProductCardVariant.premiumFresh ? 30.h : 12.h,
+                    variant == ProductCardVariant.premiumFresh ? 16.h : 12.h,
                 children: products
                     .map(
                       (ProductEntity product) => SizedBox(
@@ -1400,7 +1406,7 @@ class _ManifestHorizontalProductSection extends StatelessWidget {
         Gap(10.h),
         SizedBox(
           height: variant == ProductCardVariant.premiumFresh
-              ? 164.w + 200.h * MediaQuery.textScalerOf(context).scale(1)
+              ? 320.h * MediaQuery.textScalerOf(context).scale(1)
               : 246.h,
           child: ListView.builder(
             padding: EdgeInsets.symmetric(horizontal: 14.w),

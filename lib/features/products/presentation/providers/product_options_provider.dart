@@ -7,6 +7,9 @@ part 'product_options_provider.g.dart';
 
 @riverpod
 Future<ProductOptionsResponse> productOptions(Ref ref, String productId) async {
+  // Family chips remain hot while the user changes tabs or selects another
+  // size, so the compact card never flashes empty during a repeat fetch.
+  ref.keepAlive();
   final datasource = ref.watch(productRemoteDataSourceProvider);
   final response = await datasource.getProductOptions(productId);
   return response;
