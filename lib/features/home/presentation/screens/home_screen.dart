@@ -44,7 +44,6 @@ import 'package:bakaloo_flutter_app/shared/widgets/product_card.dart';
 import 'package:bakaloo_flutter_app/shared/widgets/skeleton_loader.dart';
 import 'package:bakaloo_flutter_app/features/products/presentation/widgets/show_product_options.dart';
 import 'package:bakaloo_flutter_app/features/location/presentation/providers/location_prompt_provider.dart';
-import 'package:bakaloo_flutter_app/features/location/presentation/providers/guest_storefront_provider.dart';
 import 'package:bakaloo_flutter_app/features/location/presentation/providers/non_serviceable_location_provider.dart';
 import 'package:bakaloo_flutter_app/features/notifications/presentation/providers/notification_provider.dart';
 import 'package:bakaloo_flutter_app/features/location/presentation/widgets/location_prompt_sheet.dart';
@@ -99,8 +98,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   late final ProviderSubscription<Timer> _themeRefreshTimerSub;
   late final ProviderSubscription<AuthState> _authStateSub;
   late final ProviderSubscription<AsyncValue<HomeScreenData>> _homeDataSub;
-  late final ProviderSubscription<AsyncValue<TabHomeContentResponse?>>
-      _tabHomeContentSub;
   // PHASE 4: Track active tab key so we can reset scroll/stage state on switch.
   late final ProviderSubscription<String> _tabKeySub;
   String _activeTabKey = 'all';
@@ -237,17 +234,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       homeProvider,
       (previous, next) {
         next.whenData(_recomputeHomeData);
-      },
-      fireImmediately: true,
-    );
-    _tabHomeContentSub = ref.listenManual(
-      selectedTabHomeContentProvider,
-      (previous, next) {
-        if (next case AsyncData(:final value?)) {
-          _recomputeTabContent(value);
-          return;
-        }
-        _clearTabContentCache();
       },
       fireImmediately: true,
     );
@@ -539,7 +525,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     _themeRefreshTimerSub.close();
     _authStateSub.close();
     _homeDataSub.close();
-    _tabHomeContentSub.close();
     _tabKeySub.close();
     _deferredSectionStage
       ..removeListener(_rebuildStagedSlivers)
@@ -666,8 +651,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       _isTopChromeMotionEnabled.value = true;
     }
 
-    // Clear managed tab content immediately — new content will arrive via
-    // _tabHomeContentSub once the new tab's provider resolves.
+    // Clear managed tab content immediately so no stale per-tab products
+    // linger; section widgets re-pull fresh content directly from the
+    // section-manifest providers once the new tab's data resolves.
     _clearTabContentCache();
 
     // Recalculate the sticky trigger offset after the new tab layout renders.
@@ -709,39 +695,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     _featuredPool = featuredPool;
     _refreshStagedSliversCache();
     _ensurePurchaseLimitsLoaded(data.featuredProducts);
-  }
-
-  void _recomputeTabContent(TabHomeContentResponse content) {
-    final seasonalProducts = content.seasonalProducts
-        .where((product) => product.inStock)
-        .toList(growable: false);
-    final featuredProducts = content.featuredProducts
-        .where((product) => product.inStock)
-        .toList(growable: false);
-    final trendingProducts = content.trendingProducts
-        .where((product) => product.inStock)
-        .toList(growable: false);
-    final categorySections = content.categorySections
-        .where((section) => section.products.isNotEmpty)
-        .toList(growable: false);
-    final featuredPool = _buildFeaturedPool(
-      managedFeaturedProducts: featuredProducts,
-      homeFeaturedProducts: _homeFeaturedProducts,
-    );
-
-    // PHASE 2B: Mutate fields without setState — only update ValueNotifier.
-    _managedSeasonalProducts = seasonalProducts;
-    _managedFeaturedProducts = featuredProducts;
-    _managedTrendingProducts = trendingProducts;
-    _managedCategorySections = categorySections;
-    _featuredPool = featuredPool;
-    _refreshStagedSliversCache();
-    _ensurePurchaseLimitsLoaded(<ProductEntity>[
-      ...seasonalProducts,
-      ...featuredProducts,
-      ...trendingProducts,
-      for (final section in categorySections) ...section.products,
-    ]);
   }
 
   // Piggybacks on the home/tab-content fetches that are already happening —

@@ -60,11 +60,24 @@ class _AddEditAddressScreenState extends ConsumerState<AddEditAddressScreen> {
     lng: 88.3639,
   );
   static const List<String> _labels = <String>['Home', 'Work', 'Other'];
+  static const List<String> _propertyTypes = <String>[
+    'Individual House',
+    'Apartment',
+    'Villa',
+    'Office',
+    'Other',
+  ];
 
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final TextEditingController _addressController = TextEditingController();
   final TextEditingController _houseNoController = TextEditingController();
   final TextEditingController _buildingController = TextEditingController();
+  final TextEditingController _floorController = TextEditingController();
+  final TextEditingController _flatController = TextEditingController();
+  final TextEditingController _towerController = TextEditingController();
+  final TextEditingController _securityController = TextEditingController();
+  final TextEditingController _companyController = TextEditingController();
+  final TextEditingController _streetController = TextEditingController();
   final TextEditingController _landmarkController = TextEditingController();
   final TextEditingController _cityController = TextEditingController();
   final TextEditingController _stateController = TextEditingController();
@@ -77,6 +90,7 @@ class _AddEditAddressScreenState extends ConsumerState<AddEditAddressScreen> {
   );
 
   String _selectedLabel = 'Home';
+  String _selectedPropertyType = 'Individual House';
   double? _latitude;
   double? _longitude;
   String? _city;
@@ -103,7 +117,7 @@ class _AddEditAddressScreenState extends ConsumerState<AddEditAddressScreen> {
       !_isSaving &&
       _hasPinnedLocation &&
       _addressController.text.trim().isNotEmpty &&
-      _houseNoController.text.trim().isNotEmpty &&
+      _requiredPropertyController.text.trim().isNotEmpty &&
       _cityController.text.trim().isNotEmpty &&
       _stateController.text.trim().isNotEmpty &&
       _pincodeStatus == _PincodeValidationStatus.valid;
@@ -123,8 +137,16 @@ class _AddEditAddressScreenState extends ConsumerState<AddEditAddressScreen> {
     // separate on/off pair needed there.
     addressSheetVisible.value = true;
     _seedFromInitialAddress();
+    _prefillReceiverFromAccountSilently();
     _addressController.addListener(_handleFormStateChanged);
     _houseNoController.addListener(_handleFormStateChanged);
+    _buildingController.addListener(_handleFormStateChanged);
+    _floorController.addListener(_handleFormStateChanged);
+    _flatController.addListener(_handleFormStateChanged);
+    _towerController.addListener(_handleFormStateChanged);
+    _securityController.addListener(_handleFormStateChanged);
+    _companyController.addListener(_handleFormStateChanged);
+    _streetController.addListener(_handleFormStateChanged);
     _cityController.addListener(_handleCityTextChanged);
     _stateController.addListener(_handleStateTextChanged);
     _pincodeController.addListener(_handlePincodeTextChanged);
@@ -215,6 +237,12 @@ class _AddEditAddressScreenState extends ConsumerState<AddEditAddressScreen> {
       ..removeListener(_handlePincodeTextChanged)
       ..dispose();
     _buildingController.dispose();
+    _floorController.dispose();
+    _flatController.dispose();
+    _towerController.dispose();
+    _securityController.dispose();
+    _companyController.dispose();
+    _streetController.dispose();
     _landmarkController.dispose();
     _receiverNameController.dispose();
     _receiverPhoneController.dispose();
@@ -288,6 +316,30 @@ class _AddEditAddressScreenState extends ConsumerState<AddEditAddressScreen> {
       setState(() {});
     }
   }
+
+  /// The phone and display name come from the signed-in account. They remain
+  /// editable for a gift/alternate receiver, but a normal address add never
+  /// starts with an empty contact field.
+  void _prefillReceiverFromAccountSilently() {
+    final authState = ref.read(authStateProvider);
+    if (authState case AuthAuthenticated(:final user)) {
+      if (_receiverNameController.text.trim().isEmpty) {
+        _receiverNameController.text = (user.name ?? '').trim();
+      }
+      if (_receiverPhoneController.text.trim().isEmpty) {
+        _receiverPhoneController.text = _sanitizePhone(user.phone);
+      }
+    }
+  }
+
+  TextEditingController get _requiredPropertyController =>
+      switch (_selectedPropertyType) {
+        'Apartment' => _flatController,
+        'Villa' => _houseNoController,
+        'Office' => _companyController,
+        'Other' => _buildingController,
+        _ => _houseNoController,
+      };
 
   // City/State/Pincode are pre-filled from the map pick but stay fully
   // editable — these listeners keep the underlying _city/_state/_pincode
@@ -385,9 +437,11 @@ class _AddEditAddressScreenState extends ConsumerState<AddEditAddressScreen> {
       }
 
       if (permission == LocationPermission.denied) {
-        AppToast.show(context,
-            '📍 Location permission is required to detect your location.',
-            type: ToastType.warning);
+        AppToast.show(
+          context,
+          '📍 Location permission is required to detect your location.',
+          type: ToastType.warning,
+        );
         return;
       }
 
@@ -406,8 +460,11 @@ class _AddEditAddressScreenState extends ConsumerState<AddEditAddressScreen> {
           return;
         }
         if (!serviceEnabled) {
-          AppToast.show(context, '📍 Turn on location services and try again.',
-              type: ToastType.warning);
+          AppToast.show(
+            context,
+            '📍 Turn on location services and try again.',
+            type: ToastType.warning,
+          );
           return;
         }
       }
@@ -587,13 +644,19 @@ class _AddEditAddressScreenState extends ConsumerState<AddEditAddressScreen> {
         setState(() {});
         return;
       }
-      AppToast.show(context, '✅ Receiver details are already filled.',
-          type: ToastType.info);
+      AppToast.show(
+        context,
+        '✅ Receiver details are already filled.',
+        type: ToastType.info,
+      );
       return;
     }
 
-    AppToast.show(context, 'ℹ️ Add receiver details manually.',
-        type: ToastType.info);
+    AppToast.show(
+      context,
+      'ℹ️ Add receiver details manually.',
+      type: ToastType.info,
+    );
   }
 
   Future<void> _saveAddress() async {
@@ -605,8 +668,10 @@ class _AddEditAddressScreenState extends ConsumerState<AddEditAddressScreen> {
 
     if (!_hasPinnedLocation) {
       AppToast.show(
-          context, '📍 Pick the delivery pin before saving this address.',
-          type: ToastType.warning);
+        context,
+        '📍 Pick the delivery pin before saving this address.',
+        type: ToastType.warning,
+      );
       return;
     }
 
@@ -614,8 +679,11 @@ class _AddEditAddressScreenState extends ConsumerState<AddEditAddressScreen> {
         (_city ?? '').trim().isEmpty ||
         (_state ?? '').trim().isEmpty ||
         (_pincode ?? '').trim().isEmpty) {
-      AppToast.show(context, '📍 Choose a valid delivery pin to continue.',
-          type: ToastType.warning);
+      AppToast.show(
+        context,
+        '📍 Choose a valid delivery pin to continue.',
+        type: ToastType.warning,
+      );
       return;
     }
 
@@ -702,16 +770,91 @@ class _AddEditAddressScreenState extends ConsumerState<AddEditAddressScreen> {
   }
 
   String? _composeSecondaryAddress() {
-    final parts = <String>[
-      _houseNoController.text.trim(),
-      _buildingController.text.trim(),
-      _landmarkController.text.trim(),
-    ].where((value) => value.isNotEmpty).toList(growable: false);
+    final values = <String, String>{
+      'type': _selectedPropertyType,
+      'house': _houseNoController.text.trim(),
+      'building': _buildingController.text.trim(),
+      'flat': _flatController.text.trim(),
+      'floor': _floorController.text.trim(),
+      'tower/block': _towerController.text.trim(),
+      'security/secretary': _securityController.text.trim(),
+      'company': _companyController.text.trim(),
+      'street': _streetController.text.trim(),
+      'landmark': _landmarkController.text.trim(),
+    };
+    // The current address API intentionally has one secondary-address field.
+    // Keeping the key names in it makes the richer type-specific details
+    // readable in checkout, support tools, and a later edit flow without a
+    // backend schema migration.
+    final parts = values.entries
+        .where((entry) => entry.value.isNotEmpty)
+        .map((entry) => '${entry.key}: ${entry.value}')
+        .toList(growable: false);
 
     if (parts.isEmpty) {
       return null;
     }
     return parts.join(', ');
+  }
+
+  List<Widget> _buildPropertyFields() {
+    final fields = <Widget>[];
+
+    void addField(
+      TextEditingController controller,
+      String label, {
+      bool required = false,
+      TextInputAction action = TextInputAction.next,
+    }) {
+      if (fields.isNotEmpty) fields.add(Gap(12.h));
+      fields.add(
+        _FormField(
+          controller: controller,
+          label: required ? '$label *' : '$label (Optional)',
+          textInputAction: action,
+          validator: required
+              ? (value) =>
+                  (value ?? '').trim().isEmpty ? '$label is required.' : null
+              : null,
+        ),
+      );
+    }
+
+    switch (_selectedPropertyType) {
+      case 'Apartment':
+        addField(_buildingController, 'Building number / name', required: true);
+        addField(_flatController, 'Flat number', required: true);
+        addField(_floorController, 'Floor');
+        addField(_towerController, 'Tower / block');
+        break;
+      case 'Villa':
+        addField(_houseNoController, 'Villa number / name', required: true);
+        addField(_securityController, 'Security / secretary name');
+        addField(_streetController, 'Street name');
+        break;
+      case 'Office':
+        addField(_companyController, 'Company name', required: true);
+        addField(_floorController, 'Floor');
+        addField(_towerController, 'Block / tower');
+        break;
+      case 'Other':
+        addField(_buildingController, 'Building number / area', required: true);
+        addField(_floorController, 'Floor');
+        break;
+      case 'Individual House':
+      default:
+        addField(
+          _houseNoController,
+          'House number / name / area',
+          required: true,
+        );
+        addField(_floorController, 'Floor');
+        break;
+    }
+
+    addField(_addressController, 'Street / area from map', required: true);
+    addField(_landmarkController, 'Landmark');
+    return fields;
   }
 
   @override
@@ -822,7 +965,9 @@ class _AddEditAddressScreenState extends ConsumerState<AddEditAddressScreen> {
                                 onChangeTap: _openMapPicker,
                               ),
                               const Divider(
-                                  height: 1, color: AppColors.divider),
+                                height: 1,
+                                color: AppColors.divider,
+                              ),
                             ],
                           ),
                         ),
@@ -842,41 +987,24 @@ class _AddEditAddressScreenState extends ConsumerState<AddEditAddressScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: <Widget>[
-                              _FormField(
-                                controller: _houseNoController,
-                                label: 'House No. & Floor *',
-                                textInputAction: TextInputAction.next,
-                                validator: (String? value) {
-                                  if ((value ?? '').trim().isEmpty) {
-                                    return 'House no. and floor are required.';
-                                  }
-                                  return null;
-                                },
+                              Text(
+                                'Address type',
+                                style: AppTextStyles.labelLarge.copyWith(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 14.sp,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
-                              Gap(12.h),
-                              _FormField(
-                                controller: _buildingController,
-                                label: 'Building & Block No. (Optional)',
-                                textInputAction: TextInputAction.next,
+                              Gap(10.h),
+                              _PropertyTypeSelector(
+                                types: _propertyTypes,
+                                selectedType: _selectedPropertyType,
+                                onSelected: (type) => setState(() {
+                                  _selectedPropertyType = type;
+                                }),
                               ),
-                              Gap(12.h),
-                              _FormField(
-                                controller: _addressController,
-                                label: 'Address *',
-                                textInputAction: TextInputAction.next,
-                                validator: (String? value) {
-                                  if ((value ?? '').trim().isEmpty) {
-                                    return 'Address is required.';
-                                  }
-                                  return null;
-                                },
-                              ),
-                              Gap(12.h),
-                              _FormField(
-                                controller: _landmarkController,
-                                label: 'Landmark & Area Name (Optional)',
-                                textInputAction: TextInputAction.next,
-                              ),
+                              Gap(16.h),
+                              ..._buildPropertyFields(),
                               Gap(12.h),
                               Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -908,7 +1036,8 @@ class _AddEditAddressScreenState extends ConsumerState<AddEditAddressScreen> {
                                           return 'PIN code is required.';
                                         }
                                         return Validators.validatePincode(
-                                            trimmed);
+                                          trimmed,
+                                        );
                                       },
                                     ),
                                   ),
@@ -1379,6 +1508,67 @@ class _LabelChipSelector extends StatelessWidget {
           ),
         );
       }).toList(growable: false),
+    );
+  }
+}
+
+/// A horizontally scrollable selector keeps all address types reachable on
+/// narrow phones without shrinking the tap targets, while remaining a calm
+/// single-row control on wider screens.
+class _PropertyTypeSelector extends StatelessWidget {
+  const _PropertyTypeSelector({
+    required this.types,
+    required this.selectedType,
+    required this.onSelected,
+  });
+
+  final List<String> types;
+  final String selectedType;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 44.h,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: EdgeInsets.zero,
+        itemCount: types.length,
+        separatorBuilder: (_, __) => Gap(10.w),
+        itemBuilder: (context, index) {
+          final type = types[index];
+          final selected = type == selectedType;
+          return Semantics(
+            selected: selected,
+            button: true,
+            label: '$type address type',
+            child: InkWell(
+              onTap: () => onSelected(type),
+              borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                padding: EdgeInsets.symmetric(horizontal: 16.w),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: selected ? AppColors.textPrimary : Colors.white,
+                  borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
+                  border: Border.all(
+                    color: selected
+                        ? AppColors.textPrimary
+                        : AppColors.borderLight,
+                  ),
+                ),
+                child: Text(
+                  type,
+                  style: AppTextStyles.buttonSmall.copyWith(
+                    color: selected ? Colors.white : AppColors.textPrimary,
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 }

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import 'package:bakaloo_flutter_app/core/maps/geo_point.dart';
@@ -27,10 +28,12 @@ class AddressMapPickerScreen extends ConsumerStatefulWidget {
   final GeoPoint? initialPoint;
 
   @override
-  ConsumerState<AddressMapPickerScreen> createState() => _AddressMapPickerScreenState();
+  ConsumerState<AddressMapPickerScreen> createState() =>
+      _AddressMapPickerScreenState();
 }
 
-class _AddressMapPickerScreenState extends ConsumerState<AddressMapPickerScreen> {
+class _AddressMapPickerScreenState
+    extends ConsumerState<AddressMapPickerScreen> {
   static const GeoPoint _fallbackPoint = GeoPoint(lat: 22.5726, lng: 88.3639);
 
   final Debouncer _searchDebouncer = Debouncer(
@@ -41,17 +44,12 @@ class _AddressMapPickerScreenState extends ConsumerState<AddressMapPickerScreen>
 
   late GeoPoint _selectedPoint;
 
-  // Static (raster) map image, not the interactive MapLibreMap — that
-  // widget renders a solid black surface on some Android devices/OS
-  // versions (a confirmed upstream maplibre-native rendering bug, see
-  // maplibre/maplibre-native#4079, not fixable from this app). A plain
-  // network image has no native platform-view rendering path to fail on.
-  // Trade-off: no drag-to-reposition — the pin only moves via search or
-  // "use current location", each of which re-fetches a fresh image
-  // centered on the new point.
-  String? _staticMapUrl;
-  bool _isLoadingMapImage = true;
-  int _mapImageRequestId = 0;
+  /// Ola's vector style is rendered by MapLibre, so users can pan and zoom
+  /// the actual map. Hybrid composition is enabled before app startup in
+  /// main.dart; it prevents the Android black-surface issue that led to the
+  /// old static-image fallback.
+  MapLibreMapController? _mapController;
+  GeoPoint? _cameraPoint;
 
   GeoPoint? _currentLocationPoint;
   _ResolvedLocationDetails? _resolvedLocation;
@@ -90,7 +88,6 @@ class _AddressMapPickerScreenState extends ConsumerState<AddressMapPickerScreen>
     _searchFocusNode.addListener(_handleSearchFocusChanged);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      unawaited(_loadStaticMapImage(_selectedPoint));
       unawaited(_resolvePointDetails(_selectedPoint, showLoader: true));
       unawaited(_captureCurrentLocationSilently());
     });
@@ -108,34 +105,6 @@ class _AddressMapPickerScreenState extends ConsumerState<AddressMapPickerScreen>
     super.dispose();
   }
 
-  Future<void> _loadStaticMapImage(GeoPoint point) async {
-    final requestId = ++_mapImageRequestId;
-    if (mounted) {
-      setState(() {
-        _isLoadingMapImage = true;
-      });
-    }
-
-    final url = await ref.read(olaMapsServiceProvider).getStaticMapUrl(
-          point,
-          zoom: _currentZoom,
-          // Ola's own marker is skipped — the Flutter-drawn center pin
-          // overlay (_CenterPinOverlay) already renders on top of the
-          // image at the same screen position, matching the pre-fallback
-          // design instead of drawing two pins.
-          marker: false,
-        );
-
-    if (!mounted || requestId != _mapImageRequestId) {
-      return;
-    }
-
-    setState(() {
-      _staticMapUrl = url;
-      _isLoadingMapImage = false;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -146,80 +115,86 @@ class _AddressMapPickerScreenState extends ConsumerState<AddressMapPickerScreen>
   }
 
   Widget _buildBody() {
-    if (_isLoadingMapImage && _staticMapUrl == null) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    final style = ref.watch(olaMapsStyleProvider);
+    return style.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (_, __) => _buildMapUnavailable(),
+      data: (value) {
+        final styleUrl = value.styleUrl;
+        if (!value.configured || styleUrl == null || styleUrl.isEmpty) {
+          return _buildMapUnavailable();
+        }
 
-    if (_staticMapUrl == null) {
-      return _buildMapUnavailable();
-    }
-
-    return Stack(
-      children: <Widget>[
-        Positioned.fill(child: _buildMapImage(_staticMapUrl!)),
-        Positioned(
-          top: 0,
-          left: 0,
-          right: 0,
-          child: _buildTopOverlay(),
-        ),
-        Positioned(
-          top: 152.h,
-          right: 16.w,
-          child: IgnorePointer(
-            ignoring: _showSearchOverlay,
-            child: AnimatedOpacity(
-              opacity: _showSearchOverlay ? 0 : 1,
-              duration: const Duration(milliseconds: 180),
-              child: _MapFab(
-                isLoading: _isLocating,
-                onTap: _moveToCurrentLocation,
-                child: PhosphorIcon(
-                  PhosphorIcons.crosshairSimpleBold,
-                  size: 20.sp,
-                  color: AppColors.textSecondary,
+        return Stack(
+          children: <Widget>[
+            Positioned.fill(child: _buildInteractiveMap(styleUrl)),
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: _buildTopOverlay(),
+            ),
+            Positioned(
+              top: 152.h,
+              right: 16.w,
+              child: IgnorePointer(
+                ignoring: _showSearchOverlay,
+                child: AnimatedOpacity(
+                  opacity: _showSearchOverlay ? 0 : 1,
+                  duration: const Duration(milliseconds: 180),
+                  child: _MapFab(
+                    isLoading: _isLocating,
+                    onTap: _moveToCurrentLocation,
+                    child: PhosphorIcon(
+                      PhosphorIcons.crosshairSimpleBold,
+                      size: 20.sp,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
-        ),
-        // Static map images can't be pinch-zoomed like the (now removed)
-        // interactive MapLibreMap could — these re-fetch a fresh image at
-        // the new zoom level instead.
-        Positioned(
-          top: 204.h,
-          right: 16.w,
-          child: IgnorePointer(
-            ignoring: _showSearchOverlay,
-            child: AnimatedOpacity(
-              opacity: _showSearchOverlay ? 0 : 1,
-              duration: const Duration(milliseconds: 180),
-              child: _ZoomControls(
-                onZoomIn: _zoomIn,
-                onZoomOut: _zoomOut,
+            Positioned(
+              top: 204.h,
+              right: 16.w,
+              child: IgnorePointer(
+                ignoring: _showSearchOverlay,
+                child: AnimatedOpacity(
+                  opacity: _showSearchOverlay ? 0 : 1,
+                  duration: const Duration(milliseconds: 180),
+                  child: _ZoomControls(
+                    onZoomIn: _zoomIn,
+                    onZoomOut: _zoomOut,
+                  ),
+                ),
               ),
             ),
-          ),
-        ),
-        const Positioned.fill(
-          child: IgnorePointer(
-            child: Center(
-              child: _CenterPinOverlay(),
+            const Positioned.fill(
+              child: IgnorePointer(
+                child: Center(
+                  child: _CenterPinOverlay(),
+                ),
+              ),
             ),
-          ),
-        ),
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom: 0,
-          child: _BottomLocationSheet(
-            isResolving: _isResolvingLocation,
-            isConfirming: _isConfirming,
-            distanceLabel: _distanceLabel,
-            onConfirm: _confirmSelection,
-          ),
-        ),
-      ],
+            Positioned(
+              left: 16.w,
+              bottom: 238.h,
+              child: const IgnorePointer(child: _MapBrandWatermark()),
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: _BottomLocationSheet(
+                isResolving: _isResolvingLocation,
+                isConfirming: _isConfirming,
+                distanceLabel: _distanceLabel,
+                onConfirm: _confirmSelection,
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -251,7 +226,7 @@ class _AddressMapPickerScreenState extends ConsumerState<AddressMapPickerScreen>
             ),
             Gap(20.h),
             OutlinedButton(
-              onPressed: () => unawaited(_loadStaticMapImage(_selectedPoint)),
+              onPressed: () => ref.invalidate(olaMapsStyleProvider),
               child: const Text('Retry'),
             ),
             Gap(12.h),
@@ -265,25 +240,34 @@ class _AddressMapPickerScreenState extends ConsumerState<AddressMapPickerScreen>
     );
   }
 
-  Widget _buildMapImage(String url) {
-    return GestureDetector(
-      onTap: _dismissSearchOverlay,
-      child: ColoredBox(
-        color: AppColors.bgInput,
-        child: Stack(
-          fit: StackFit.expand,
-          children: <Widget>[
-            Image.network(
-              url,
-              key: ValueKey<String>(url),
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-            ),
-            if (_isLoadingMapImage)
-              const Center(child: CircularProgressIndicator()),
-          ],
-        ),
+  Widget _buildInteractiveMap(String styleUrl) {
+    return MapLibreMap(
+      styleString: styleUrl,
+      initialCameraPosition: CameraPosition(
+        target: LatLng(_selectedPoint.lat, _selectedPoint.lng),
+        zoom: _currentZoom,
       ),
+      minMaxZoomPreference: const MinMaxZoomPreference(_minZoom, _maxZoom),
+      compassEnabled: false,
+      rotateGesturesEnabled: false,
+      onMapCreated: (controller) => _mapController = controller,
+      onCameraMove: (position) {
+        _cameraPoint = GeoPoint(
+          lat: position.target.latitude,
+          lng: position.target.longitude,
+        );
+        _currentZoom = position.zoom;
+      },
+      onCameraIdle: () {
+        final point = _cameraPoint;
+        if (point == null || !point.isValid) return;
+        if (point.lat == _selectedPoint.lat &&
+            point.lng == _selectedPoint.lng) {
+          return;
+        }
+        setState(() => _selectedPoint = point);
+        unawaited(_resolvePointDetails(point, showLoader: true));
+      },
     );
   }
 
@@ -431,7 +415,8 @@ class _AddressMapPickerScreenState extends ConsumerState<AddressMapPickerScreen>
         return;
       }
 
-      final currentPoint = GeoPoint(lat: position.latitude, lng: position.longitude);
+      final currentPoint =
+          GeoPoint(lat: position.latitude, lng: position.longitude);
 
       setState(() {
         _currentLocationPoint = currentPoint;
@@ -543,8 +528,11 @@ class _AddressMapPickerScreenState extends ConsumerState<AddressMapPickerScreen>
       _selectedPoint = point;
       _currentZoom = nextZoom;
     });
-    unawaited(_loadStaticMapImage(point));
     unawaited(_resolvePointDetails(point, showLoader: true));
+    await _mapController?.animateCamera(
+      CameraUpdate.newLatLngZoom(LatLng(point.lat, point.lng), nextZoom),
+      duration: const Duration(milliseconds: 450),
+    );
   }
 
   void _zoomIn() => _changeZoom(1);
@@ -559,7 +547,7 @@ class _AddressMapPickerScreenState extends ConsumerState<AddressMapPickerScreen>
     setState(() {
       _currentZoom = nextZoom;
     });
-    unawaited(_loadStaticMapImage(_selectedPoint));
+    unawaited(_mapController?.animateCamera(CameraUpdate.zoomBy(delta)));
   }
 
   Future<void> _resolvePointDetails(
@@ -574,7 +562,8 @@ class _AddressMapPickerScreenState extends ConsumerState<AddressMapPickerScreen>
     }
 
     try {
-      final reverse = await ref.read(olaMapsServiceProvider).reverseGeocode(point);
+      final reverse =
+          await ref.read(olaMapsServiceProvider).reverseGeocode(point);
 
       if (!mounted || requestId != _resolveRequestId) {
         return;
@@ -1095,10 +1084,97 @@ class _CenterPinOverlay extends StatelessWidget {
         children: <Widget>[
           const _TooltipBubble(),
           Gap(8.h),
-          PhosphorIcon(
-            PhosphorIcons.mapPinFill,
-            size: 42.sp,
-            color: AppColors.cartPink,
+          // The supplied premium FC artwork has a dark rectangular canvas.
+          // Clipping it to the actual pin silhouette keeps that canvas out
+          // of the live map while retaining the full branded emblem.
+          ClipPath(
+            clipper: const _PremiumPinClipper(),
+            child: Image.asset(
+              'assets/images/fc_premium_map_pin.png',
+              width: 52.w,
+              height: 76.h,
+              fit: BoxFit.cover,
+              filterQuality: FilterQuality.high,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PremiumPinClipper extends CustomClipper<Path> {
+  const _PremiumPinClipper();
+
+  @override
+  Path getClip(Size size) {
+    final w = size.width;
+    final h = size.height;
+    return Path()
+      ..moveTo(w * 0.5, 0)
+      ..cubicTo(w * 0.2, 0, 0, h * 0.18, 0, h * 0.42)
+      ..cubicTo(0, h * 0.66, w * 0.31, h * 0.9, w * 0.5, h)
+      ..cubicTo(w * 0.69, h * 0.9, w, h * 0.66, w, h * 0.42)
+      ..cubicTo(w, h * 0.18, w * 0.8, 0, w * 0.5, 0)
+      ..close();
+  }
+
+  @override
+  bool shouldReclip(covariant _PremiumPinClipper oldClipper) => false;
+}
+
+/// A quiet ownership mark for the map's lower-left corner. It sits above the
+/// sheet and ignores input so the map remains fully draggable underneath.
+class _MapBrandWatermark extends StatelessWidget {
+  const _MapBrandWatermark();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 7.h),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.94),
+        borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
+        border: Border.all(color: Colors.white),
+        boxShadow: const <BoxShadow>[AppShadows.cardShadow],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Container(
+            width: 28.w,
+            height: 28.w,
+            padding: EdgeInsets.all(4.w),
+            decoration: const BoxDecoration(
+              color: Color(0xFFFDF0F3),
+              shape: BoxShape.circle,
+            ),
+            child: Image.asset(
+              'assets/icon/brand_logo.png',
+              fit: BoxFit.contain,
+            ),
+          ),
+          Gap(7.w),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                'FreshCuts',
+                style: AppTextStyles.labelMedium.copyWith(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              Text(
+                'DELIVERY MAP',
+                style: AppTextStyles.overline.copyWith(
+                  color: AppColors.cartPink,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.7,
+                ),
+              ),
+            ],
           ),
         ],
       ),

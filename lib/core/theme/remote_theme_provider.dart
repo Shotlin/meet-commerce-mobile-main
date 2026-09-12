@@ -292,31 +292,14 @@ class _ManagedThemeRefreshNotifier extends Notifier<int> {
 
   Future<void> refresh() async {
     final String storeKey = ref.read(selectedStoreProvider).id;
-    final String selectedTabKey = ref.read(selectedCategoryIdProvider);
 
     _themeMemoryCache.remove(_themeCacheKey(storeKey));
 
     await _fetchAndCacheTabThemes(ref, storeKey);
 
-    final TabThemesResponse response =
-        _themeMemoryCache[_themeCacheKey(storeKey)] ??
-            _readCachedManifestSnapshot(storeKey) ??
-            (storeKey == 'zepto'
-                ? TabThemesResponse.defaults(storeKey: storeKey)
-                : TabThemesResponse.empty(storeKey: storeKey));
-
-    final String? resolvedTabKey = _resolveTabKey(response, selectedTabKey);
-    if (resolvedTabKey != null) {
-      final String providerKey = _tabHomeProviderKey(storeKey, resolvedTabKey);
-      _tabHomeMemoryCache.remove(_tabHomeMemoryKey(storeKey, resolvedTabKey));
-      ref.invalidate(tabHomeContentProvider(providerKey));
-      await _fetchAndCacheTabHomeContent(ref, storeKey, resolvedTabKey);
-    }
-
     ref
       ..invalidate(tabThemesForStoreProvider(storeKey))
-      ..invalidate(tabThemesProvider)
-      ..invalidate(selectedTabHomeContentProvider);
+      ..invalidate(tabThemesProvider);
 
     state++;
   }
@@ -362,7 +345,6 @@ void _scheduleThemeWarmAndPrefetch(
 ) {
   unawaited(ThemeAssetWarmer.warmAssets(response));
   unawaited(_prefetchSectionManifests(ref, storeKey, response));
-  unawaited(_prefetchTabHomeContent(ref, storeKey, response));
 }
 
 Future<void> _prefetchSectionManifests(
@@ -391,35 +373,6 @@ Future<void> _prefetchSectionManifests(
     }
   } finally {
     _sectionManifestPrefetchInFlight.remove(storeKey);
-  }
-}
-
-Future<void> _prefetchTabHomeContent(
-  Ref ref,
-  String storeKey,
-  TabThemesResponse response,
-) async {
-  if (response.tabs.isEmpty) {
-    return;
-  }
-
-  if (!_tabHomePrefetchInFlight.add(storeKey)) {
-    return;
-  }
-
-  try {
-    final List<String> prioritizedTabKeys = _prioritizeTabKeys(
-      ref,
-      response,
-    );
-
-    for (final String tabKey
-        in prioritizedTabKeys.take(_tabHomePrefetchLimit)) {
-      await _fetchAndCacheTabHomeContent(ref, storeKey, tabKey);
-      await Future<void>.delayed(Duration.zero);
-    }
-  } finally {
-    _tabHomePrefetchInFlight.remove(storeKey);
   }
 }
 

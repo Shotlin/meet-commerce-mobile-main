@@ -24,6 +24,8 @@ const String _sectionManifestBoxName = 'section_manifests';
 final Map<String, SectionManifestResponse> _memoryCache =
     <String, SectionManifestResponse>{};
 final Map<String, String> _etagCache = <String, String>{};
+final Map<String, Future<SectionManifestResponse?>> _fetchInFlight =
+    <String, Future<SectionManifestResponse?>>{};
 
 class _SectionManifestEpochNotifier extends Notifier<int> {
   @override
@@ -126,8 +128,9 @@ Future<void> handleSectionSocketEvent(WidgetRef ref, Map data) async {
 Future<void> refreshSectionManifest(WidgetRef ref, String tabKey) async {
   final String storeKey = ref.read(selectedStoreProvider).id;
 
+  final String keyPrefix = '$storeKey::$tabKey::';
   final List<String> keysToRemove = _memoryCache.keys
-      .where((String key) => key.endsWith('::$tabKey'))
+      .where((String key) => key.startsWith(keyPrefix))
       .toList(growable: false);
 
   for (final String key in keysToRemove) {
@@ -158,6 +161,32 @@ Future<SectionManifestResponse?> _fetchAndCacheSectionManifest(
 ) async {
   final String cacheKey = _cacheKey(storeKey, tabKey);
 
+  // The visible tab, warm-up loop and pull-to-refresh can ask for the same
+  // manifest at once. Share that request so a fast tab switch cannot race an
+  // older empty/failing response into the cache.
+  final Future<SectionManifestResponse?>? pending = _fetchInFlight[cacheKey];
+  if (pending != null) {
+    return pending;
+  }
+
+  final Future<SectionManifestResponse?> request =
+      _runFetchAndCacheSectionManifest(ref, storeKey, tabKey);
+  _fetchInFlight[cacheKey] = request;
+  request.whenComplete(() {
+    if (identical(_fetchInFlight[cacheKey], request)) {
+      _fetchInFlight.remove(cacheKey);
+    }
+  });
+  return request;
+}
+
+Future<SectionManifestResponse?> _runFetchAndCacheSectionManifest(
+  Ref ref,
+  String storeKey,
+  String tabKey,
+) async {
+  final String cacheKey = _cacheKey(storeKey, tabKey);
+
   try {
     final Dio dio = _buildDio();
     final Map<String, dynamic> headers = <String, dynamic>{};
@@ -173,7 +202,7 @@ Future<SectionManifestResponse?> _fetchAndCacheSectionManifest(
         headers: headers,
         validateStatus: (int? status) => status != null && status < 500,
       ),
-    );
+    ).timeout(const Duration(seconds: 12));
 
     if (response.statusCode == 304) {
       return _readCachedSectionManifestSnapshot(storeKey, tabKey);

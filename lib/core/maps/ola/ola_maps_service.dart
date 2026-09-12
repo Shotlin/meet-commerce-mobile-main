@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import 'package:bakaloo_flutter_app/core/constants/api_constants.dart';
 import 'package:bakaloo_flutter_app/core/di/providers.dart';
 import 'package:bakaloo_flutter_app/core/maps/geo_point.dart';
 import 'package:bakaloo_flutter_app/core/maps/route_model.dart';
@@ -82,7 +83,13 @@ class OlaMapsService {
       final data = _extractData(response.data);
       return OlaMapsStyle(
         configured: data['configured'] == true,
-        styleUrl: (data['styleUrl'] as String?)?.trim(),
+        // MapLibre fetches the returned style itself, outside Dio and its
+        // base URL. A reverse proxy currently reports `http` upstream even
+        // though the public API is HTTPS, which Android rightly blocks as
+        // clear-text traffic and leaves a black map canvas. The API origin
+        // is authoritative here, so preserve its HTTPS scheme for a style
+        // URL on the same host.
+        styleUrl: _securePublicStyleUrl(data['styleUrl'] as String?),
       );
     } catch (error, stackTrace) {
       if (kDebugMode) {
@@ -91,6 +98,25 @@ class OlaMapsService {
       }
       return const OlaMapsStyle(configured: false);
     }
+  }
+
+  String? _securePublicStyleUrl(String? rawUrl) {
+    final value = rawUrl?.trim();
+    if (value == null || value.isEmpty) return null;
+
+    final styleUri = Uri.tryParse(value);
+    final apiUri = Uri.tryParse(ApiConstants.baseUrl);
+    if (styleUri == null || apiUri == null) return value;
+
+    if (styleUri.scheme == 'http' &&
+        apiUri.scheme == 'https' &&
+        styleUri.host == apiUri.host) {
+      // Do not pass a port here: a Uri without an explicit port inherits the
+      // scheme default, while `port: 0` serializes literally as `:0` and is
+      // rejected by MapLibre's native URL parser.
+      return styleUri.replace(scheme: 'https').toString();
+    }
+    return value;
   }
 
   /// A key-embedded static (raster) map image URL centered on [point], with
@@ -176,7 +202,9 @@ class OlaMapsService {
     final name = (result['name'] as String?)?.trim() ?? '';
     final title = name.isNotEmpty
         ? name
-        : (formatted.isNotEmpty ? formatted.split(',').first.trim() : 'Selected place');
+        : (formatted.isNotEmpty
+            ? formatted.split(',').first.trim()
+            : 'Selected place');
 
     return OlaPlaceSuggestion(
       title: title,
@@ -209,7 +237,9 @@ class OlaMapsService {
           .map((point) {
             final lat = _toDouble(point['lat']);
             final lng = _toDouble(point['lng']);
-            return lat != null && lng != null ? GeoPoint(lat: lat, lng: lng) : null;
+            return lat != null && lng != null
+                ? GeoPoint(lat: lat, lng: lng)
+                : null;
           })
           .whereType<GeoPoint>()
           .toList(growable: false);
