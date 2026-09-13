@@ -17,6 +17,7 @@ import 'package:bakaloo_flutter_app/routing/route_names.dart';
 class LocationUnavailableScreen extends StatelessWidget {
   const LocationUnavailableScreen({
     this.attemptedLocationLabel,
+    this.showSignIn = false,
     this.onChangeLocation,
     this.onNotify,
     super.key,
@@ -27,6 +28,11 @@ class LocationUnavailableScreen extends StatelessWidget {
   /// generic label when null — e.g. reached from the auto-detect path,
   /// which never collects a human-readable place name.
   final String? attemptedLocationLabel;
+
+  /// Signed-out customers reach this screen before the app can read their
+  /// saved delivery address. Let them sign in directly rather than trapping
+  /// them behind a GPS-only location gate.
+  final bool showSignIn;
 
   /// Optional overrides — primarily for previewing/testing. When omitted the
   /// screen wires sensible default navigation.
@@ -151,6 +157,21 @@ class LocationUnavailableScreen extends StatelessWidget {
                             }
                           },
                     ),
+                    if (showSignIn) ...<Widget>[
+                      Gap(10.h),
+                      TextButton(
+                        onPressed: () => context.go(RouteNames.phone),
+                        child: Text(
+                          'Already have an account? Sign in',
+                          style: TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 13.sp,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.brandRed,
+                          ),
+                        ),
+                      ),
+                    ],
                     Gap(20.h),
                     _ExpansionBanner(),
                   ],

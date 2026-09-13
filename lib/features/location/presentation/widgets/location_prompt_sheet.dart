@@ -124,7 +124,7 @@ class _LocationPromptSheetState extends ConsumerState<_LocationPromptSheet> {
         ].join(', ');
         Navigator.of(context).pop();
         GoRouter.of(context).go(
-          RouteNames.locationUnavailable,
+          '${RouteNames.locationUnavailable}?guest=1',
           extra: attemptedLocation.isEmpty ? null : attemptedLocation,
         );
         return;

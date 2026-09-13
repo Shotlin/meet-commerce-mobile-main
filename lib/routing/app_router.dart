@@ -146,6 +146,7 @@ GoRouter appRouter(Ref ref) {
           return LocationUnavailableScreen(
             attemptedLocationLabel:
                 state.extra is String ? state.extra! as String : null,
+            showSignIn: state.uri.queryParameters['guest'] == '1',
           );
         },
       ),
