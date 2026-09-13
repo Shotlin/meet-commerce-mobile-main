@@ -115,6 +115,20 @@ class _LocationPromptSheetState extends ConsumerState<_LocationPromptSheet> {
         Navigator.of(context).pop();
         return;
       }
+      if (guestState.status == GuestStorefrontStatus.unavailable) {
+        final attemptedLocation = <String>[
+          if (guestState.city?.trim().isNotEmpty ?? false)
+            guestState.city!.trim(),
+          if (guestState.pincode?.trim().isNotEmpty ?? false)
+            guestState.pincode!.trim(),
+        ].join(', ');
+        Navigator.of(context).pop();
+        GoRouter.of(context).go(
+          RouteNames.locationUnavailable,
+          extra: attemptedLocation.isEmpty ? null : attemptedLocation,
+        );
+        return;
+      }
       setState(() {
         _state = _SheetState.idle;
         _statusMessage = guestState.message ??

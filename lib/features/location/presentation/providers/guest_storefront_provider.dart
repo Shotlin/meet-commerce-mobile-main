@@ -203,9 +203,13 @@ class GuestStorefrontNotifier extends Notifier<GuestStorefrontState> {
           ? Map<String, dynamic>.from(payload['data'] as Map)
           : const <String, dynamic>{};
       if (data['serviceable'] != true) {
-        state = const GuestStorefrontState(
-            status: GuestStorefrontStatus.unavailable,
-            message: 'Delivery is not available at this location yet.');
+        state = GuestStorefrontState(
+          status: GuestStorefrontStatus.unavailable,
+          pincode: pincode.isEmpty ? null : pincode,
+          city: resolvedCity?.isNotEmpty == true ? resolvedCity : null,
+          addressLine1: reverse?.addressLine1 ?? reverse?.displayName,
+          message: 'Delivery is not available at this location yet.',
+        );
         return;
       }
       final token = data['storefrontToken'] as String?;

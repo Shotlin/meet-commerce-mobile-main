@@ -143,7 +143,11 @@ class LocationUnavailableScreen extends StatelessWidget {
                             if (context.canPop()) {
                               context.pop();
                             } else {
-                              context.go(RouteNames.addresses);
+                              // Guest users reach this screen before login,
+                              // so returning to Home reopens the location
+                              // picker instead of sending them to the
+                              // authenticated addresses route.
+                              context.go(RouteNames.home);
                             }
                           },
                     ),
