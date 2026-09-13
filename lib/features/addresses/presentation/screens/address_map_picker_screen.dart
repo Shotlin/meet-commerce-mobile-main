@@ -1161,14 +1161,14 @@ class _MapBrandWatermark extends StatelessWidget {
             children: <Widget>[
               Text(
                 'FreshCuts',
-                style: AppTextStyles.labelMedium.copyWith(
+                style: AppTextStyles.labelLarge.copyWith(
                   color: AppColors.textPrimary,
                   fontWeight: FontWeight.w800,
                 ),
               ),
               Text(
                 'DELIVERY MAP',
-                style: AppTextStyles.overline.copyWith(
+                style: AppTextStyles.labelSmall.copyWith(
                   color: AppColors.cartPink,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.7,
