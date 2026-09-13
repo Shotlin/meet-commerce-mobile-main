@@ -105,6 +105,18 @@ class _HomeSearchBarState extends State<HomeSearchBar> {
   Widget build(BuildContext context) {
     final searchHints = _resolvedSearchHints;
     final BorderRadius borderRadius = BorderRadius.circular(12.r);
+    final bool searchColorEnabled = widget.searchTheme?.colorEnabled ?? true;
+    // The Theme Builder's "Search zone background" setting applies to the
+    // actual search control too. Previously the surrounding row updated but
+    // this control remained hard-coded white, so a selected tab looked only
+    // partially themed. When the colour is disabled, leave the full control
+    // transparent so the optional header image remains visible behind it.
+    final Color searchSurfaceColor = searchColorEnabled
+        ? widget.searchTheme?.backgroundColor ?? Colors.white
+        : Colors.transparent;
+    final Color searchBorderColor = searchColorEnabled
+        ? _borderColor
+        : Colors.white.withValues(alpha: 0.72);
     final hintLabel = Align(
       alignment: Alignment.centerLeft,
       key: ValueKey<int>(_hintIndex),
@@ -133,16 +145,18 @@ class _HomeSearchBarState extends State<HomeSearchBar> {
             width: double.infinity,
             height: double.infinity,
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: searchSurfaceColor,
               borderRadius: borderRadius,
-              border: Border.all(color: _borderColor),
-              boxShadow: <BoxShadow>[
-                BoxShadow(
-                  color: const Color(0xFF2A1A47).withValues(alpha: 0.06),
-                  blurRadius: 14,
-                  offset: const Offset(0, 4),
-                ),
-              ],
+              border: Border.all(color: searchBorderColor),
+              boxShadow: searchColorEnabled
+                  ? <BoxShadow>[
+                      BoxShadow(
+                        color: const Color(0xFF2A1A47).withValues(alpha: 0.06),
+                        blurRadius: 14,
+                        offset: const Offset(0, 4),
+                      ),
+                    ]
+                  : const <BoxShadow>[],
             ),
             padding: EdgeInsets.symmetric(horizontal: 14.w),
             child: Row(
