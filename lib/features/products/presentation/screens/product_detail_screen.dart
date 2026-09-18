@@ -616,6 +616,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
           product.id,
           1,
           product: product,
+          shopProductId: product.shopProductId,
         );
     if (!mounted || result.isSuccess) {
       return;
@@ -641,8 +642,15 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     }
 
     final result = qty <= 0
-        ? await ref.read(cartProvider.notifier).removeItem(product.id)
-        : await ref.read(cartProvider.notifier).updateItem(product.id, qty);
+        ? await ref.read(cartProvider.notifier).removeItem(
+              product.id,
+              shopProductId: product.shopProductId,
+            )
+        : await ref.read(cartProvider.notifier).updateItem(
+              product.id,
+              qty,
+              shopProductId: product.shopProductId,
+            );
 
     if (!mounted || result.isSuccess) {
       return;

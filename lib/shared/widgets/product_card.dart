@@ -1637,16 +1637,20 @@ class _ZeptoAddQtyButton extends ConsumerWidget {
             InkWell(
               onTap: () async {
                 if (quantity == 1) {
-                  final result = await ref
-                      .read(cartProvider.notifier)
-                      .removeItem(product.id);
+                  final result =
+                      await ref.read(cartProvider.notifier).removeItem(
+                            product.id,
+                            shopProductId: product.shopProductId,
+                          );
                   if (!context.mounted || result.isSuccess) return;
                   showCartSnackBar(context, result.failure!.message);
                   return;
                 }
-                final result = await ref
-                    .read(cartProvider.notifier)
-                    .updateItem(product.id, quantity - 1);
+                final result = await ref.read(cartProvider.notifier).updateItem(
+                      product.id,
+                      quantity - 1,
+                      shopProductId: product.shopProductId,
+                    );
                 if (!context.mounted || result.isSuccess) return;
                 showCartSnackBar(context, result.failure!.message);
               },
@@ -1685,9 +1689,11 @@ class _ZeptoAddQtyButton extends ConsumerWidget {
                   AppToast.show(context, 'Maximum product order complete');
                   return;
                 }
-                final result = await ref
-                    .read(cartProvider.notifier)
-                    .updateItem(product.id, quantity + 1);
+                final result = await ref.read(cartProvider.notifier).updateItem(
+                      product.id,
+                      quantity + 1,
+                      shopProductId: product.shopProductId,
+                    );
                 if (!context.mounted || result.isSuccess) return;
                 showCartSnackBar(context, result.failure!.message);
               },
@@ -1766,9 +1772,12 @@ class _ZeptoAddQtyButton extends ConsumerWidget {
                     product,
                   );
                   if (!allowed || !context.mounted) return;
-                  final result = await ref
-                      .read(cartProvider.notifier)
-                      .addItem(product.id, 1, product: product);
+                  final result = await ref.read(cartProvider.notifier).addItem(
+                        product.id,
+                        1,
+                        product: product,
+                        shopProductId: product.shopProductId,
+                      );
                   if (!context.mounted) return;
                   if (!result.isSuccess) {
                     showCartSnackBar(context, result.failure!.message);

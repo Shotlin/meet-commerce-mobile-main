@@ -311,11 +311,22 @@ void _addMapProduct(WidgetRef ref, Map<String, dynamic> product) {
     return;
   }
 
-  ref.read(cartProvider.notifier).addItem(id, 1);
+  final shopProductId = product['shopProductId']?.toString() ??
+      product['shop_product_id']?.toString();
+  ref.read(cartProvider.notifier).addItem(
+        id,
+        1,
+        shopProductId: shopProductId,
+      );
 }
 
 void _addEntityProduct(WidgetRef ref, ProductEntity product) {
-  ref.read(cartProvider.notifier).addItem(product.id, 1, product: product);
+  ref.read(cartProvider.notifier).addItem(
+        product.id,
+        1,
+        product: product,
+        shopProductId: product.shopProductId,
+      );
 }
 
 double _asDouble(dynamic value) {

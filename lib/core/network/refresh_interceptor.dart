@@ -35,10 +35,16 @@ class RefreshInterceptor extends Interceptor {
     final statusCode = err.response?.statusCode;
     final requestOptions = err.requestOptions;
     final hasRetried = requestOptions.extra['retried'] == true;
+    final currentHeader = requestOptions.headers['Authorization'] as String?;
+    final requestHadAccessToken =
+        currentHeader != null && currentHeader.trim().isNotEmpty;
 
     if (statusCode != 401 ||
         hasRetried ||
-        requestOptions.path == ApiConstants.refreshToken) {
+        requestOptions.path == ApiConstants.refreshToken ||
+        !requestHadAccessToken) {
+      // Guest/public endpoints may correctly return 401 without a customer
+      // session. Never turn those responses into a refresh/logout flow.
       handler.next(err);
       return;
     }
@@ -46,9 +52,7 @@ class RefreshInterceptor extends Interceptor {
     try {
       final response = await _lock.synchronized(() async {
         final latestAccessToken = await _secureStorageService.getAccessToken();
-        final currentHeader =
-            requestOptions.headers['Authorization'] as String?;
-        final currentToken = currentHeader?.replaceFirst('Bearer ', '').trim();
+        final currentToken = currentHeader.replaceFirst('Bearer ', '').trim();
 
         if (latestAccessToken != null &&
             latestAccessToken.isNotEmpty &&

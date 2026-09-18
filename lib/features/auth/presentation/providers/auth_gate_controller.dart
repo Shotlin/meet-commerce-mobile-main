@@ -189,6 +189,7 @@ class AuthGateController {
               product.id,
               intent.quantity,
               product: product,
+              shopProductId: product.shopProductId,
             );
         if (!result.isSuccess && context.mounted) {
           _showMessage(context, result.failure?.message);

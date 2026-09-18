@@ -105,8 +105,7 @@ class SearchProductGridCard extends ConsumerStatefulWidget {
       _SearchProductGridCardState();
 }
 
-class _SearchProductGridCardState
-    extends ConsumerState<SearchProductGridCard> {
+class _SearchProductGridCardState extends ConsumerState<SearchProductGridCard> {
   late String _selectedId = widget.product.id;
 
   @override
@@ -125,7 +124,8 @@ class _SearchProductGridCardState
     if (product.hasMultipleOptions) {
       final familyId = product.productFamilyId ?? product.id;
       final optionsAsync = ref.watch(productOptionsProvider(familyId));
-      options = optionsAsync.asData?.value.options ?? const <ProductOptionItem>[];
+      options =
+          optionsAsync.asData?.value.options ?? const <ProductOptionItem>[];
     }
 
     ProductOptionItem? selectedOption;
@@ -136,11 +136,11 @@ class _SearchProductGridCardState
       }
     }
 
-    final displayed =
-        selectedOption != null ? _mergeOption(product, selectedOption) : product;
-    final badge = displayed.customBadges.isNotEmpty
-        ? displayed.customBadges.first
-        : null;
+    final displayed = selectedOption != null
+        ? _mergeOption(product, selectedOption)
+        : product;
+    final badge =
+        displayed.customBadges.isNotEmpty ? displayed.customBadges.first : null;
     final subtitle = _subtitleFor(displayed);
 
     return InkWell(
@@ -362,8 +362,8 @@ class _WishlistHeartButton extends ConsumerWidget {
       button: true,
       child: Material(
         color: Colors.white.withValues(alpha: 0.98),
-        shape:
-            const CircleBorder(side: BorderSide(color: _Palette.wishlistBorder)),
+        shape: const CircleBorder(
+            side: BorderSide(color: _Palette.wishlistBorder)),
         child: InkWell(
           customBorder: const CircleBorder(),
           onTap: () async {
@@ -462,9 +462,8 @@ class _VariantChipsRow extends StatelessWidget {
               _Chip(
                 label: shown[i].displayUnit,
                 selected: shown[i].id == selectedId,
-                onTap: shown[i].id == selectedId
-                    ? null
-                    : () => onSelect(shown[i]),
+                onTap:
+                    shown[i].id == selectedId ? null : () => onSelect(shown[i]),
               ),
             ],
             if (extra > 0) ...<Widget>[
@@ -664,9 +663,12 @@ class _AddToCartControl extends ConsumerWidget {
       final allowed = await authGate.protectAddToCart(context, product);
       if (!allowed || !context.mounted) return;
       HapticFeedback.selectionClick();
-      final result = await ref
-          .read(cartProvider.notifier)
-          .addItem(product.id, 1, product: product);
+      final result = await ref.read(cartProvider.notifier).addItem(
+            product.id,
+            1,
+            product: product,
+            shopProductId: product.shopProductId,
+          );
       if (!context.mounted) return;
       if (!result.isSuccess) {
         showCartSnackBar(context, result.failure!.message);
@@ -680,9 +682,11 @@ class _AddToCartControl extends ConsumerWidget {
         return;
       }
       HapticFeedback.selectionClick();
-      final result = await ref
-          .read(cartProvider.notifier)
-          .updateItem(product.id, quantity + 1);
+      final result = await ref.read(cartProvider.notifier).updateItem(
+            product.id,
+            quantity + 1,
+            shopProductId: product.shopProductId,
+          );
       if (!context.mounted) return;
       if (!result.isSuccess) {
         showCartSnackBar(context, result.failure!.message);
@@ -692,10 +696,15 @@ class _AddToCartControl extends ConsumerWidget {
     Future<void> decrement() async {
       HapticFeedback.selectionClick();
       final result = quantity == 1
-          ? await ref.read(cartProvider.notifier).removeItem(product.id)
-          : await ref
-              .read(cartProvider.notifier)
-              .updateItem(product.id, quantity - 1);
+          ? await ref.read(cartProvider.notifier).removeItem(
+                product.id,
+                shopProductId: product.shopProductId,
+              )
+          : await ref.read(cartProvider.notifier).updateItem(
+                product.id,
+                quantity - 1,
+                shopProductId: product.shopProductId,
+              );
       if (!context.mounted) return;
       if (!result.isSuccess) {
         showCartSnackBar(context, result.failure!.message);

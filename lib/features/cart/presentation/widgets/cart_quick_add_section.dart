@@ -65,9 +65,12 @@ class CartQuickAddSection extends ConsumerWidget {
       return;
     }
 
-    final result = await ref
-        .read(cartProvider.notifier)
-        .addItem(product.id, 1, product: product);
+    final result = await ref.read(cartProvider.notifier).addItem(
+          product.id,
+          1,
+          product: product,
+          shopProductId: product.shopProductId,
+        );
     if (!context.mounted || result.isSuccess) {
       return;
     }

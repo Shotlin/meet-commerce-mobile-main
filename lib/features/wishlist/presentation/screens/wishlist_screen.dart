@@ -354,6 +354,8 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
                                         item.product.id,
                                         1,
                                         product: item.product,
+                                        shopProductId:
+                                            item.product.shopProductId,
                                       );
                                   if (!context.mounted) return;
                                   if (!result.isSuccess &&

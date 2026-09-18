@@ -74,8 +74,7 @@ class _ArchBackgroundPainter extends CustomPainter {
 
     final paint = Paint()..isAntiAlias = true;
     if (gradient != null) {
-      paint.shader =
-          gradient!.createShader(Rect.fromLTWH(0, 0, w, h));
+      paint.shader = gradient!.createShader(Rect.fromLTWH(0, 0, w, h));
     } else {
       paint.color = color;
     }
@@ -561,16 +560,21 @@ class _ArchedAddButton extends ConsumerWidget {
               onTap: product.inStock
                   ? () async {
                       if (quantity == 1) {
-                        final result = await ref
-                            .read(cartProvider.notifier)
-                            .removeItem(product.id);
+                        final result =
+                            await ref.read(cartProvider.notifier).removeItem(
+                                  product.id,
+                                  shopProductId: product.shopProductId,
+                                );
                         if (!context.mounted || result.isSuccess) return;
                         showCartSnackBar(context, result.failure!.message);
                         return;
                       }
-                      final result = await ref
-                          .read(cartProvider.notifier)
-                          .updateItem(product.id, quantity - 1);
+                      final result =
+                          await ref.read(cartProvider.notifier).updateItem(
+                                product.id,
+                                quantity - 1,
+                                shopProductId: product.shopProductId,
+                              );
                       if (!context.mounted || result.isSuccess) return;
                       showCartSnackBar(context, result.failure!.message);
                     }
@@ -615,9 +619,12 @@ class _ArchedAddButton extends ConsumerWidget {
                         );
                         return;
                       }
-                      final result = await ref
-                          .read(cartProvider.notifier)
-                          .updateItem(product.id, quantity + 1);
+                      final result =
+                          await ref.read(cartProvider.notifier).updateItem(
+                                product.id,
+                                quantity + 1,
+                                shopProductId: product.shopProductId,
+                              );
                       if (!context.mounted || result.isSuccess) return;
                       showCartSnackBar(context, result.failure!.message);
                     }
@@ -674,9 +681,12 @@ class _ArchedAddButton extends ConsumerWidget {
                   product,
                 );
                 if (!allowed || !context.mounted) return;
-                final result = await ref
-                    .read(cartProvider.notifier)
-                    .addItem(product.id, 1, product: product);
+                final result = await ref.read(cartProvider.notifier).addItem(
+                      product.id,
+                      1,
+                      product: product,
+                      shopProductId: product.shopProductId,
+                    );
                 if (!context.mounted || result.isSuccess) return;
                 showCartSnackBar(context, result.failure!.message);
               }
@@ -741,4 +751,3 @@ class _ArchedAddButton extends ConsumerWidget {
     );
   }
 }
-
