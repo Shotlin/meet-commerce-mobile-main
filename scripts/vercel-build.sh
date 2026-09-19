@@ -17,6 +17,7 @@ if [ ! -x "${SDK_DIR}/bin/flutter" ]; then
 fi
 
 export PATH="${SDK_DIR}/bin:${PATH}"
+git config --global --add safe.directory "${SDK_DIR}"
 flutter config --no-analytics
 flutter pub get
 flutter build web --release \
