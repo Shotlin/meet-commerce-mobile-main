@@ -1,0 +1,10 @@
+.fvm
+.dart_tool
+build
+.git
+.idea
+.vscode
+.agents
+.cache
+*.log
+analyze.log
