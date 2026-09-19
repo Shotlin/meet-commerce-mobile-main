@@ -370,7 +370,7 @@ class _OptionThumb extends StatelessWidget {
               child: Container(
                 padding: EdgeInsets.symmetric(horizontal: 5.w, vertical: 2.h),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFD02428),
+                  color: AppColors.brandRed,
                   borderRadius: BorderRadius.circular(6.r),
                 ),
                 child: Text(

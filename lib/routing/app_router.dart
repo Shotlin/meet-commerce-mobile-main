@@ -78,6 +78,9 @@ GoRouter appRouter(Ref ref) {
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
     initialLocation: RouteNames.splash,
+    errorBuilder: (BuildContext context, GoRouterState state) {
+      return const _UnknownRouteScreen();
+    },
     refreshListenable: authGuard,
     redirect: (BuildContext context, GoRouterState state) {
       final authenticated = ref.read(isAuthenticatedProvider);
@@ -114,6 +117,14 @@ GoRouter appRouter(Ref ref) {
       return null;
     },
     routes: <RouteBase>[
+      // Browsers and installed PWAs commonly launch at the origin root.
+      // Resolve that entry point into the normal splash/auth restoration flow
+      // instead of showing the unknown-route state.
+      GoRoute(
+        path: RouteNames.root,
+        redirect: (BuildContext context, GoRouterState state) =>
+            RouteNames.splash,
+      ),
       GoRoute(
         path: RouteNames.splash,
         builder: (BuildContext context, GoRouterState state) {
@@ -174,8 +185,20 @@ GoRouter appRouter(Ref ref) {
       GoRoute(
         path: RouteNames.onboarding,
         builder: (BuildContext context, GoRouterState state) {
-          return const _RoutePlaceholderScreen('OnboardingScreen');
+          return const _RouteUnavailableScreen(
+            title: 'Onboarding is unavailable',
+            message:
+                'You can continue to Bakaloo and sign in when you are ready.',
+          );
         },
+      ),
+      // Keep the public checkout deep link stable while the in-app flow is
+      // nested under /cart. The second redirect pass still applies the
+      // existing cart authentication guard before rendering CheckoutScreen.
+      GoRoute(
+        path: RouteNames.checkout,
+        redirect: (BuildContext context, GoRouterState state) =>
+            '${RouteNames.cart}/checkout',
       ),
       GoRoute(
         path: '/orders/success/:orderId',
@@ -200,7 +223,7 @@ GoRouter appRouter(Ref ref) {
               GoRoute(
                 path: 'payment',
                 builder: (BuildContext context, GoRouterState state) {
-                  return const _RoutePlaceholderScreen('PaymentScreen');
+                  return const CheckoutScreen();
                 },
               ),
             ],
@@ -431,7 +454,11 @@ GoRouter appRouter(Ref ref) {
                   GoRoute(
                     path: 'settings',
                     builder: (BuildContext context, GoRouterState state) {
-                      return const _RoutePlaceholderScreen('SettingsScreen');
+                      return const _RouteUnavailableScreen(
+                        title: 'Settings are unavailable',
+                        message:
+                            'This account setting is not available in the current Bakaloo app.',
+                      );
                     },
                   ),
                 ],
@@ -444,16 +471,71 @@ GoRouter appRouter(Ref ref) {
   );
 }
 
-class _RoutePlaceholderScreen extends StatelessWidget {
-  const _RoutePlaceholderScreen(this.label);
-
-  final String label;
+class _UnknownRouteScreen extends StatelessWidget {
+  const _UnknownRouteScreen();
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Center(
-        child: Text(label),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              const Icon(Icons.travel_explore_rounded, size: 48),
+              const SizedBox(height: 16),
+              const Text(
+                'This Bakaloo page is unavailable.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              FilledButton(
+                onPressed: () => context.go(RouteNames.home),
+                child: const Text('Go to home'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RouteUnavailableScreen extends StatelessWidget {
+  const _RouteUnavailableScreen({
+    required this.title,
+    required this.message,
+  });
+
+  final String title;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Bakaloo'),
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              const Icon(Icons.info_outline_rounded, size: 48),
+              const SizedBox(height: 16),
+              Text(title, textAlign: TextAlign.center),
+              const SizedBox(height: 8),
+              Text(message, textAlign: TextAlign.center),
+              const SizedBox(height: 20),
+              FilledButton(
+                onPressed: () => context.go(RouteNames.home),
+                child: const Text('Go to home'),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

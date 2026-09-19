@@ -1,6 +1,7 @@
 class RouteNames {
   RouteNames._();
 
+  static const root = '/';
   static const splash = '/splash';
   static const phone = '/auth/phone';
   static const otp = '/auth/otp';

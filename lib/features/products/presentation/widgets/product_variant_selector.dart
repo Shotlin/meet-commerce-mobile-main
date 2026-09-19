@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
+import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
 import 'package:bakaloo_flutter_app/features/products/data/models/product_options_response.dart';
 import 'package:bakaloo_flutter_app/features/products/presentation/providers/product_options_provider.dart';
 
-const _kGreen = Color(0xFFD02428);
-const _kGreenBg = Color(0xFFFBEEEE);
+const _kGreen = AppColors.brandRed;
+const _kGreenBg = AppColors.brandRedSurface;
 const _kBorderGrey = Color(0xFFE0E0E0);
 
 /// "Select Unit" chip row shown on the product detail page for products

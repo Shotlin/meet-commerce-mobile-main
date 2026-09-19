@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 /// Which side of the [B2BSegmentToggle] is active.
 enum BusinessMode { b2c, b2b }
 
-/// FreshCuts-style B2C / B2B segmented toggle.
+/// Bakaloo-style B2C / B2B segmented toggle.
 ///
 /// A hand-built pill (no [Switch], [ToggleButtons] or
 /// [CupertinoSegmentedControl]) sized 170x58 at its natural scale and

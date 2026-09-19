@@ -7,7 +7,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
 import 'package:bakaloo_flutter_app/routing/route_names.dart';
 
-/// Shown when FreshCuts does not yet serve the customer's selected location
+/// Shown when Bakaloo does not yet serve the customer's selected location
 /// (no shop matches the pincode/delivery radius). Reached from two real
 /// triggers: the address form after the backend rejects a save with
 /// ADDRESS_NOT_SERVICEABLE (add_edit_address_screen.dart), and the
@@ -54,10 +54,13 @@ class LocationUnavailableScreen extends StatelessWidget {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: <Widget>[
-                    Image.asset(
-                      'assets/images/freshcuts-logo-wordmark.png',
-                      height: 42.h,
-                      fit: BoxFit.contain,
+                    Text(
+                      'Bakaloo',
+                      style: TextStyle(
+                        color: AppColors.brandRed,
+                        fontSize: 22.sp,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                     const Spacer(),
                     _LocationPill(
@@ -76,7 +79,7 @@ class LocationUnavailableScreen extends StatelessWidget {
                 width: double.infinity,
                 height: 300.h,
                 child: Image.asset(
-                  'assets/images/freshcuts-location-unavailable-illustration.png',
+                  'assets/images/bakaloo-location-unavailable-illustration.png',
                   fit: BoxFit.cover,
                   alignment: Alignment.topCenter,
                 ),
@@ -121,24 +124,15 @@ class LocationUnavailableScreen extends StatelessWidget {
                       ),
                     ),
                     Gap(24.h),
-                    _LocationUnavailableButton(
-                      label: 'Notify Me When Available',
-                      icon: PhosphorIcons.bellBold,
-                      filled: true,
-                      onTap: onNotify ??
-                          () {
-                            ScaffoldMessenger.of(context)
-                              ..hideCurrentSnackBar()
-                              ..showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    "Thanks! We'll notify you when FreshCuts "
-                                    'reaches your area.',
-                                  ),
-                                ),
-                              );
-                          },
-                    ),
+                    if (onNotify != null)
+                      _LocationUnavailableButton(
+                        label: 'Notify Me When Available',
+                        icon: PhosphorIcons.bellBold,
+                        filled: true,
+                        onTap: onNotify!,
+                      )
+                    else
+                      const _NotificationUnavailableNotice(),
                     Gap(12.h),
                     _LocationUnavailableButton(
                       label: 'Try a Different Location',
@@ -289,6 +283,49 @@ class _LocationUnavailableButton extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// The audited backend has no customer-facing area-alert signup endpoint.
+/// Keep this state informational until a real callback is wired, rather than
+/// presenting a success snackbar that implies a notification was registered.
+class _NotificationUnavailableNotice extends StatelessWidget {
+  const _NotificationUnavailableNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
+      decoration: BoxDecoration(
+        color: AppColors.brandRedSurface,
+        borderRadius: BorderRadius.circular(16.r),
+        border: Border.all(color: AppColors.brandRedBorder),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          PhosphorIcon(
+            PhosphorIcons.bellSimpleBold,
+            size: 20.sp,
+            color: AppColors.brandRed,
+          ),
+          Gap(10.w),
+          Expanded(
+            child: Text(
+              'Area alerts are not available yet. Check back later or choose '
+              'a different delivery location.',
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 12.5.sp,
+                height: 1.35,
+                color: const Color(0xFF3E2750),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -34,7 +34,7 @@ class _NamePromptDialogState extends ConsumerState<_NamePromptDialog> {
   // Matches the app's actual brand accent (auth screens, bottom nav) — not
   // exposed via AppColors, which only has the green used for cart/delivery
   // CTAs, so it's defined locally here same as those other call sites do.
-  static const Color _brandColor = Color(0xFFD02428);
+  static const Color _brandColor = AppColors.brandRed;
 
   final TextEditingController _firstNameController = TextEditingController();
   final TextEditingController _lastNameController = TextEditingController();
@@ -175,7 +175,8 @@ class _NamePromptDialogState extends ConsumerState<_NamePromptDialog> {
                       maxLength: 30,
                       onSubmitted: (_) => _lastNameFocusNode.requestFocus(),
                       onChanged: (_) {
-                        if (_errorText != null) setState(() => _errorText = null);
+                        if (_errorText != null)
+                          setState(() => _errorText = null);
                       },
                       style: AppTextStyles.bodyLarge,
                       decoration: _nameFieldDecoration('First name'),
@@ -191,7 +192,8 @@ class _NamePromptDialogState extends ConsumerState<_NamePromptDialog> {
                       maxLength: 30,
                       onSubmitted: (_) => _save(),
                       onChanged: (_) {
-                        if (_errorText != null) setState(() => _errorText = null);
+                        if (_errorText != null)
+                          setState(() => _errorText = null);
                       },
                       style: AppTextStyles.bodyLarge,
                       decoration: _nameFieldDecoration('Last name'),

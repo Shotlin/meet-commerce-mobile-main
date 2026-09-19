@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import 'package:bakaloo_flutter_app/core/di/providers.dart';
+import 'package:bakaloo_flutter_app/core/refresh/storefront_refresh_provider.dart';
 import 'package:bakaloo_flutter_app/features/home/data/datasources/home_remote_datasource.dart';
 import 'package:bakaloo_flutter_app/features/home/data/repositories/home_repository_impl.dart';
 import 'package:bakaloo_flutter_app/features/home/domain/entities/banner_entity.dart';
@@ -31,6 +32,7 @@ final getFeaturedProductsUseCaseProvider =
 
 @riverpod
 Future<List<BannerEntity>> banner(Ref ref) async {
+  ref.watch(storefrontRefreshEpochProvider);
   final result = await ref.read(getBannersUseCaseProvider).call();
   return result.fold((_) => const <BannerEntity>[], (data) => data);
 }
@@ -39,6 +41,7 @@ Future<List<BannerEntity>> banner(Ref ref) async {
 /// (banner_type='category', admin-managed via Categories → Page Banners).
 @riverpod
 Future<List<BannerEntity>> categoryPageBanners(Ref ref) async {
+  ref.watch(storefrontRefreshEpochProvider);
   final result =
       await ref.read(getBannersUseCaseProvider).call(type: 'category');
   return result.fold((_) => const <BannerEntity>[], (data) => data);
@@ -48,6 +51,7 @@ Future<List<BannerEntity>> categoryPageBanners(Ref ref) async {
 /// (banner_type='category_footer').
 @riverpod
 Future<List<BannerEntity>> categoryFooterBanners(Ref ref) async {
+  ref.watch(storefrontRefreshEpochProvider);
   final result =
       await ref.read(getBannersUseCaseProvider).call(type: 'category_footer');
   return result.fold((_) => const <BannerEntity>[], (data) => data);
@@ -55,6 +59,7 @@ Future<List<BannerEntity>> categoryFooterBanners(Ref ref) async {
 
 @riverpod
 Future<List<ProductEntity>> homeFeaturedProducts(Ref ref) async {
+  ref.watch(storefrontRefreshEpochProvider);
   final result = await ref.read(getFeaturedProductsUseCaseProvider).call(
         limit: 4,
       );

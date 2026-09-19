@@ -13,6 +13,7 @@ import 'package:bakaloo_flutter_app/core/theme/section_manifest_provider.dart';
 import 'package:bakaloo_flutter_app/features/addresses/domain/entities/address_entity.dart';
 import 'package:bakaloo_flutter_app/features/addresses/presentation/providers/address_provider.dart';
 import 'package:bakaloo_flutter_app/features/location/presentation/providers/guest_storefront_provider.dart';
+import 'package:bakaloo_flutter_app/features/location/presentation/widgets/location_prompt_sheet.dart';
 import 'package:bakaloo_flutter_app/features/home/presentation/providers/home_provider.dart';
 import 'package:bakaloo_flutter_app/features/home/presentation/widgets/dynamic_home_sections.dart';
 import 'package:bakaloo_flutter_app/routing/app_router.dart';
@@ -290,9 +291,16 @@ class _StoreScreenShellState extends ConsumerState<StoreScreenShell>
                                 );
                                 return HomeHeader(
                                   addressText: addressText,
-                                  onAddressTap: () => currentUser == null
-                                      ? context.go(RouteNames.phone)
-                                      : showAddressSheet(context),
+                                  onAddressTap: () {
+                                    if (currentUser == null) {
+                                      showLocationPromptSheet(
+                                        context,
+                                        guestStorefront: true,
+                                      );
+                                      return;
+                                    }
+                                    showAddressSheet(context);
+                                  },
                                   topBarTheme: chromeTheme.topBarTheme,
                                   searchZoneColor: chromeTheme.searchZoneColor,
                                   deliveryEtaMinutes: deliveryEtaMinutes,

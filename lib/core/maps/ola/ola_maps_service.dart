@@ -279,16 +279,22 @@ class OlaMapsService {
     );
   }
 
-  Future<ReverseGeocodeResult?> reverseGeocode(GeoPoint point) async {
+  Future<ReverseGeocodeResult?> reverseGeocode(
+    GeoPoint point, {
+    String? storefrontToken,
+  }) async {
     if (!point.isValid) {
       return null;
     }
 
     try {
-      final response = await _apiClient.getOlaMapsReverseGeocode(
-        point.lat,
-        point.lng,
-      );
+      final response = storefrontToken == null || storefrontToken.isEmpty
+          ? await _apiClient.getOlaMapsReverseGeocode(point.lat, point.lng)
+          : await _apiClient.getOlaMapsReverseGeocodeForStorefront(
+              point.lat,
+              point.lng,
+              storefrontToken,
+            );
       final data = _extractData(response.data);
       final result = _asMap(data['result']);
       final results = _asList(result['results']);

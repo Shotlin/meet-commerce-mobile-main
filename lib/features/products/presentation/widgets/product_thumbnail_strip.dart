@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
+import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
+
 /// Small thumbnail row beneath the hero gallery — tapping one jumps the
 /// hero PageView to that image.
 class ProductThumbnailStrip extends StatelessWidget {
@@ -44,7 +46,7 @@ class ProductThumbnailStrip extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12.r),
                   border: Border.all(
                     color: isSelected
-                        ? const Color(0xFFD02428)
+                        ? AppColors.brandRed
                         : const Color(0xFFE5E5E5),
                     width: isSelected ? 2 : 1,
                   ),

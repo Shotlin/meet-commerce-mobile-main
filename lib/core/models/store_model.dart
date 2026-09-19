@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
+
 class StoreModel {
   const StoreModel({
     required this.id,
@@ -28,7 +30,14 @@ const List<StoreModel> appStores = <StoreModel>[
     backgroundColor: Color(0xFF88D4FE),
     chipActiveColor: Color(0xFF1A3461),
     textColor: Colors.black,
-    categories: ['Fruits & Veg', 'Dairy', 'Snacks', 'Beverages', 'Rice', 'Bread'],
+    categories: [
+      'Fruits & Veg',
+      'Dairy',
+      'Snacks',
+      'Beverages',
+      'Rice',
+      'Bread'
+    ],
   ),
   StoreModel(
     id: 'off_zone',
@@ -37,14 +46,20 @@ const List<StoreModel> appStores = <StoreModel>[
     backgroundColor: Color(0xFFFF6B35),
     chipActiveColor: Color(0xFFCC3A00),
     textColor: Colors.white,
-    categories: ['Flash Sale', 'Combos', 'Clearance', 'Buy 1 Get 1', 'Bulk Buy'],
+    categories: [
+      'Flash Sale',
+      'Combos',
+      'Clearance',
+      'Buy 1 Get 1',
+      'Bulk Buy'
+    ],
   ),
   StoreModel(
     id: 'super_mall',
     label: 'Super Mall',
     subtitle: 'All in one store',
-    backgroundColor: Color(0xFFD02428),
-    chipActiveColor: Color(0xFFA81C1F),
+    backgroundColor: AppColors.brandRed,
+    chipActiveColor: AppColors.brandRedDark,
     textColor: Colors.white,
     categories: ['Electronics', 'Fashion', 'Home', 'Beauty', 'Sports'],
   ),

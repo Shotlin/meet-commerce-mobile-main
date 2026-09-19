@@ -6,10 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
-import 'package:local_auth/local_auth.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import 'package:bakaloo_flutter_app/core/constants/app_constants.dart';
+import 'package:bakaloo_flutter_app/core/security/device_authentication.dart';
 import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
 import 'package:bakaloo_flutter_app/core/theme/app_dimensions.dart';
 import 'package:bakaloo_flutter_app/core/theme/app_shadows.dart';
@@ -35,7 +35,7 @@ class SendMoneyScreen extends ConsumerStatefulWidget {
 class _SendMoneyScreenState extends ConsumerState<SendMoneyScreen> {
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _amountController = TextEditingController();
-  final LocalAuthentication _localAuth = LocalAuthentication();
+  final DeviceAuthentication _deviceAuthentication = DeviceAuthentication();
 
   WalletRecipientEntity? _selectedRecipient;
   bool _isSending = false;
@@ -78,23 +78,9 @@ class _SendMoneyScreenState extends ConsumerState<SendMoneyScreen> {
 
   Future<bool> _authenticateForTransfer() async {
     try {
-      final isSupported = await _localAuth.isDeviceSupported();
-      if (!isSupported) {
-        return true;
-      }
-
-      final canCheckBiometrics = await _localAuth.canCheckBiometrics;
-      final availableBiometrics = await _localAuth.getAvailableBiometrics();
-      return await _localAuth.authenticate(
-        localizedReason: 'Authenticate to transfer money',
-        options: AuthenticationOptions(
-          biometricOnly: canCheckBiometrics && availableBiometrics.isNotEmpty,
-          stickyAuth: true,
-          sensitiveTransaction: true,
-        ),
+      return _deviceAuthentication.authenticateIfAvailable(
+        reason: 'Authenticate to transfer money',
       );
-    } on PlatformException {
-      return false;
     } catch (_) {
       return false;
     }

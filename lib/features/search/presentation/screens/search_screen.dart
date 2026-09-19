@@ -981,12 +981,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                           onTap: _dismiss,
                         ),
                         Gap(10.w),
-                        Image.asset(
-                          'assets/images/freshcuts-logo-wordmark.png',
-                          height: 26.h,
-                          cacheHeight: 104,
-                          fit: BoxFit.contain,
-                          filterQuality: FilterQuality.high,
+                        Text(
+                          'Bakaloo',
+                          style: TextStyle(
+                            color: AppColors.brandRed,
+                            fontSize: 20.sp,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                         const Spacer(),
                         Consumer(

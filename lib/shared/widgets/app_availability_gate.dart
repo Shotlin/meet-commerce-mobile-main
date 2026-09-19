@@ -27,6 +27,8 @@ class AppAvailabilityGate extends ConsumerWidget {
           Positioned.fill(
             child: _OfflineScreen(
               onRetry: () => ref.read(appAvailabilityProvider.notifier).retry(),
+              onBrowseSaved: () =>
+                  ref.read(appAvailabilityProvider.notifier).browseOffline(),
             ),
           )
         else if (status == AppAvailabilityStatus.serviceUnavailable)
@@ -43,14 +45,19 @@ class AppAvailabilityGate extends ConsumerWidget {
 // ───────────────────────────────────────────────────────────────────────────
 // Offline screen — shown full-screen (overlaid above whatever page the
 // customer was on) the moment device connectivity drops, from
-// AppAvailabilityGate wrapping the whole app. Both buttons re-run the same
-// real connectivity check (there's only one honest way to "check the
-// connection" from inside the app); no fabricated network-diagnostics step.
+// AppAvailabilityGate wrapping the whole app. The retry/check buttons re-run
+// the same real connectivity check (there's only one honest way to "check the
+// connection" from inside the app); the saved-items action intentionally
+// dismisses the overlay without claiming that live commerce is available.
 // ───────────────────────────────────────────────────────────────────────────
 class _OfflineScreen extends StatelessWidget {
-  const _OfflineScreen({required this.onRetry});
+  const _OfflineScreen({
+    required this.onRetry,
+    required this.onBrowseSaved,
+  });
 
   final VoidCallback onRetry;
+  final VoidCallback onBrowseSaved;
 
   @override
   Widget build(BuildContext context) {
@@ -64,16 +71,18 @@ class _OfflineScreen extends StatelessWidget {
             children: <Widget>[
               Padding(
                 padding: EdgeInsets.symmetric(horizontal: 20.w),
-                child: Image.asset(
-                  'assets/images/freshcuts-logo-wordmark.png',
-                  height: 42.h,
-                  fit: BoxFit.contain,
-                  alignment: Alignment.centerLeft,
+                child: Text(
+                  'Bakaloo',
+                  style: TextStyle(
+                    color: AppColors.brandRed,
+                    fontSize: 24.sp,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ),
               Gap(8.h),
               Image.asset(
-                'assets/images/freshcuts-offline-state-illustration.png',
+                'assets/images/bakaloo-offline-state-illustration.png',
                 width: double.infinity,
                 fit: BoxFit.fitWidth,
               ),
@@ -104,9 +113,9 @@ class _OfflineScreen extends StatelessWidget {
                     ),
                     Gap(10.h),
                     Text(
-                      'Please check your network and try again. We need an '
-                      'active connection to show fresh products and deliver '
-                      'to your area.',
+                      'Please check your network and try again. Fresh stock, '
+                      'delivery and checkout need an active connection. You '
+                      'can still browse items saved on this device.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontFamily: 'Inter',
@@ -129,6 +138,13 @@ class _OfflineScreen extends StatelessWidget {
                       icon: PhosphorIcons.wifiHighBold,
                       filled: false,
                       onTap: onRetry,
+                    ),
+                    Gap(12.h),
+                    _OfflineButton(
+                      label: 'Browse saved items',
+                      icon: PhosphorIcons.package,
+                      filled: false,
+                      onTap: onBrowseSaved,
                     ),
                   ],
                 ),
@@ -156,44 +172,48 @@ class _OfflineButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: filled ? AppColors.brandRed : Colors.white,
-      borderRadius: BorderRadius.circular(28.r),
-      child: InkWell(
-        onTap: onTap,
+    return Semantics(
+      button: true,
+      label: label,
+      child: Material(
+        color: filled ? AppColors.brandRed : Colors.white,
         borderRadius: BorderRadius.circular(28.r),
-        child: Container(
-          width: double.infinity,
-          height: 52.h,
-          alignment: Alignment.center,
-          decoration: filled
-              ? null
-              : BoxDecoration(
-                  borderRadius: BorderRadius.circular(28.r),
-                  border: Border.all(
-                    color: const Color(0xFFDDDDDD),
-                    width: 1.2,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(28.r),
+          child: Container(
+            width: double.infinity,
+            height: 52.h,
+            alignment: Alignment.center,
+            decoration: filled
+                ? null
+                : BoxDecoration(
+                    borderRadius: BorderRadius.circular(28.r),
+                    border: Border.all(
+                      color: const Color(0xFFDDDDDD),
+                      width: 1.2,
+                    ),
                   ),
-                ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              PhosphorIcon(
-                icon,
-                size: 18.sp,
-                color: filled ? Colors.white : const Color(0xFF1A1A1A),
-              ),
-              Gap(8.w),
-              Text(
-                label,
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 14.5.sp,
-                  fontWeight: FontWeight.w700,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                PhosphorIcon(
+                  icon,
+                  size: 18.sp,
                   color: filled ? Colors.white : const Color(0xFF1A1A1A),
                 ),
-              ),
-            ],
+                Gap(8.w),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 14.5.sp,
+                    fontWeight: FontWeight.w700,
+                    color: filled ? Colors.white : const Color(0xFF1A1A1A),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

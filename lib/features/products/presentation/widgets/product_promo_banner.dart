@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
+import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
+
 /// Full-width brand-red delivery-promise strip shown right below the image
-/// gallery. Deliberately just the one "Delivered in minutes with FreshCuts"
+/// gallery. Deliberately just the one "Delivered in minutes with Bakaloo"
 /// line + the real brand mark watermark — no extra icon/heading beyond
 /// that, per direct product feedback on an earlier build of this banner.
 class ProductPromoBanner extends StatelessWidget {
@@ -24,9 +26,9 @@ class ProductPromoBanner extends StatelessWidget {
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
           colors: <Color>[
-            Color(0xFFA81C1F),
-            Color(0xFFD02428),
-            Color(0xFFE5484B),
+            AppColors.brandRedDark,
+            AppColors.brandRed,
+            AppColors.brandRed,
           ],
         ),
       ),
@@ -76,7 +78,7 @@ class ProductPromoBanner extends StatelessWidget {
                           ),
                         ),
                         TextSpan(
-                          text: 'FreshCuts',
+                          text: 'Bakaloo',
                           style: TextStyle(
                             fontFamily: 'Inter',
                             fontSize: 13.sp,

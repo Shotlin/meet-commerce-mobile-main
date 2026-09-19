@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
-/// FreshCuts' standing quality promise — the same four claims on every
+/// Bakaloo's standing quality promise — the same four claims on every
 /// product page (cold-chain, protein, FSSAI, freshness), not a
 /// per-product attribute, so it's rendered as static brand copy rather
 /// than sourced from product data.

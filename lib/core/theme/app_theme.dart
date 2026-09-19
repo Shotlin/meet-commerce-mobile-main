@@ -21,6 +21,11 @@ class AppTheme {
       useMaterial3: true,
       colorScheme: colorScheme,
       scaffoldBackgroundColor: AppColors.bgPrimary,
+      // Keep keyboard focus discoverable on Web and desktop. Material's
+      // default focus overlay is intentionally subtle, which makes focus
+      // easy to miss against Bakaloo's pale cards and search surfaces.
+      focusColor: AppColors.primaryGreen.withValues(alpha: 0.18),
+      hoverColor: AppColors.primaryGreen.withValues(alpha: 0.08),
       fontFamily: 'DMSans',
       textTheme: TextTheme(
         displayLarge: AppTextStyles.display,

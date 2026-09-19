@@ -1,11 +1,11 @@
 import 'dart:async';
 
-import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 
 import 'package:bakaloo_flutter_app/core/maps/geo_point.dart';
 import 'package:bakaloo_flutter_app/core/maps/ola/ola_maps_service.dart';
+import 'package:bakaloo_flutter_app/core/diagnostics/crash_reporter.dart';
 import 'package:bakaloo_flutter_app/core/utils/resilient_location.dart';
 import 'package:bakaloo_flutter_app/features/addresses/domain/repositories/address_repository.dart';
 import 'package:bakaloo_flutter_app/features/addresses/presentation/providers/address_provider.dart';
@@ -108,7 +108,7 @@ Future<LocationAutoDetectResult> detectAndSaveCurrentLocation(
       position = await getResilientCurrentPosition();
     } catch (err, stack) {
       unawaited(
-        FirebaseCrashlytics.instance.recordError(
+        reportError(
           err,
           stack,
           reason: 'detectAndSaveCurrentLocation: getResilientCurrentPosition '
@@ -122,7 +122,7 @@ Future<LocationAutoDetectResult> detectAndSaveCurrentLocation(
     return _geocodeAndSave(ref, position);
   } catch (err, stack) {
     unawaited(
-      FirebaseCrashlytics.instance.recordError(
+      reportError(
         err,
         stack,
         reason: 'detectAndSaveCurrentLocation: unexpected failure',
@@ -159,7 +159,7 @@ Future<LocationAutoDetectResult> _geocodeAndSave(
           road.isEmpty &&
           displayName.isEmpty)) {
     unawaited(
-      FirebaseCrashlytics.instance.recordError(
+      reportError(
         StateError('Ola reverseGeocode returned nothing usable'),
         StackTrace.current,
         reason: '_geocodeAndSave: reverse geocoding failed',
@@ -283,7 +283,7 @@ Future<LocationAutoDetectResult> _geocodeAndSave(
       return LocationAutoDetectResult.notServiceable;
     }
     unawaited(
-      FirebaseCrashlytics.instance.recordError(
+      reportError(
         StateError(result.failure?.message ?? 'unknown'),
         StackTrace.current,
         reason: '_geocodeAndSave: ${existingDefaultId != null ? 'update' : 'create'}Address failed',

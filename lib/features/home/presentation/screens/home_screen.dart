@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:bakaloo_flutter_app/shared/widgets/app_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,6 +12,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import 'package:bakaloo_flutter_app/core/branding/branding_provider.dart';
 import 'package:bakaloo_flutter_app/core/constants/api_constants.dart';
+import 'package:bakaloo_flutter_app/core/refresh/storefront_refresh_provider.dart';
 import 'package:bakaloo_flutter_app/core/theme/remote_theme_model.dart';
 import 'package:bakaloo_flutter_app/core/theme/remote_theme_provider.dart';
 import 'package:bakaloo_flutter_app/core/theme/section_manifest_provider.dart';
@@ -47,7 +49,6 @@ import 'package:bakaloo_flutter_app/features/location/presentation/providers/loc
 import 'package:bakaloo_flutter_app/features/location/presentation/providers/non_serviceable_location_provider.dart';
 import 'package:bakaloo_flutter_app/features/notifications/presentation/providers/notification_provider.dart';
 import 'package:bakaloo_flutter_app/features/location/presentation/widgets/location_prompt_sheet.dart';
-import 'package:bakaloo_flutter_app/features/location/presentation/widgets/guest_location_gate.dart';
 import 'package:bakaloo_flutter_app/features/profile/presentation/providers/profile_provider.dart';
 import 'package:bakaloo_flutter_app/features/profile/presentation/widgets/name_prompt_dialog.dart';
 import 'package:bakaloo_flutter_app/shared/widgets/address_bottom_sheet.dart';
@@ -88,6 +89,12 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen>
     with WidgetsBindingObserver {
+  // A public storefront has no socket token before sign-in, so Web needs a
+  // small polling fallback for dashboard-managed catalogue changes. Signed-in
+  // customers still receive the existing socket events immediately; this
+  // timer keeps the anonymous browser view current without a page reload.
+  static const Duration _webStorefrontRefreshInterval = Duration(seconds: 20);
+
   late final ScrollController _homeScrollController;
   late final ProviderSubscription<AsyncValue<Map<String, dynamic>>>
       _themeSocketSub;
@@ -98,6 +105,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   late final ProviderSubscription<Timer> _themeRefreshTimerSub;
   late final ProviderSubscription<AuthState> _authStateSub;
   late final ProviderSubscription<AsyncValue<HomeScreenData>> _homeDataSub;
+  late final ProviderSubscription<AsyncValue<TabHomeContentResponse?>>
+      _tabHomeContentSub;
+  Timer? _webStorefrontRefreshTimer;
   // PHASE 4: Track active tab key so we can reset scroll/stage state on switch.
   late final ProviderSubscription<String> _tabKeySub;
   String _activeTabKey = 'all';
@@ -109,6 +119,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   final ValueNotifier<bool> _isTopChromeMotionEnabled =
       ValueNotifier<bool>(true);
   bool _isThemeLayoutRefreshInFlight = false;
+  bool _isRefreshInFlight = false;
   List<CategoryEntity> _stagedCategories = const <CategoryEntity>[];
   List<CategoryEntity> _priorityCategories = const <CategoryEntity>[];
   List<CategoryEntity> _deferredCategories = const <CategoryEntity>[];
@@ -199,6 +210,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       themeRefreshTimerProvider,
       (_, __) {},
     );
+    if (kIsWeb) {
+      _webStorefrontRefreshTimer = Timer.periodic(
+        _webStorefrontRefreshInterval,
+        (_) => unawaited(_refresh()),
+      );
+    }
     // HomeScreen (part of AppShell, the always-mounted root) can be built
     // before login completes — e.g. a guest view of Home. initState's own
     // one-shot _maybeShowLocationPrompt call below then runs while still
@@ -247,46 +264,46 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         });
       }
     });
-    // Live-listen for the user toggling device location on/off while the
-    // app stays in the foreground (e.g. via the quick-settings shade) —
-    // on many Android versions this does NOT trigger didChangeAppLifecycleState,
-    // so without this stream the prompt would only ever reappear after a full
-    // background/foreground cycle.
-    _locationServiceStatusSub =
-        Geolocator.getServiceStatusStream().listen((status) {
-      if (status == ServiceStatus.enabled) {
-        // Guard against re-opening anything for a customer who's already
-        // done — Android re-reports this status for reasons that have
-        // nothing to do with the customer (not just them flipping the
-        // quick-settings toggle), so this can fire well after they've
-        // already completed their address. Resetting the flag
-        // unconditionally used to let that stale event re-run the whole
-        // detect flow — which, combined with a since-fixed bug where
-        // detection always created a brand-new address instead of
-        // updating the existing one, sent a customer with an already-
-        // complete address straight back into the completion screen. This
-        // check is deliberately independent of that fix (defense in
-        // depth): even a future bug that re-creates an incomplete address
-        // shouldn't be able to reopen this for someone who has a complete
-        // one on file.
-        final addresses = ref.read(addressProvider).asData?.value;
-        final hasCompleteAddress = addresses != null &&
-            addresses.any(
-              (a) => a.isDefault && (a.addressLine2 ?? '').trim().isNotEmpty,
-            );
-        if (!hasCompleteAddress) {
-          _locationPromptShownThisSession = false;
-          // The whole point of nudging the customer to flip this toggle is
-          // to get their address saved the moment it happens, not to wait
-          // for them to come back later — _maybeShowLocationPrompt will
-          // still show the sheet if there's no address yet, just
-          // auto-triggered.
+    // The geolocator service-status stream is a native-only capability.
+    // Browsers expose location permission on demand and throw when this
+    // stream is requested, so Web must not subscribe during home startup.
+    if (!kIsWeb) {
+      _locationServiceStatusSub =
+          Geolocator.getServiceStatusStream().listen((status) {
+        if (status == ServiceStatus.enabled) {
+          // Guard against re-opening anything for a customer who's already
+          // done — Android re-reports this status for reasons that have
+          // nothing to do with the customer (not just them flipping the
+          // quick-settings toggle), so this can fire well after they've
+          // already completed their address. Resetting the flag
+          // unconditionally used to let that stale event re-run the whole
+          // detect flow — which, combined with a since-fixed bug where
+          // detection always created a brand-new address instead of
+          // updating the existing one, sent a customer with an already-
+          // complete address straight back into the completion screen. This
+          // check is deliberately independent of that fix (defense in
+          // depth): even a future bug that re-creates an incomplete address
+          // shouldn't be able to reopen this for someone who has a complete
+          // one on file.
+          final addresses = ref.read(addressProvider).asData?.value;
+          final hasCompleteAddress = addresses != null &&
+              addresses.any(
+                (a) => a.isDefault && (a.addressLine2 ?? '').trim().isNotEmpty,
+              );
+          if (!hasCompleteAddress) {
+            _locationPromptShownThisSession = false;
+            // The whole point of nudging the customer to flip this toggle is
+            // to get their address saved the moment it happens, not to wait
+            // for them to come back later — _maybeShowLocationPrompt will
+            // still show the sheet if there's no address yet, just
+            // auto-triggered.
+            unawaited(_maybeShowLocationPrompt());
+          }
+        } else if (status == ServiceStatus.disabled) {
           unawaited(_maybeShowLocationPrompt());
         }
-      } else if (status == ServiceStatus.disabled) {
-        unawaited(_maybeShowLocationPrompt());
-      }
-    });
+      });
+    }
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
@@ -364,9 +381,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   ///      CartBottomBar's address-completeness gate in cart_bottom_bar.dart
   ///      — the one moment it actually blocks something (placing an
   ///      order), rather than blocking browsing the app.
-  ///   2. No saved address at all — the original location-enable/
-  ///      auto-detect sheet, mandatory (they can't order without an
-  ///      address at all). When permission is already granted and service
+  ///   2. No saved address at all — offer the location-enable/
+  ///      auto-detect sheet without blocking browsing. A delivery address
+  ///      is still required when the customer reaches checkout. When
+  ///      permission is already granted and service
   ///      is already on, it's told to auto-trigger detection the moment it
   ///      opens instead of waiting for an "Enable" tap — the customer
   ///      still sees the sheet and its spinner/status text either way.
@@ -444,7 +462,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       await showLocationPromptSheet(
         context,
         autoTrigger: permissionGranted && serviceEnabled,
-        mandatory: true,
+        mandatory: false,
       );
       if (mounted && ref.read(nonServiceableLocationProvider)) {
         context.push(RouteNames.locationUnavailable);
@@ -519,6 +537,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _locationServiceStatusSub?.cancel();
+    _webStorefrontRefreshTimer?.cancel();
     _themeSocketSub.close();
     _sectionSocketSub.close();
     _brandingSocketSub.close();
@@ -542,7 +561,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      unawaited(_refreshThemeDrivenLayout());
+      // A browser can be backgrounded for longer than the polling interval.
+      // Refresh every live home feed when it becomes active again so changes
+      // made in the dashboard are visible before the next timed refresh.
+      unawaited(_refresh());
       // Covers the case where the app was only backgrounded (not actually
       // process-killed) while the mandatory name dialog was open or before
       // it ever got a chance to check — resuming without this never
@@ -599,24 +621,33 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   }
 
   Future<void> _refresh() async {
+    if (_isRefreshInFlight) {
+      return;
+    }
+    _isRefreshInFlight = true;
     final activeTabKey = ref.read(activeTabKeyProvider);
-    ref
-      ..invalidate(homeProvider)
-      ..invalidate(bannerProvider)
-      ..invalidate(categoryCollectionProvider)
-      ..invalidate(homeFeaturedProductsProvider)
-      ..invalidate(homeDealsProvider)
-      ..invalidate(homeTrendingProductsProvider)
-      ..invalidate(tabThemesProvider)
-      ..invalidate(selectedTabHomeContentProvider)
-      ..invalidate(sectionManifestProvider(activeTabKey))
-      ..invalidate(activeSectionManifestProvider);
-    _stickyHeaderTriggerOffset = null;
-    _stickyHeaderProgress.value = 0;
-    await Future.wait<void>(<Future<void>>[
-      ref.read(homeProvider.future).then((_) {}),
-      _refreshThemeDrivenLayout(),
-    ]);
+    try {
+      refreshStorefrontContent(ref);
+      ref
+        ..invalidate(homeProvider)
+        ..invalidate(bannerProvider)
+        ..invalidate(categoryCollectionProvider)
+        ..invalidate(homeFeaturedProductsProvider)
+        ..invalidate(homeDealsProvider)
+        ..invalidate(homeTrendingProductsProvider)
+        ..invalidate(tabThemesProvider)
+        ..invalidate(selectedTabHomeContentProvider)
+        ..invalidate(sectionManifestProvider(activeTabKey))
+        ..invalidate(activeSectionManifestProvider);
+      _stickyHeaderTriggerOffset = null;
+      _stickyHeaderProgress.value = 0;
+      await Future.wait<void>(<Future<void>>[
+        ref.read(homeProvider.future).then((_) {}),
+        _refreshThemeDrivenLayout(),
+      ]);
+    } finally {
+      _isRefreshInFlight = false;
+    }
   }
 
   void _openSearch() {
@@ -802,14 +833,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
   @override
   Widget build(BuildContext context) {
-    final authState = ref.watch(authStateProvider);
-    final guestStorefront = ref.watch(guestStorefrontProvider);
-    // Do this before subscribing to remote home-theme/content providers.
-    // A new guest must not fetch or see a master catalogue before the
-    // location resolver has assigned a serviceable store.
-    if (authState is! AuthAuthenticated && !guestStorefront.isReady) {
-      return GuestLocationGate(state: guestStorefront);
-    }
     final topBarTheme = TopBarTheme(
       backgroundColor: ref.watch(
         activeTabThemeProvider.select(
@@ -872,10 +895,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         (manifest) => manifest.sections.isEmpty,
       ),
     );
-    // Show skeleton sections ONLY while the manifest is actively loading and
-    // we have no cached content yet.  Never render old summer/campaign
-    // hardcoded widgets as a loading fallback.
+    // Show a skeleton only while the manifest is actively loading and no
+    // cached content exists. Never render old hardcoded campaign widgets as
+    // a loading fallback; an unavailable manifest gets a visible retry state
+    // instead of leaving a silent blank body below the header.
     final showSkeletonSections = manifestIsEmpty && manifestIsLoading;
+    final showSectionsUnavailable = manifestIsEmpty && !manifestIsLoading;
     final showCategoryTabs = ref.watch(
       activeTabThemeProvider.select(
         (theme) => theme.sections.categoryTabs.visible,
@@ -943,200 +968,174 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 child: Stack(
                   children: <Widget>[
                     Positioned.fill(
-                      child: CustomScrollView(
+                      child: Scrollbar(
                         controller: _homeScrollController,
-                        physics: const AlwaysScrollableScrollPhysics(
-                          parent: BouncingScrollPhysics(),
-                        ),
-                        slivers: <Widget>[
-                          SliverToBoxAdapter(
-                            child: Stack(
-                              children: <Widget>[
-                                // Shared background image behind the top
-                                // bar + search zone + category tabs block
-                                // below. The Stack sizes itself to that
-                                // Column's natural height, so Positioned.fill
-                                // matches it with no hardcoded height.
-                                if (headerBackgroundImageUrl != null &&
-                                    headerBackgroundImageUrl.isNotEmpty)
-                                  Positioned.fill(
-                                    child: AppImage(
-                                      imageUrl: headerBackgroundImageUrl,
-                                      memCacheWidth: MediaQuery.sizeOf(context)
-                                          .width
-                                          .round(),
-                                      memCacheHeight: 900,
-                                      fit: BoxFit.cover,
-                                      // Any cropping from a shorter-than-image
-                                      // device (smaller status bar, tabs
-                                      // hidden, etc.) should trim the bottom
-                                      // of the image, not the top — the
-                                      // delivery-address text sits right at
-                                      // the top of this block.
-                                      alignment: Alignment.topCenter,
-                                    ),
-                                  ),
-                                Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: <Widget>[
-                                    ValueListenableBuilder<bool>(
-                                      valueListenable:
-                                          _isTopChromeMotionEnabled,
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: <Widget>[
-                                          Consumer(
-                                            builder: (context, ref, _) {
-                                              final currentUser = ref.watch(
-                                                currentUserProvider,
-                                              );
-                                              final addresses = currentUser ==
-                                                      null
-                                                  ? null
-                                                  : ref
-                                                      .watch(addressProvider)
-                                                      .asData
-                                                      ?.value;
-                                              final guestLocation =
-                                                  currentUser == null
-                                                      ? ref.watch(
-                                                          guestStorefrontProvider)
-                                                      : null;
-                                              final hasTrackingBanner = ref
-                                                  .watch(
-                                                      orderTrackingBannerProvider)
-                                                  .isNotEmpty;
-                                              return Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: <Widget>[
-                                                  const OrderTrackingTopBanner(),
-                                                  HomeHeader(
-                                                    addressText:
-                                                        resolveAddressLabel(
-                                                      isLoggedIn:
-                                                          currentUser != null,
-                                                      addresses: addresses,
-                                                      guestAddressLine1:
-                                                          guestLocation
-                                                              ?.addressLine1,
-                                                      guestCity:
-                                                          guestLocation?.city,
-                                                      guestPincode:
-                                                          guestLocation
-                                                              ?.pincode,
-                                                    ),
-                                                    onAddressTap: () =>
-                                                        currentUser == null
-                                                            ? context.go(
-                                                                RouteNames
-                                                                    .phone)
-                                                            : showAddressSheet(
-                                                                context),
-                                                    topBarTheme: topBarTheme,
-                                                    searchZoneColor:
-                                                        searchZoneTheme
-                                                                .colorEnabled
-                                                            ? searchZoneTheme
-                                                                .backgroundColor
-                                                            : Colors
-                                                                .transparent,
-                                                    deliveryEtaMinutes:
-                                                        deliveryEtaMinutes,
-                                                    topPaddingOverride:
-                                                        hasTrackingBanner
-                                                            ? 0
-                                                            : null,
-                                                  ),
-                                                ],
-                                              );
-                                            },
-                                          ),
-                                        ],
+                        // Desktop/web shoppers need a visible, draggable
+                        // affordance for the longer manifest-driven home
+                        // feed. Native platforms keep their conventional
+                        // overlay scrollbar behavior.
+                        thumbVisibility: kIsWeb,
+                        interactive: kIsWeb,
+                        child: CustomScrollView(
+                          controller: _homeScrollController,
+                          physics: const AlwaysScrollableScrollPhysics(
+                            parent: BouncingScrollPhysics(),
+                          ),
+                          slivers: <Widget>[
+                            SliverToBoxAdapter(
+                              child: Stack(
+                                children: <Widget>[
+                                  // Shared background image behind the top
+                                  // bar + search zone + category tabs block
+                                  // below. The Stack sizes itself to that
+                                  // Column's natural height, so Positioned.fill
+                                  // matches it with no hardcoded height.
+                                  if (headerBackgroundImageUrl != null &&
+                                      headerBackgroundImageUrl.isNotEmpty)
+                                    Positioned.fill(
+                                      child: AppImage(
+                                        imageUrl: headerBackgroundImageUrl,
+                                        memCacheWidth:
+                                            MediaQuery.sizeOf(context)
+                                                .width
+                                                .round(),
+                                        memCacheHeight: 900,
+                                        fit: BoxFit.cover,
+                                        // Any cropping from a shorter-than-image
+                                        // device (smaller status bar, tabs
+                                        // hidden, etc.) should trim the bottom
+                                        // of the image, not the top — the
+                                        // delivery-address text sits right at
+                                        // the top of this block.
+                                        alignment: Alignment.topCenter,
                                       ),
-                                      builder: (
-                                        context,
-                                        isTopChromeMotionEnabled,
-                                        child,
-                                      ) {
-                                        return ColoredBox(
-                                          color: topBarTheme.colorEnabled
-                                              ? topBarTheme.backgroundColor
-                                              : Colors.transparent,
-                                          child: TickerMode(
-                                            enabled: isTopChromeMotionEnabled,
-                                            child: child!,
-                                          ),
-                                        );
-                                      },
                                     ),
-                                    ValueListenableBuilder<bool>(
-                                      valueListenable:
-                                          _isTopChromeMotionEnabled,
-                                      builder: (
-                                        context,
-                                        isTopChromeMotionEnabled,
-                                        _,
-                                      ) {
-                                        return Container(
-                                          key: _topSearchZoneKey,
-                                          color: Colors.transparent,
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: <Widget>[
-                                              // Search zone — uses searchZone.backgroundColor
-                                              ColoredBox(
-                                                color:
-                                                    searchZoneTheme.colorEnabled
-                                                        ? searchZoneTheme
-                                                            .backgroundColor
-                                                        : Colors.transparent,
-                                                child: TickerMode(
-                                                  enabled:
-                                                      isTopChromeMotionEnabled,
-                                                  child: Column(
-                                                    crossAxisAlignment:
-                                                        CrossAxisAlignment
-                                                            .start,
-                                                    children: <Widget>[
-                                                      const SizedBox.shrink(),
-                                                      HomeSearchBar(
-                                                        onSearchTap:
-                                                            _openSearch,
-                                                        animateHints:
-                                                            isTopChromeMotionEnabled,
-                                                        searchTheme:
-                                                            searchZoneTheme,
-                                                        outerPadding:
-                                                            EdgeInsets.fromLTRB(
-                                                          12.w,
-                                                          0,
-                                                          12.w,
-                                                          10.h,
-                                                        ),
+                                  Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: <Widget>[
+                                      ValueListenableBuilder<bool>(
+                                        valueListenable:
+                                            _isTopChromeMotionEnabled,
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: <Widget>[
+                                            Consumer(
+                                              builder: (context, ref, _) {
+                                                final currentUser = ref.watch(
+                                                  currentUserProvider,
+                                                );
+                                                final addresses = currentUser ==
+                                                        null
+                                                    ? null
+                                                    : ref
+                                                        .watch(addressProvider)
+                                                        .asData
+                                                        ?.value;
+                                                final guestLocation =
+                                                    currentUser == null
+                                                        ? ref.watch(
+                                                            guestStorefrontProvider)
+                                                        : null;
+                                                final hasTrackingBanner = ref
+                                                    .watch(
+                                                        orderTrackingBannerProvider)
+                                                    .isNotEmpty;
+                                                return Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: <Widget>[
+                                                    const OrderTrackingTopBanner(),
+                                                    HomeHeader(
+                                                      addressText:
+                                                          resolveAddressLabel(
+                                                        isLoggedIn:
+                                                            currentUser != null,
+                                                        addresses: addresses,
+                                                        guestAddressLine1:
+                                                            guestLocation
+                                                                ?.addressLine1,
+                                                        guestCity:
+                                                            guestLocation?.city,
+                                                        guestPincode:
+                                                            guestLocation
+                                                                ?.pincode,
                                                       ),
-                                                    ],
-                                                  ),
-                                                ),
-                                              ),
-                                              // Store-closed banner — sits directly
-                                              // under the search bar (above category
-                                              // tabs) so it reads as a status line
-                                              // right below the primary nav action,
-                                              // not buried after tab browsing.
-                                              const StoreClosedBanner(),
-                                              // Category tabs — independent backgroundColor
-                                              // (falls back to searchZone color for legacy themes)
-                                              if (showCategoryTabs) ...<Widget>[
+                                                      onAddressTap: () {
+                                                        if (currentUser ==
+                                                            null) {
+                                                          showLocationPromptSheet(
+                                                            context,
+                                                            guestStorefront:
+                                                                true,
+                                                          );
+                                                          return;
+                                                        }
+                                                        showAddressSheet(
+                                                            context);
+                                                      },
+                                                      topBarTheme: topBarTheme,
+                                                      searchZoneColor:
+                                                          searchZoneTheme
+                                                                  .colorEnabled
+                                                              ? searchZoneTheme
+                                                                  .backgroundColor
+                                                              : Colors
+                                                                  .transparent,
+                                                      deliveryEtaMinutes:
+                                                          deliveryEtaMinutes,
+                                                      topPaddingOverride:
+                                                          hasTrackingBanner
+                                                              ? 0
+                                                              : null,
+                                                    ),
+                                                  ],
+                                                );
+                                              },
+                                            ),
+                                          ],
+                                        ),
+                                        builder: (
+                                          context,
+                                          isTopChromeMotionEnabled,
+                                          child,
+                                        ) {
+                                          return ColoredBox(
+                                            color: topBarTheme.colorEnabled
+                                                ? topBarTheme.backgroundColor
+                                                : Colors.transparent,
+                                            child: TickerMode(
+                                              enabled: isTopChromeMotionEnabled,
+                                              child: child!,
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                      ValueListenableBuilder<bool>(
+                                        valueListenable:
+                                            _isTopChromeMotionEnabled,
+                                        builder: (
+                                          context,
+                                          isTopChromeMotionEnabled,
+                                          _,
+                                        ) {
+                                          return Container(
+                                            key: _topSearchZoneKey,
+                                            color: Colors.transparent,
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: <Widget>[
+                                                // Search zone — uses searchZone.backgroundColor
                                                 ColoredBox(
-                                                  color:
-                                                      categoryTabsColorEnabled
-                                                          ? categoryTabsBgColor
-                                                          : Colors.transparent,
+                                                  color: searchZoneTheme
+                                                          .colorEnabled
+                                                      ? searchZoneTheme
+                                                          .backgroundColor
+                                                      : Colors.transparent,
                                                   child: TickerMode(
                                                     enabled:
                                                         isTopChromeMotionEnabled,
@@ -1145,48 +1144,97 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                                                           CrossAxisAlignment
                                                               .start,
                                                       children: <Widget>[
-                                                        Gap(4.h),
-                                                        const CategoryTabsRow(),
-                                                        Gap(6.h),
+                                                        const SizedBox.shrink(),
+                                                        HomeSearchBar(
+                                                          onSearchTap:
+                                                              _openSearch,
+                                                          animateHints:
+                                                              isTopChromeMotionEnabled,
+                                                          searchTheme:
+                                                              searchZoneTheme,
+                                                          outerPadding:
+                                                              EdgeInsets
+                                                                  .fromLTRB(
+                                                            12.w,
+                                                            0,
+                                                            12.w,
+                                                            10.h,
+                                                          ),
+                                                        ),
                                                       ],
                                                     ),
                                                   ),
                                                 ),
-                                              ] else
-                                                ColoredBox(
-                                                  color: searchZoneTheme
-                                                          .colorEnabled
-                                                      ? searchZoneTheme
-                                                          .backgroundColor
-                                                      : Colors.transparent,
-                                                  child: Gap(10.h),
-                                                ),
-                                            ],
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  ],
+                                                // Store-closed banner — sits directly
+                                                // under the search bar (above category
+                                                // tabs) so it reads as a status line
+                                                // right below the primary nav action,
+                                                // not buried after tab browsing.
+                                                const StoreClosedBanner(),
+                                                // Category tabs — independent backgroundColor
+                                                // (falls back to searchZone color for legacy themes)
+                                                if (showCategoryTabs) ...<Widget>[
+                                                  ColoredBox(
+                                                    color:
+                                                        categoryTabsColorEnabled
+                                                            ? categoryTabsBgColor
+                                                            : Colors
+                                                                .transparent,
+                                                    child: TickerMode(
+                                                      enabled:
+                                                          isTopChromeMotionEnabled,
+                                                      child: Column(
+                                                        crossAxisAlignment:
+                                                            CrossAxisAlignment
+                                                                .start,
+                                                        children: <Widget>[
+                                                          Gap(4.h),
+                                                          const CategoryTabsRow(),
+                                                          Gap(6.h),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ] else
+                                                  ColoredBox(
+                                                    color: searchZoneTheme
+                                                            .colorEnabled
+                                                        ? searchZoneTheme
+                                                            .backgroundColor
+                                                        : Colors.transparent,
+                                                    child: Gap(10.h),
+                                                  ),
+                                              ],
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                            // Never render old hardcoded campaign widgets as a
+                            // loading fallback. A missing remote manifest now
+                            // gets an explicit recovery action rather than a
+                            // blank area that looks like broken rendering.
+                            if (showSkeletonSections)
+                              const SliverToBoxAdapter(
+                                child: _HomeSectionsSkeleton(),
+                              )
+                            else if (showSectionsUnavailable)
+                              SliverToBoxAdapter(
+                                child: _HomeSectionsUnavailable(
+                                  onRetry: _refresh,
                                 ),
-                              ],
-                            ),
-                          ),
-                          // PHASE 1 FIX: Never render old summer/campaign
-                          // hardcoded widgets as a loading fallback.
-                          // Show skeleton while manifest loads; show
-                          // DynamicHomeSections once manifest arrives (even if
-                          // empty — an empty manifest means the dashboard
-                          // intentionally has no sections).
-                          if (showSkeletonSections)
-                            const SliverToBoxAdapter(
-                              child: _HomeSectionsSkeleton(),
-                            )
-                          else
-                            DynamicHomeSections(
-                              key: ValueKey<String>(activeTabKey),
-                            ),
-                          SliverToBoxAdapter(child: Gap(0)),
-                        ],
+                              )
+                            else
+                              DynamicHomeSections(
+                                key: ValueKey<String>(activeTabKey),
+                              ),
+                            SliverToBoxAdapter(child: Gap(0)),
+                          ],
+                        ),
                       ),
                     ),
                     Positioned(
@@ -2084,6 +2132,58 @@ class _HomeErrorView extends StatelessWidget {
       title: 'Home feed unavailable',
       message: 'We could not load the storefront right now. Try again.',
       onRetry: () => unawaited(onRetry()),
+    );
+  }
+}
+
+/// Used when the header is available but the dashboard-driven section
+/// manifest has no cache to render. This is deliberately separate from the
+/// full-screen [_HomeErrorView]: customers can still search, switch category
+/// tabs, set their location, or access notifications while a transient
+/// catalogue response is recovered.
+class _HomeSectionsUnavailable extends StatelessWidget {
+  const _HomeSectionsUnavailable({required this.onRetry});
+
+  final Future<void> Function() onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20.w, 40.h, 20.w, 56.h),
+      child: Column(
+        children: <Widget>[
+          Icon(
+            Icons.storefront_outlined,
+            size: 42.sp,
+            color: AppColors.warmOrangeDark,
+          ),
+          Gap(14.h),
+          Text(
+            'Fresh picks are updating',
+            textAlign: TextAlign.center,
+            style: AppTextStyles.h2.copyWith(fontSize: 19.sp),
+          ),
+          Gap(8.h),
+          Text(
+            'We could not load the latest catalogue. Please try again.',
+            textAlign: TextAlign.center,
+            style: AppTextStyles.bodyMedium.copyWith(
+              color: AppColors.textSecondary,
+            ),
+          ),
+          Gap(18.h),
+          FilledButton.icon(
+            onPressed: () => unawaited(onRetry()),
+            icon: const Icon(Icons.refresh_rounded),
+            label: const Text('Retry catalogue'),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.warmOrangeDark,
+              foregroundColor: Colors.white,
+              padding: EdgeInsets.symmetric(horizontal: 18.w, vertical: 12.h),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

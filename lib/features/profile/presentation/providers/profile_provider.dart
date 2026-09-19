@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -16,6 +15,7 @@ import 'package:bakaloo_flutter_app/features/auth/domain/entities/user_entity.da
 import 'package:bakaloo_flutter_app/features/profile/data/datasources/user_remote_datasource.dart';
 import 'package:bakaloo_flutter_app/features/profile/data/repositories/profile_repository_impl.dart';
 import 'package:bakaloo_flutter_app/features/profile/domain/entities/user_stats_entity.dart';
+import 'package:bakaloo_flutter_app/features/profile/domain/entities/avatar_upload.dart';
 import 'package:bakaloo_flutter_app/features/profile/domain/repositories/profile_repository.dart';
 import 'package:bakaloo_flutter_app/features/profile/domain/usecases/get_profile.dart';
 import 'package:bakaloo_flutter_app/features/profile/domain/usecases/get_stats.dart';
@@ -199,8 +199,8 @@ class ProfileNotifier extends _$ProfileNotifier {
     );
   }
 
-  Future<ProfileActionResult> uploadAvatar(File imageFile) async {
-    final result = await ref.read(uploadAvatarUseCaseProvider).call(imageFile);
+  Future<ProfileActionResult> uploadAvatar(AvatarUpload upload) async {
+    final result = await ref.read(uploadAvatarUseCaseProvider).call(upload);
 
     return result.fold(
       (failure) => ProfileActionResult(failure: failure),

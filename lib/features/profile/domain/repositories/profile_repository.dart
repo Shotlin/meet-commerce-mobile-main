@@ -1,10 +1,9 @@
-import 'dart:io';
-
 import 'package:dartz/dartz.dart';
 
 import 'package:bakaloo_flutter_app/core/errors/failure.dart';
 import 'package:bakaloo_flutter_app/features/auth/domain/entities/user_entity.dart';
 import 'package:bakaloo_flutter_app/features/profile/domain/entities/user_stats_entity.dart';
+import 'package:bakaloo_flutter_app/features/profile/domain/entities/avatar_upload.dart';
 
 class ProfileData {
   const ProfileData({
@@ -65,7 +64,7 @@ abstract class ProfileRepository {
     UpdateProfileParams params,
   );
 
-  Future<Either<Failure, String>> uploadAvatar(File imageFile);
+  Future<Either<Failure, String>> uploadAvatar(AvatarUpload upload);
 
   Future<Either<Failure, UserStatsEntity>> getStats();
 }

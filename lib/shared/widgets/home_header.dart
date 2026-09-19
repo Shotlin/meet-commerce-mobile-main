@@ -8,6 +8,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:bakaloo_flutter_app/core/providers/price_mode_provider.dart';
 import 'package:bakaloo_flutter_app/core/providers/store_provider.dart';
 import 'package:bakaloo_flutter_app/core/theme/remote_theme_model.dart';
+import 'package:bakaloo_flutter_app/features/notifications/presentation/providers/unread_count_provider.dart';
 import 'package:bakaloo_flutter_app/routing/route_names.dart';
 import 'package:bakaloo_flutter_app/shared/widgets/b2b_segment_toggle.dart';
 
@@ -114,38 +115,45 @@ class HomeHeader extends ConsumerWidget {
                             ),
                           ),
                           Gap(4.h),
-                          GestureDetector(
-                            onTap: onAddressTap,
-                            behavior: HitTestBehavior.opaque,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: <Widget>[
-                                Icon(
-                                  Icons.location_on_outlined,
-                                  color: topTextColor,
-                                  size: 17.sp,
-                                ),
-                                Gap(4.w),
-                                Flexible(
-                                  child: Text(
-                                    addressText,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontFamily: 'Inter',
-                                      fontSize: 13.sp,
-                                      fontWeight: FontWeight.w500,
+                          Semantics(
+                            button: true,
+                            label: 'Delivery address: $addressText',
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: onAddressTap,
+                                borderRadius: BorderRadius.circular(8),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: <Widget>[
+                                    Icon(
+                                      Icons.location_on_outlined,
                                       color: topTextColor,
+                                      size: 17.sp,
                                     ),
-                                  ),
+                                    Gap(4.w),
+                                    Flexible(
+                                      child: Text(
+                                        addressText,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontFamily: 'Inter',
+                                          fontSize: 13.sp,
+                                          fontWeight: FontWeight.w500,
+                                          color: topTextColor,
+                                        ),
+                                      ),
+                                    ),
+                                    Gap(2.w),
+                                    Icon(
+                                      Icons.keyboard_arrow_down_rounded,
+                                      color: topTextColor,
+                                      size: 18.sp,
+                                    ),
+                                  ],
                                 ),
-                                Gap(2.w),
-                                Icon(
-                                  Icons.keyboard_arrow_down_rounded,
-                                  color: topTextColor,
-                                  size: 18.sp,
-                                ),
-                              ],
+                              ),
                             ),
                           ),
                         ],
@@ -197,22 +205,24 @@ class _HeaderBottomCurveClipper extends CustomClipper<Path> {
   bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
 }
 
-/// B2B/B2C browsing toggle + profile shortcut — replaces the previous
-/// wallet/notification icons, which now live inside the Profile tab
-/// instead of the home header.
-class _HeaderActions extends StatelessWidget {
+/// B2B/B2C browsing toggle plus a directly accessible notification centre.
+/// Profile remains available in the persistent navigation, which avoids
+/// cramming three action buttons into the narrow phone header.
+class _HeaderActions extends ConsumerWidget {
   const _HeaderActions();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final unreadCount = ref.watch(unreadCountProvider);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
         const _PriceModeToggle(),
         Gap(10.w),
-        _ProfileButton(
+        _NotificationsButton(
           size: 42.w,
-          onTap: () => context.go(RouteNames.profile),
+          unreadCount: unreadCount,
+          onTap: () => context.go(RouteNames.notifications),
         ),
       ],
     );
@@ -245,39 +255,82 @@ class _PriceModeToggle extends ConsumerWidget {
   }
 }
 
-class _ProfileButton extends StatelessWidget {
-  const _ProfileButton({required this.size, required this.onTap});
+class _NotificationsButton extends StatelessWidget {
+  const _NotificationsButton({
+    required this.size,
+    required this.unreadCount,
+    required this.onTap,
+  });
 
   final double size;
+  final int unreadCount;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Container(
-        width: size,
-        height: size,
-        decoration: const BoxDecoration(
-          shape: BoxShape.circle,
-          boxShadow: <BoxShadow>[
-            BoxShadow(
-              color: Color(0x242A1A47),
-              blurRadius: 12,
-              offset: Offset(0, 4),
+    return Semantics(
+      button: true,
+      label: unreadCount > 0
+          ? 'Notifications, $unreadCount unread'
+          : 'Notifications',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          customBorder: const CircleBorder(),
+          child: Container(
+            width: size,
+            height: size,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              boxShadow: <BoxShadow>[
+                BoxShadow(
+                  color: Color(0x242A1A47),
+                  blurRadius: 12,
+                  offset: Offset(0, 4),
+                ),
+              ],
             ),
-          ],
-        ),
-        child: ClipOval(
-          child: ColoredBox(
-            color: Colors.white,
-            child: Center(
-              child: PhosphorIcon(
-                PhosphorIcons.userCircle,
-                size: 26.sp,
-                color: const Color(0xFF2A1A47),
-              ),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: <Widget>[
+                ClipOval(
+                  child: ColoredBox(
+                    color: Colors.white,
+                    child: Center(
+                      child: PhosphorIcon(
+                        PhosphorIcons.bell,
+                        size: 24.sp,
+                        color: const Color(0xFF2A1A47),
+                      ),
+                    ),
+                  ),
+                ),
+                if (unreadCount > 0)
+                  Positioned(
+                    top: -2.h,
+                    right: -2.w,
+                    child: Container(
+                      constraints:
+                          BoxConstraints(minWidth: 16.w, minHeight: 16.h),
+                      padding: EdgeInsets.symmetric(horizontal: 4.w),
+                      alignment: Alignment.center,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFD9202A),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Text(
+                        unreadCount > 99 ? '99+' : '$unreadCount',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontFamily: 'Inter',
+                          fontSize: 9.sp,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
         ),

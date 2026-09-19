@@ -67,104 +67,108 @@ class _TutorialTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => TutorialPlayerScreen(tutorial: tutorial),
+    return Semantics(
+      button: true,
+      label: 'Play tutorial ${tutorial.title}',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => TutorialPlayerScreen(tutorial: tutorial),
+          ),
         ),
-      ),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-          border: Border.all(color: AppColors.borderLight),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            ClipRRect(
-              borderRadius: const BorderRadius.horizontal(
-                left: Radius.circular(AppDimensions.radiusMd),
-              ),
-              child: Stack(
-                alignment: Alignment.center,
-                children: <Widget>[
-                  Image.network(
-                    tutorial.thumbnailUrl,
-                    width: 110.w,
-                    height: 78.w,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+            border: Border.all(color: AppColors.borderLight),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              ClipRRect(
+                borderRadius: const BorderRadius.horizontal(
+                  left: Radius.circular(AppDimensions.radiusMd),
+                ),
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: <Widget>[
+                    Image.network(
+                      tutorial.thumbnailUrl,
                       width: 110.w,
                       height: 78.w,
-                      color: AppColors.bgSection,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                        width: 110.w,
+                        height: 78.w,
+                        color: AppColors.bgSection,
+                        child: Icon(
+                          Icons.videocam_off_outlined,
+                          color: AppColors.textTertiary,
+                          size: 20.sp,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      width: 28.w,
+                      height: 28.w,
+                      decoration: const BoxDecoration(
+                        color: Colors.black45,
+                        shape: BoxShape.circle,
+                      ),
                       child: Icon(
-                        Icons.videocam_off_outlined,
-                        color: AppColors.textTertiary,
-                        size: 20.sp,
+                        Icons.play_arrow_rounded,
+                        color: Colors.white,
+                        size: 18.sp,
                       ),
                     ),
-                  ),
-                  Container(
-                    width: 28.w,
-                    height: 28.w,
-                    decoration: const BoxDecoration(
-                      color: Colors.black45,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.play_arrow_rounded,
-                      color: Colors.white,
-                      size: 18.sp,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Gap(12.w),
-            Expanded(
-              child: Padding(
-                padding: EdgeInsets.symmetric(vertical: 10.h),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    Text(
-                      tutorial.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTextStyles.labelLarge.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    if (tutorial.language != null) ...<Widget>[
-                      Gap(6.h),
-                      Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 8.w,
-                          vertical: 3.h,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.bgSection,
-                          borderRadius: BorderRadius.circular(
-                            AppDimensions.radiusFull,
-                          ),
-                        ),
-                        child: Text(
-                          tutorial.language!,
-                          style: AppTextStyles.bodySmall.copyWith(
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ),
-                    ],
                   ],
                 ),
               ),
-            ),
-            Gap(8.w),
-          ],
+              Gap(12.w),
+              Expanded(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 10.h),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Text(
+                        tutorial.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.labelLarge.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      if (tutorial.language != null) ...<Widget>[
+                        Gap(6.h),
+                        Container(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 8.w,
+                            vertical: 3.h,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.bgSection,
+                            borderRadius: BorderRadius.circular(
+                              AppDimensions.radiusFull,
+                            ),
+                          ),
+                          child: Text(
+                            tutorial.language!,
+                            style: AppTextStyles.bodySmall.copyWith(
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              Gap(8.w),
+            ],
+          ),
         ),
       ),
     );

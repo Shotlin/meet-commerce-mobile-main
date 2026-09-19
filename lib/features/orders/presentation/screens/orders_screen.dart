@@ -296,7 +296,7 @@ class _OrdersHeader extends ConsumerWidget {
               ),
               SizedBox(width: 8.w),
               Text(
-                'FreshCuts',
+                'Bakaloo',
                 style: TextStyle(
                   fontFamily: 'PlusJakartaSans',
                   fontSize: 19.sp,

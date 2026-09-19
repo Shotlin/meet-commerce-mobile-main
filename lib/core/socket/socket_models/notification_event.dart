@@ -23,7 +23,7 @@ class NotificationEvent {
       title: _readString(
         json,
         <String>['title'],
-        fallback: 'FreshCuts',
+        fallback: 'Bakaloo',
       ),
       body: _readString(
         json,

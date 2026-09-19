@@ -117,7 +117,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen>
     // checkout total always matches what the backend actually charges.
     final billSummaryAsync = ref.watch(billSummaryProvider);
     final billSummary = billSummaryAsync.asData?.value;
-    final billSummaryLoading = billSummaryAsync.isLoading && billSummary == null;
+    final billSummaryLoading =
+        billSummaryAsync.isLoading && billSummary == null;
     final rawPayable = billSummary?.payable ?? summary.total;
     // Wallet-balance toggle — a pure client-side derivation from two values
     // already loaded here (walletProvider, billSummaryProvider), never a
@@ -137,9 +138,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen>
     final walletApplied = (checkoutState.useWallet && canUseWallet)
         ? ((walletBalance ?? 0.0) < rawPayable ? walletBalance! : rawPayable)
         : 0.0;
-    final remainderPayable = rawPayable - walletApplied < 0
-        ? 0.0
-        : rawPayable - walletApplied;
+    final remainderPayable =
+        rawPayable - walletApplied < 0 ? 0.0 : rawPayable - walletApplied;
     final effectiveSummary = summary.copyWith(total: remainderPayable);
     final isPlacing = checkoutState.isPlacingOrder;
     final paymentState = ref.watch(paymentProvider);
@@ -199,8 +199,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen>
         // Also spins/disables the CTA while the real bill is still loading
         // (see the matching guard in _handlePayment) — shows the customer
         // why the button is briefly unavailable instead of a dead tap.
-        isLoading:
-            isPlacing || paymentState.isPendingConfirmation || billSummaryLoading,
+        isLoading: isPlacing ||
+            paymentState.isPendingConfirmation ||
+            billSummaryLoading,
         onPlaceOrder: () => _handlePayment(checkoutState.paymentMethod),
         showWalletToggle: showWalletToggle,
         walletBalance: walletBalance ?? 0.0,
@@ -263,7 +264,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen>
   }) {
     final address = checkoutState.selectedAddress;
     final selectedMethod = checkoutState.paymentMethod;
-    final paymentMethods = billSummary?.paymentMethods ?? const PaymentMethodsInfo();
+    final paymentMethods =
+        billSummary?.paymentMethods ?? const PaymentMethodsInfo();
     final cod = paymentMethods.cod;
 
     return ListView(
@@ -339,8 +341,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen>
                 .read(checkoutProvider.notifier)
                 .selectPaymentMethod(PaymentMethod.online),
             onPay: () => _handlePayment(PaymentMethod.online),
-            isPlacingOrder: checkoutState.paymentMethod == PaymentMethod.online &&
-                checkoutState.isPlacingOrder,
+            isPlacingOrder:
+                checkoutState.paymentMethod == PaymentMethod.online &&
+                    checkoutState.isPlacingOrder,
           ),
 
         Gap(18.h),
@@ -363,7 +366,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen>
     }
 
     if (currentState.selectedAddress == null) {
-      AppToast.show(context, '📍 Please choose a delivery address first.', type: ToastType.warning);
+      AppToast.show(context, '📍 Please choose a delivery address first.',
+          type: ToastType.warning);
       return;
     }
 
@@ -424,7 +428,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen>
     // the order) — set this explicitly rather than assuming it's already
     // true.
     ref.read(checkoutProvider.notifier).setUseWallet(true);
-    return _handlePayment(codEnabled ? PaymentMethod.cod : PaymentMethod.online);
+    return _handlePayment(
+        codEnabled ? PaymentMethod.cod : PaymentMethod.online);
   }
 
   // ── Address Change ──────────────────────────────────────────────────
@@ -476,10 +481,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen>
     // through unchecked). Fails open on a network/validation error rather
     // than blocking checkout on a transient hiccup — the backend's own
     // order-placement check remains the authoritative backstop regardless.
-    final validation = await ref
-        .read(validatePincodeUseCaseProvider)
-        .call(selected.pincode);
-    final available = validation.fold((_) => true, (result) => result.available);
+    final validation =
+        await ref.read(validatePincodeUseCaseProvider).call(selected.pincode);
+    final available =
+        validation.fold((_) => true, (result) => result.available);
     if (!available) {
       if (!context.mounted) {
         return;
@@ -516,7 +521,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen>
   /// how much more they need — and refreshes the balance on return. The
   /// customer may have topped up even if they didn't pop with `true`, so
   /// always refresh rather than trusting the pop result.
-  Future<void> _goToTopup(BuildContext context, {double? suggestedAmount}) async {
+  Future<void> _goToTopup(BuildContext context,
+      {double? suggestedAmount}) async {
     await context.push<bool>(RouteNames.topup, extra: suggestedAmount);
     if (!mounted) {
       return;
@@ -593,9 +599,11 @@ class _BillAccordion extends StatelessWidget {
         children: <Widget>[
           _BillRow(label: 'Items total', value: summary.subtotal),
           Gap(8.h),
-          _BillRow(label: 'Delivery fee (estimated)', value: summary.deliveryFee),
+          _BillRow(
+              label: 'Delivery fee (estimated)', value: summary.deliveryFee),
           Gap(8.h),
-          _BillRow(label: 'Platform fee (estimated)', value: summary.platformFee),
+          _BillRow(
+              label: 'Platform fee (estimated)', value: summary.platformFee),
           if (summary.discount > 0) ...<Widget>[
             Gap(8.h),
             _BillRow(
@@ -609,8 +617,7 @@ class _BillAccordion extends StatelessWidget {
           _BillRow(
             label: 'Total (estimated)',
             value: summary.total,
-            valueStyle:
-                AppTextStyles.h3.copyWith(fontWeight: FontWeight.w800),
+            valueStyle: AppTextStyles.h3.copyWith(fontWeight: FontWeight.w800),
           ),
           Gap(6.h),
           Text(
@@ -686,11 +693,14 @@ class _BillAccordion extends StatelessWidget {
     // via the generic `fees` list; the codes above already have dedicated
     // rows so they're excluded here to avoid double-counting.
     for (final FeeLine fee in bs.fees.where(
-      (FeeLine f) => !_dedicatedFeeCodes.contains(f.code) && f.amount > 0 && !f.waived,
+      (FeeLine f) =>
+          !_dedicatedFeeCodes.contains(f.code) && f.amount > 0 && !f.waived,
     )) {
       rows
         ..add(Gap(8.h))
-        ..add(_BillRow(label: fee.label.isNotEmpty ? fee.label : 'Fee', value: fee.amount));
+        ..add(_BillRow(
+            label: fee.label.isNotEmpty ? fee.label : 'Fee',
+            value: fee.amount));
     }
     if (bs.couponDiscount > 0) {
       rows
@@ -923,7 +933,8 @@ class _OrderItemsReviewCard extends StatelessWidget {
           ...List<Widget>.generate(items.length, (index) {
             final item = items[index];
             return Padding(
-              padding: EdgeInsets.only(bottom: index == items.length - 1 ? 0 : 10.h),
+              padding:
+                  EdgeInsets.only(bottom: index == items.length - 1 ? 0 : 10.h),
               child: _OrderItemReviewRow(item: item),
             );
           }),
@@ -1003,7 +1014,8 @@ class _OrderItemReviewRow extends StatelessWidget {
                 children: <Widget>[
                   if (hasOption)
                     Container(
-                      padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 1.h),
+                      padding:
+                          EdgeInsets.symmetric(horizontal: 6.w, vertical: 1.h),
                       decoration: BoxDecoration(
                         color: const Color(0xFFF1F5F9),
                         borderRadius: BorderRadius.circular(4.r),
@@ -1069,10 +1081,12 @@ class _DeliveryInfoCard extends StatelessWidget {
   final int itemCount;
   final VoidCallback onChangeAddress;
   final SelectedDeliverySlot? selectedSlot;
+
   /// Opens the same schedule-delivery sheet the cart screen uses — checkout
   /// previously only showed the chosen slot read-only, with no way to
   /// change it without navigating back to the cart.
   final VoidCallback? onChangeSlot;
+
   /// Opens the "view store hours" sheet. Only rendered when provided.
   final VoidCallback? onViewHoursTap;
 
@@ -1125,7 +1139,9 @@ class _DeliveryInfoCard extends StatelessWidget {
                         Gap(8.w),
                         Container(
                           padding: EdgeInsets.symmetric(
-                              horizontal: 8.w, vertical: 2.h,),
+                            horizontal: 8.w,
+                            vertical: 2.h,
+                          ),
                           decoration: BoxDecoration(
                             color: AppColors.orderVioletSurface,
                             borderRadius:
@@ -1194,7 +1210,7 @@ class _DeliveryInfoCard extends StatelessWidget {
                     Icon(
                       Icons.calendar_month_outlined,
                       size: 14.sp,
-                      color: const Color(0xFFD02428),
+                      color: AppColors.brandRed,
                     ),
                     Gap(6.w),
                     Expanded(
@@ -1203,7 +1219,7 @@ class _DeliveryInfoCard extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 12.sp,
                           fontWeight: FontWeight.w600,
-                          color: const Color(0xFFD02428),
+                          color: AppColors.brandRed,
                           fontFamily: 'Inter',
                         ),
                       ),
@@ -1213,7 +1229,7 @@ class _DeliveryInfoCard extends StatelessWidget {
                       Icon(
                         Icons.edit_calendar_outlined,
                         size: 14.sp,
-                        color: const Color(0xFFD02428),
+                        color: AppColors.brandRed,
                       ),
                     ],
                   ],
@@ -1718,7 +1734,8 @@ class _CodPaymentCard extends StatelessWidget {
             decoration: BoxDecoration(
               color: AppColors.errorRed.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-              border: Border.all(color: AppColors.errorRed.withValues(alpha: 0.25)),
+              border:
+                  Border.all(color: AppColors.errorRed.withValues(alpha: 0.25)),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1869,6 +1886,7 @@ class _CheckoutBottomBar extends StatelessWidget {
   final bool walletLoading;
   final bool useWallet;
   final double walletApplied;
+
   /// The order's real payable total, before any wallet offset — used only
   /// to decide whether the wallet row's expanded action is "Pay via Wallet"
   /// or "Add Money". `summary.total` is already the post-wallet remainder.
@@ -1972,7 +1990,7 @@ class _CheckoutBottomBar extends StatelessWidget {
 /// wallet balance available — applies (or reverts) the wallet offset
 /// against whichever payment method is currently selected, rather than
 /// requiring wallet as a separate exclusive payment method.
-/// Wallet card — a self-contained "FreshCuts Wallet" payment card, offsetting
+/// Wallet card — a self-contained "Bakaloo Wallet" payment card, offsetting
 /// [_CheckoutBottomBar]'s "Total payable" figure regardless of the chosen
 /// payment method. Shown only when the admin allows wallet at all (even at
 /// zero balance).
@@ -2005,9 +2023,9 @@ class _WalletToggleRow extends StatelessWidget {
   final VoidCallback? onAddMoney;
   final VoidCallback? onPayFullWallet;
 
-  static const _brandRed = Color(0xFFD02428);
-  static const _redBg = Color(0xFFFBEAEA);
-  static const _borderColor = Color(0xFFF0C6C7);
+  static const _brandRed = AppColors.brandRed;
+  static const _redBg = AppColors.brandRedSurface;
+  static const _borderColor = AppColors.brandRedBorder;
   static const _titleColor = Color(0xFF171717);
   static const _mutedGray = Color(0xFF737684);
 
@@ -2057,7 +2075,7 @@ class _WalletToggleRow extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
                 Text(
-                  'FreshCuts Wallet',
+                  'Bakaloo Wallet',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   softWrap: false,
@@ -2152,7 +2170,7 @@ class _WalletToggleRow extends StatelessWidget {
 /// outlined circle (off) — used instead of a [Switch] specifically because
 /// Switch's minimum track width (~34dp, ~90px on this density) was, next to
 /// the "Add Money" button, squeezing the wallet card's title/subtitle text
-/// column down to where "FreshCuts Wallet" wrapped onto two lines and the
+/// column down to where "Bakaloo Wallet" wrapped onto two lines and the
 /// whole card ballooned past its intended compact height. This toggle is
 /// roughly a third of that width.
 class _CheckmarkToggle extends StatelessWidget {
@@ -2166,7 +2184,7 @@ class _CheckmarkToggle extends StatelessWidget {
   final bool enabled;
   final ValueChanged<bool> onChanged;
 
-  static const _brandRed = Color(0xFFD02428);
+  static const _brandRed = AppColors.brandRed;
 
   @override
   Widget build(BuildContext context) {
@@ -2215,10 +2233,10 @@ class _PayWithWalletButton extends StatelessWidget {
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: onPressed != null
-                  ? const <Color>[Color(0xFFD02428), Color(0xFFA81C1F)]
+                  ? const <Color>[AppColors.brandRed, AppColors.brandRedDark]
                   : <Color>[
-                      const Color(0xFFD02428).withValues(alpha: 0.4),
-                      const Color(0xFFA81C1F).withValues(alpha: 0.4),
+                      AppColors.brandRed.withValues(alpha: 0.4),
+                      AppColors.brandRedDark.withValues(alpha: 0.4),
                     ],
             ),
             borderRadius: BorderRadius.circular(13.r),
@@ -2257,7 +2275,7 @@ class _AddMoneyButton extends StatelessWidget {
 
   final VoidCallback? onPressed;
 
-  static const _brandRed = Color(0xFFD02428);
+  static const _brandRed = AppColors.brandRed;
 
   @override
   Widget build(BuildContext context) {

@@ -13,7 +13,7 @@ String resolveAddressLabel({
     final line = guestAddressLine1?.trim() ?? '';
     if (city.isNotEmpty && pincode.isNotEmpty) return '$city, $pincode';
     if (line.isNotEmpty) return line;
-    return 'Log in to add your delivery address';
+    return 'Set your delivery location';
   }
   if (addresses == null || addresses.isEmpty) {
     return 'Add your delivery address for faster checkout';

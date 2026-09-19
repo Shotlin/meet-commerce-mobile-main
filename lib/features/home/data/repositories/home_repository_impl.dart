@@ -1,11 +1,8 @@
-import 'dart:async';
-
 import 'package:dartz/dartz.dart';
 import 'package:dio/dio.dart';
 
 import 'package:bakaloo_flutter_app/core/errors/error_handler.dart';
 import 'package:bakaloo_flutter_app/core/errors/failure.dart';
-import 'package:bakaloo_flutter_app/core/storage/cache_strategy.dart';
 import 'package:bakaloo_flutter_app/core/storage/hive_service.dart';
 import 'package:bakaloo_flutter_app/core/constants/storage_keys.dart';
 import 'package:bakaloo_flutter_app/features/home/data/datasources/home_remote_datasource.dart';
@@ -22,16 +19,10 @@ class HomeRepositoryImpl implements HomeRepository {
 
   @override
   Future<Either<Failure, List<BannerEntity>>> getBanners({String? type}) async {
-    final cacheKey =
-        type == null ? StorageKeys.cacheBanners : '${StorageKeys.cacheBanners}_$type';
+    final cacheKey = type == null
+        ? StorageKeys.cacheBanners
+        : '${StorageKeys.cacheBanners}_$type';
     final cached = _readBannerCache(cacheKey);
-    final isFresh = HiveService.isFresh(cacheKey, CacheStrategy.banners.ttl!);
-
-    if (cached.isNotEmpty && isFresh) {
-      unawaited(_refreshBanners(cacheKey, type));
-      return Right(cached);
-    }
-
     try {
       final banners = await _remoteDataSource.getBanners(type: type);
       await HiveService.bannersBox.put(
@@ -63,16 +54,6 @@ class HomeRepositoryImpl implements HomeRepository {
   }) async {
     final cacheKey = '${StorageKeys.cacheFeatured}_$limit';
     final cached = _readFeaturedCache(cacheKey);
-    final isFresh = HiveService.isFresh(
-      cacheKey,
-      CacheStrategy.featuredProducts.ttl!,
-    );
-
-    if (cached.isNotEmpty && isFresh) {
-      unawaited(_refreshFeatured(cacheKey, limit));
-      return Right(cached);
-    }
-
     try {
       final products =
           await _remoteDataSource.getFeaturedProducts(limit: limit);
@@ -97,29 +78,6 @@ class HomeRepositoryImpl implements HomeRepository {
         UnknownFailure(message: 'Unable to load featured products right now.'),
       );
     }
-  }
-
-  Future<void> _refreshBanners(String cacheKey, String? type) async {
-    try {
-      final banners = await _remoteDataSource.getBanners(type: type);
-      await HiveService.bannersBox.put(
-        cacheKey,
-        banners.map((BannerModel banner) => banner.toJson()).toList(),
-      );
-      await HiveService.markCached(cacheKey);
-    } catch (_) {}
-  }
-
-  Future<void> _refreshFeatured(String cacheKey, int limit) async {
-    try {
-      final products =
-          await _remoteDataSource.getFeaturedProducts(limit: limit);
-      await HiveService.productsBox.put(
-        cacheKey,
-        products.map((ProductModel product) => product.toJson()).toList(),
-      );
-      await HiveService.markCached(cacheKey);
-    } catch (_) {}
   }
 
   List<BannerEntity> _readBannerCache(String cacheKey) {

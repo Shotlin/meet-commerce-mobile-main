@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
 
+import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
 import 'package:bakaloo_flutter_app/features/cart/domain/entities/bill_summary_entity.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/providers/cart_enhancement_providers.dart';
 import 'package:bakaloo_flutter_app/features/checkout/domain/entities/delivery_slot_entity.dart';
@@ -11,9 +12,9 @@ import 'package:bakaloo_flutter_app/features/checkout/presentation/providers/del
 import 'package:bakaloo_flutter_app/features/checkout/presentation/providers/store_status_provider.dart';
 
 // ─── Brand colours ────────────────────────────────────────────────────────────
-const _kBrandRed = Color(0xFFD02428);
+const _kBrandRed = AppColors.brandRed;
 const _kBrandRedLight = Color(0xFFF5F3FF);
-const _kBrandRedBorder = Color(0xFFDDD6FE);
+const _kBrandRedBorder = AppColors.brandRedBorder;
 const _kGreen = Color(0xFF0AC26B);
 const _kBlack = Color(0xFF111827);
 const _kGrey = Color(0xFF6B7280);
@@ -39,8 +40,7 @@ class ScheduleDeliverySheet extends ConsumerStatefulWidget {
       _ScheduleDeliverySheetState();
 }
 
-class _ScheduleDeliverySheetState
-    extends ConsumerState<ScheduleDeliverySheet> {
+class _ScheduleDeliverySheetState extends ConsumerState<ScheduleDeliverySheet> {
   bool _isScheduled = false;
   bool _quickDeliverySelected = false;
   int _selectedDayIndex = 0;
@@ -66,17 +66,20 @@ class _ScheduleDeliverySheetState
     // still loading, matching BillSummaryEntity's own default.
     final billSummary = ref.watch(billSummaryProvider).asData?.value;
     final etaMinutes = billSummary?.deliveryEstimate.minutes ?? 30;
-    final quickDelivery = billSummary?.quickDelivery ?? const QuickDeliveryInfo();
+    final quickDelivery =
+        billSummary?.quickDelivery ?? const QuickDeliveryInfo();
     // Live preview of the promised delivery time as the customer flips the
     // Quick Delivery toggle, before they even confirm — quickDelivery.etaMinutes
     // is static admin config, already loaded, so this needs no extra network
     // call to reflect immediately.
-    final displayEtaMinutes = !_isScheduled && _quickDeliverySelected && quickDelivery.enabled
-        ? quickDelivery.etaMinutes
-        : etaMinutes;
+    final displayEtaMinutes =
+        !_isScheduled && _quickDeliverySelected && quickDelivery.enabled
+            ? quickDelivery.etaMinutes
+            : etaMinutes;
     // Fail-open while loading (StoreStatusEntity.open() default) — never
     // block ASAP just because this specific fetch hasn't resolved yet.
-    final storeOpen = ref.watch(storeStatusProvider).asData?.value.isOpen ?? true;
+    final storeOpen =
+        ref.watch(storeStatusProvider).asData?.value.isOpen ?? true;
 
     // A day with zero bookable slots (store force-closed all day, or the
     // day is simply over) reads as broken sitting in the picker as a
@@ -89,11 +92,11 @@ class _ScheduleDeliverySheetState
     // list if filtering would leave nothing at all, so the picker never
     // renders fully empty.
     final rawDays = slotsAsync.value;
-    final effectiveDays = rawDays
-        ?.where((d) => d.slots.any((s) => s.available))
-        .toList();
-    final displayDays =
-        (effectiveDays == null || effectiveDays.isEmpty) ? rawDays : effectiveDays;
+    final effectiveDays =
+        rawDays?.where((d) => d.slots.any((s) => s.available)).toList();
+    final displayDays = (effectiveDays == null || effectiveDays.isEmpty)
+        ? rawDays
+        : effectiveDays;
     // _selectedDayIndex can point past the end once a day with nothing
     // bookable (e.g. Today, force-closed) drops out of the list above.
     final safeDayIndex = (displayDays == null || displayDays.isEmpty)
@@ -189,7 +192,8 @@ class _ScheduleDeliverySheetState
                   padding: EdgeInsets.symmetric(horizontal: 16.w),
                   child: Container(
                     margin: EdgeInsets.only(bottom: 10.h),
-                    padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
+                    padding:
+                        EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
                     decoration: BoxDecoration(
                       color: const Color(0xFFFEF3C7),
                       borderRadius: BorderRadius.circular(10.r),
@@ -197,7 +201,8 @@ class _ScheduleDeliverySheetState
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.info_outline_rounded, size: 16.sp, color: const Color(0xFF92400E)),
+                        Icon(Icons.info_outline_rounded,
+                            size: 16.sp, color: const Color(0xFF92400E)),
                         Gap(8.w),
                         Expanded(
                           child: Text(
@@ -222,7 +227,9 @@ class _ScheduleDeliverySheetState
                     _ModeCard(
                       icon: Icons.bolt_rounded,
                       title: 'ASAP',
-                      subtitle: storeOpen ? 'Deliver in $displayEtaMinutes mins' : 'Unavailable — store closed',
+                      subtitle: storeOpen
+                          ? 'Deliver in $displayEtaMinutes mins'
+                          : 'Unavailable — store closed',
                       selected: !_isScheduled,
                       disabled: !storeOpen,
                       onTap: () => setState(() {
@@ -320,8 +327,7 @@ class _ScheduleDeliverySheetState
               SafeArea(
                 top: false,
                 child: Padding(
-                  padding:
-                      EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 16.h),
+                  padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 16.h),
                   child: _ConfirmButton(
                     isScheduled: _isScheduled,
                     selectedSlot: _selectedSlot,
@@ -401,7 +407,11 @@ class _ModeCard extends StatelessWidget {
             children: [
               Icon(
                 icon,
-                color: disabled ? _kGrey.withValues(alpha: 0.5) : isSelected ? _kBrandRed : _kGrey,
+                color: disabled
+                    ? _kGrey.withValues(alpha: 0.5)
+                    : isSelected
+                        ? _kBrandRed
+                        : _kGrey,
                 size: 20.sp,
               ),
               Gap(8.w),
@@ -414,7 +424,11 @@ class _ModeCard extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 13.sp,
                         fontWeight: FontWeight.w700,
-                        color: disabled ? _kGrey : isSelected ? _kBrandRed : _kBlack,
+                        color: disabled
+                            ? _kGrey
+                            : isSelected
+                                ? _kBrandRed
+                                : _kBlack,
                         fontFamily: 'Inter',
                       ),
                     ),
@@ -422,7 +436,11 @@ class _ModeCard extends StatelessWidget {
                       subtitle,
                       style: TextStyle(
                         fontSize: 11.sp,
-                        color: disabled ? _kGrey : isSelected ? _kBrandRed : _kGrey,
+                        color: disabled
+                            ? _kGrey
+                            : isSelected
+                                ? _kBrandRed
+                                : _kGrey,
                         fontFamily: 'Inter',
                       ),
                     ),
@@ -584,8 +602,8 @@ class _SlotPickerContent extends StatelessWidget {
                     onTap: () => onDaySelected(i),
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 150),
-                      padding: EdgeInsets.symmetric(
-                          horizontal: 14.w, vertical: 6.h),
+                      padding:
+                          EdgeInsets.symmetric(horizontal: 14.w, vertical: 6.h),
                       decoration: BoxDecoration(
                         color: selected ? _kBrandRed : _kGreyLight,
                         borderRadius: BorderRadius.circular(99.r),
@@ -798,7 +816,8 @@ class _ConfirmButton extends StatelessWidget {
           child: ElevatedButton(
             onPressed: canConfirm ? () => onConfirm(selectedSlot) : null,
             style: ElevatedButton.styleFrom(
-              backgroundColor: canConfirm ? _kBrandRed : const Color(0xFFE5E7EB),
+              backgroundColor:
+                  canConfirm ? _kBrandRed : const Color(0xFFE5E7EB),
               foregroundColor: canConfirm ? _kWhite : _kGrey,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12.r),
@@ -806,9 +825,7 @@ class _ConfirmButton extends StatelessWidget {
               elevation: 0,
             ),
             child: Text(
-              isScheduled && selectedSlot != null
-                  ? 'Confirm schedule'
-                  : label,
+              isScheduled && selectedSlot != null ? 'Confirm schedule' : label,
               style: TextStyle(
                 fontSize: 15.sp,
                 fontWeight: FontWeight.w700,

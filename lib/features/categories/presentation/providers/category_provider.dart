@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import 'package:bakaloo_flutter_app/core/di/providers.dart';
+import 'package:bakaloo_flutter_app/core/refresh/storefront_refresh_provider.dart';
 import 'package:bakaloo_flutter_app/features/categories/data/datasources/category_remote_datasource.dart';
 import 'package:bakaloo_flutter_app/features/categories/data/local/category_local_datasource.dart';
 import 'package:bakaloo_flutter_app/features/categories/data/repositories/category_repository_impl.dart';
@@ -44,6 +45,7 @@ final getCategoryProductsUseCaseProvider =
 
 @riverpod
 Future<List<CategoryEntity>> categoryCollection(Ref ref) async {
+  ref.watch(storefrontRefreshEpochProvider);
   final result = await ref.read(getCategoriesUseCaseProvider).call();
   return result.fold((_) => const <CategoryEntity>[], (data) => data);
 }

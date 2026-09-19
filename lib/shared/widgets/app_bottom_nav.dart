@@ -10,13 +10,10 @@ import 'package:go_router/go_router.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import 'package:bakaloo_flutter_app/core/notifications/notification_router.dart';
+import 'package:bakaloo_flutter_app/core/layout/responsive_breakpoints.dart';
 import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
 import 'package:bakaloo_flutter_app/core/theme/app_text_styles.dart';
 import 'package:bakaloo_flutter_app/features/auth/presentation/providers/auth_gate_controller.dart';
-import 'package:bakaloo_flutter_app/features/auth/presentation/providers/auth_notifier.dart';
-import 'package:bakaloo_flutter_app/features/auth/presentation/providers/auth_state.dart';
-import 'package:bakaloo_flutter_app/features/location/presentation/providers/guest_storefront_provider.dart';
-import 'package:bakaloo_flutter_app/features/location/presentation/widgets/guest_location_gate.dart';
 import 'package:bakaloo_flutter_app/features/cart/domain/entities/bill_summary_entity.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/providers/cart_enhancement_providers.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/providers/cart_provider.dart';
@@ -123,25 +120,9 @@ class _AppShellState extends ConsumerState<AppShell>
 
   @override
   Widget build(BuildContext context) {
-    final authState = ref.watch(authStateProvider);
-    final guestStorefront = ref.watch(guestStorefrontProvider);
-
-    // Do not rely on the asynchronous storefront-access wrapper for guests:
-    // it can retain its initial `false` value while the locally saved guest
-    // storefront token has already restored. Watching the source state here
-    // makes a cold reopen immediately leave the skeleton without a second
-    // location prompt or location API call.
-    if (authState is! AuthAuthenticated) {
-      if (!guestStorefront.isReady) {
-        return GuestLocationGate(state: guestStorefront);
-      }
-    } else {
-      final storefrontAccess = ref.watch(storefrontAccessProvider);
-      if (storefrontAccess.value != true) {
-        return GuestLocationGate(state: guestStorefront);
-      }
-    }
-
+    // Catalogue navigation must stay available when a browser has not shared
+    // a location. Location and address validation happen when a customer
+    // selects a delivery-sensitive action or reaches checkout.
     final navigationShell = widget.navigationShell;
     final branchNavigatorKeys = widget.branchNavigatorKeys;
     final bottomInset = MediaQuery.paddingOf(context).bottom;
@@ -152,6 +133,40 @@ class _AppShellState extends ConsumerState<AppShell>
     final currentBranchNavigator =
         branchNavigatorKeys[selectedIndex].currentState;
     final branchCanPop = currentBranchNavigator?.canPop() ?? false;
+
+    Future<void> selectTab(int index) async {
+      HapticFeedback.lightImpact();
+      if (index == selectedIndex) {
+        return;
+      }
+      final nextPath = _tabs[index].path;
+      if (RouteAccess.isProtectedTab(nextPath) &&
+          !authGate.isAuthenticated &&
+          context.mounted) {
+        authGate.rememberRouteIntent(nextPath);
+        context.push(RouteNames.phone);
+        return;
+      }
+      _showNav();
+      await routeLoadingController.playForFooterNavigation(
+        () => navigationShell.goBranch(index),
+      );
+    }
+
+    void openCart() {
+      HapticFeedback.lightImpact();
+      if (!authGate.isAuthenticated && context.mounted) {
+        authGate.protectRoute(
+          context,
+          route: RouteNames.cart,
+          title: 'Log in to view your cart',
+          message: 'Please log in first to review your items and continue '
+              'to checkout.',
+        );
+        return;
+      }
+      context.push(RouteNames.cart);
+    }
 
     ref
       ..listen(socketNotificationStreamProvider, (previous, next) {
@@ -240,94 +255,190 @@ class _AppShellState extends ConsumerState<AppShell>
         }
         if (selectedIndex != 0) navigationShell.goBranch(0);
       },
-      child: Scaffold(
-        extendBody: false,
-        body: Stack(
-          children: <Widget>[
-            NotificationListener<UserScrollNotification>(
-              onNotification: _handleScroll,
-              child: navigationShell,
-            ),
-            _CartPillHost(
+      child: ResponsiveBreakpoints.isDesktop(MediaQuery.sizeOf(context).width)
+          ? _DesktopAppShell(
+              navigationShell: navigationShell,
               selectedIndex: selectedIndex,
-              navAnimation: _navAnimation,
-              bottomInset: bottomInset,
-              onTapCart: () {
-                HapticFeedback.lightImpact();
-                if (!authGate.isAuthenticated && context.mounted) {
-                  authGate.protectRoute(
-                    context,
-                    route: RouteNames.cart,
-                    title: 'Log in to view your cart',
-                    message:
-                        'Please log in first to review your items and continue to checkout.',
-                  );
-                  return;
-                }
-                context.push(RouteNames.cart);
-              },
-            ),
-          ],
-        ),
-        bottomNavigationBar: SizeTransition(
-          sizeFactor: _navAnimation,
-          axisAlignment: -1,
-          child: DecoratedBox(
-            decoration: const BoxDecoration(
-              color: Color(0xFFFBF9FF),
-              boxShadow: <BoxShadow>[
-                BoxShadow(
-                  color: Color(0x14000000),
-                  blurRadius: 20,
-                  offset: Offset(0, -6),
-                ),
-              ],
-            ),
-            child: SafeArea(
-              top: false,
-              child: Container(
-                padding: EdgeInsets.fromLTRB(
-                  12.w,
-                  4.h,
-                  12.w,
-                  bottomInset > 0 ? 2.h : 4.h,
-                ),
-                child: Row(
-                  children: List<Widget>.generate(_tabs.length, (index) {
-                    final tab = _tabs[index];
-                    return Expanded(
-                      child: _NavTabButton(
-                        tab: tab,
-                        selected: index == selectedIndex,
-                        onTap: () async {
-                          HapticFeedback.lightImpact();
-                          if (index == selectedIndex) return;
-                          final nextPath = tab.path;
-                          if (RouteAccess.isProtectedTab(nextPath) &&
-                              !authGate.isAuthenticated &&
-                              context.mounted) {
-                            // Remember the intent then go directly to phone screen
-                            // (avoids stale context issue after bottom sheet closes)
-                            authGate.rememberRouteIntent(nextPath);
-                            if (context.mounted) {
-                              context.push(RouteNames.phone);
-                            }
-                            return;
-                          }
-                          // Reveal the footer whenever the user switches tabs.
-                          _showNav();
-                          await routeLoadingController.playForFooterNavigation(
-                            () => navigationShell.goBranch(index),
-                          );
-                        },
+              onSelectTab: selectTab,
+              onOpenCart: openCart,
+            )
+          : Scaffold(
+              extendBody: false,
+              body: Stack(
+                children: <Widget>[
+                  NotificationListener<UserScrollNotification>(
+                    onNotification: _handleScroll,
+                    child: navigationShell,
+                  ),
+                  _CartPillHost(
+                    selectedIndex: selectedIndex,
+                    navAnimation: _navAnimation,
+                    bottomInset: bottomInset,
+                    onTapCart: openCart,
+                  ),
+                ],
+              ),
+              bottomNavigationBar: SizeTransition(
+                sizeFactor: _navAnimation,
+                axisAlignment: -1,
+                child: DecoratedBox(
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFFBF9FF),
+                    boxShadow: <BoxShadow>[
+                      BoxShadow(
+                        color: Color(0x14000000),
+                        blurRadius: 20,
+                        offset: Offset(0, -6),
                       ),
-                    );
-                  }),
+                    ],
+                  ),
+                  child: SafeArea(
+                    top: false,
+                    child: Container(
+                      padding: EdgeInsets.fromLTRB(
+                        12.w,
+                        4.h,
+                        12.w,
+                        bottomInset > 0 ? 2.h : 4.h,
+                      ),
+                      child: Row(
+                        children: List<Widget>.generate(_tabs.length, (index) {
+                          final tab = _tabs[index];
+                          return Expanded(
+                            child: _NavTabButton(
+                              tab: tab,
+                              selected: index == selectedIndex,
+                              onTap: () => unawaited(selectTab(index)),
+                            ),
+                          );
+                        }),
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
+    );
+  }
+}
+
+class _DesktopAppShell extends ConsumerWidget {
+  const _DesktopAppShell({
+    required this.navigationShell,
+    required this.selectedIndex,
+    required this.onSelectTab,
+    required this.onOpenCart,
+  });
+
+  final StatefulNavigationShell navigationShell;
+  final int selectedIndex;
+  final Future<void> Function(int index) onSelectTab;
+  final VoidCallback onOpenCart;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cartCount = ref.watch(cartCountProvider);
+
+    return Scaffold(
+      backgroundColor: AppColors.bgPrimary,
+      body: Row(
+        children: <Widget>[
+          NavigationRail(
+            selectedIndex: selectedIndex,
+            labelType: NavigationRailLabelType.all,
+            minWidth: 92,
+            leading: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 20, 12, 28),
+              child: Text(
+                'Bakaloo',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: AppColors.brandRed,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            destinations: List<NavigationRailDestination>.generate(
+              _tabs.length,
+              (index) {
+                final tab = _tabs[index];
+                return NavigationRailDestination(
+                  icon: Image.asset(
+                    tab.inactiveIcon,
+                    width: 26,
+                    height: 26,
+                    semanticLabel: tab.label,
+                  ),
+                  selectedIcon: Image.asset(
+                    tab.activeIcon,
+                    width: 26,
+                    height: 26,
+                    semanticLabel: tab.label,
+                  ),
+                  label: Text(tab.label),
+                );
+              },
+            ),
+            onDestinationSelected: (index) => unawaited(onSelectTab(index)),
           ),
-        ),
+          const VerticalDivider(width: 1),
+          Expanded(
+            child: Column(
+              children: <Widget>[
+                Container(
+                  height: 72,
+                  padding: const EdgeInsets.symmetric(horizontal: 28),
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    border: Border(
+                      bottom: BorderSide(color: AppColors.borderLight),
+                    ),
+                  ),
+                  child: Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: Semantics(
+                          button: true,
+                          label: 'Search Bakaloo',
+                          child: OutlinedButton.icon(
+                            onPressed: () => context.push(RouteNames.search),
+                            icon: const Icon(Icons.search_rounded),
+                            label: const Align(
+                              alignment: Alignment.centerLeft,
+                              child:
+                                  Text('Search fresh meat, seafood and more'),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Badge(
+                        isLabelVisible: cartCount > 0,
+                        label: Text('$cartCount'),
+                        child: FilledButton.icon(
+                          onPressed: onOpenCart,
+                          icon: const Icon(Icons.shopping_bag_outlined),
+                          label: const Text('Cart'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        maxWidth: ResponsiveBreakpoints.desktopContentMaxWidth,
+                      ),
+                      child: SizedBox.expand(child: navigationShell),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -585,7 +696,7 @@ class _SmartBottomBar extends StatelessWidget {
   final _SmartBarState state;
   final VoidCallback onTap;
 
-  static const Color _barColor = Color(0xFFD02428);
+  static const Color _barColor = AppColors.brandRed;
   static const Color _successColor = Color(0xFF12B76A);
 
   @override
@@ -877,7 +988,7 @@ class _NavTabButton extends StatelessWidget {
     // Matches the red baked into the mc-*-filled-icon.png assets — kept in
     // sync with the label color below so text and icon read as one color,
     // not the old Bakaloo purple next to a red icon.
-    const Color activeColor = Color(0xFFD02428);
+    const Color activeColor = AppColors.brandRed;
     const Color inactiveColor = Color(0xFF1A1A1A);
     final String iconAsset = selected ? tab.activeIcon : tab.inactiveIcon;
     final Color labelColor = selected ? activeColor : inactiveColor;

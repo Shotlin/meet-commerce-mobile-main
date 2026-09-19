@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:dartz/dartz.dart';
 import 'package:dio/dio.dart';
 
@@ -7,6 +5,7 @@ import 'package:bakaloo_flutter_app/core/errors/error_handler.dart';
 import 'package:bakaloo_flutter_app/core/errors/failure.dart';
 import 'package:bakaloo_flutter_app/features/profile/data/datasources/user_remote_datasource.dart';
 import 'package:bakaloo_flutter_app/features/profile/domain/entities/user_stats_entity.dart';
+import 'package:bakaloo_flutter_app/features/profile/domain/entities/avatar_upload.dart';
 import 'package:bakaloo_flutter_app/features/profile/domain/repositories/profile_repository.dart';
 
 class ProfileRepositoryImpl implements ProfileRepository {
@@ -57,9 +56,9 @@ class ProfileRepositoryImpl implements ProfileRepository {
   }
 
   @override
-  Future<Either<Failure, String>> uploadAvatar(File imageFile) async {
+  Future<Either<Failure, String>> uploadAvatar(AvatarUpload upload) async {
     try {
-      final avatarUrl = await _remoteDataSource.uploadAvatar(imageFile);
+      final avatarUrl = await _remoteDataSource.uploadAvatar(upload);
       return Right(avatarUrl);
     } on DioException catch (error) {
       return Left(handleDioError(error));

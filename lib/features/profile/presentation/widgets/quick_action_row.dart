@@ -35,7 +35,7 @@ class QuickActionRow extends StatelessWidget {
         Expanded(
           child: _QuickActionTile(
             icon: PhosphorIcons.wallet,
-            label: 'FreshCuts Money',
+            label: 'Bakaloo Money',
             onTap: onWalletTap,
           ),
         ),

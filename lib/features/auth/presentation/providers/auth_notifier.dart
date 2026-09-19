@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
-import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +9,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import 'package:bakaloo_flutter_app/core/constants/api_constants.dart';
 import 'package:bakaloo_flutter_app/core/constants/storage_keys.dart';
+import 'package:bakaloo_flutter_app/core/diagnostics/crash_reporter.dart';
 import 'package:bakaloo_flutter_app/core/di/providers.dart';
 import 'package:bakaloo_flutter_app/core/errors/failure.dart';
 import 'package:bakaloo_flutter_app/core/notifications/fcm_token_helper.dart';
@@ -450,6 +450,10 @@ class AuthNotifier extends _$AuthNotifier {
   }
 
   Future<void> _registerFcmToken() async {
+    // Browser push requires Firebase Web credentials, VAPID configuration and
+    // a messaging service worker. Until those are supplied, login must not
+    // attempt the native FCM registration path.
+    if (kIsWeb) return;
     try {
       final token = await getFcmTokenAwaitingApns(FirebaseMessaging.instance);
       if (token == null || token.isEmpty) {
@@ -478,7 +482,7 @@ class AuthNotifier extends _$AuthNotifier {
       // "no notifications at all" bug was invisible until traced through
       // the code). Record it non-fatally instead of swallowing it outright.
       unawaited(
-        FirebaseCrashlytics.instance.recordError(
+        reportError(
           err,
           stack,
           reason: 'FCM token registration failed (network)',
@@ -487,7 +491,7 @@ class AuthNotifier extends _$AuthNotifier {
       );
     } catch (err, stack) {
       unawaited(
-        FirebaseCrashlytics.instance.recordError(
+        reportError(
           err,
           stack,
           reason: 'FCM token registration failed',

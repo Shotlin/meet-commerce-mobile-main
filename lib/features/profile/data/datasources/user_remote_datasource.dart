@@ -1,10 +1,9 @@
-import 'dart:io';
-
 import 'package:dio/dio.dart';
 import 'package:retrofit/dio.dart' as retrofit;
 
 import 'package:bakaloo_flutter_app/core/constants/api_constants.dart';
 import 'package:bakaloo_flutter_app/core/network/api_client.dart';
+import 'package:bakaloo_flutter_app/features/profile/domain/entities/avatar_upload.dart';
 import 'package:bakaloo_flutter_app/features/profile/data/models/user_profile_model.dart';
 import 'package:bakaloo_flutter_app/features/profile/data/models/user_stats_model.dart';
 import 'package:bakaloo_flutter_app/features/profile/domain/repositories/profile_repository.dart';
@@ -28,10 +27,10 @@ class UserRemoteDataSource {
     return UserProfileModel.fromJson(data);
   }
 
-  Future<String> uploadAvatar(File imageFile) async {
-    final fileName = imageFile.path.split(Platform.pathSeparator).last;
-    final avatarFile = await MultipartFile.fromFile(
-      imageFile.path,
+  Future<String> uploadAvatar(AvatarUpload upload) async {
+    final fileName = upload.fileName.trim();
+    final avatarFile = MultipartFile.fromBytes(
+      upload.bytes,
       filename: fileName.isEmpty ? 'avatar.jpg' : fileName,
     );
     final response = await _uploadAvatarWithFallback(avatarFile);

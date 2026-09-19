@@ -312,7 +312,8 @@ class _LocationPromptSheetState extends ConsumerState<_LocationPromptSheet> {
       child: GestureDetector(
         onVerticalDragEnd: _onSwipeDismiss,
         child: SafeArea(
-          child: Container(
+          child: SingleChildScrollView(
+              child: Container(
             decoration: const BoxDecoration(
               color: Colors.white,
             ),
@@ -327,11 +328,13 @@ class _LocationPromptSheetState extends ConsumerState<_LocationPromptSheet> {
                   padding: EdgeInsets.fromLTRB(20.w, 14.h, 16.w, 0),
                   child: Row(
                     children: <Widget>[
-                      Image.asset(
-                        'assets/images/freshcuts-logo-wordmark.png',
-                        height: 32.h,
-                        fit: BoxFit.contain,
-                        alignment: Alignment.centerLeft,
+                      Text(
+                        'Bakaloo',
+                        style: TextStyle(
+                          color: AppColors.brandRed,
+                          fontSize: 22.sp,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                       const Spacer(),
                       if (canDismiss)
@@ -355,9 +358,10 @@ class _LocationPromptSheetState extends ConsumerState<_LocationPromptSheet> {
                   ),
                 ),
                 Image.asset(
-                  'assets/images/freshcuts-set-location-illustration.png',
+                  'assets/images/bakaloo-location-unavailable-illustration.png',
                   width: double.infinity,
-                  fit: BoxFit.fitWidth,
+                  height: MediaQuery.sizeOf(context).height * .32,
+                  fit: BoxFit.contain,
                 ),
                 Padding(
                   padding: EdgeInsets.fromLTRB(24.w, 12.h, 24.w, 28.h),
@@ -494,7 +498,7 @@ class _LocationPromptSheetState extends ConsumerState<_LocationPromptSheet> {
                 ),
               ],
             ),
-          ),
+          )),
         ),
       ),
     );

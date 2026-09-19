@@ -1364,8 +1364,8 @@ class _FormFieldState extends State<_FormField> {
   // No., Building, Address and Landmark blank on purpose). Listens to the
   // controller directly rather than needing extra setState calls — the
   // highlight clears itself the moment the customer types.
-  static const Color _emptyHighlightFill = Color(0xFFFBEAEA);
-  static const Color _emptyHighlightBorder = Color(0xFFE9A3A5);
+  static const Color _emptyHighlightFill = AppColors.brandRedSurface;
+  static const Color _emptyHighlightBorder = AppColors.brandRedBorder;
 
   final FocusNode _focusNode = FocusNode();
 

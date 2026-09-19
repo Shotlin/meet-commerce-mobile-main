@@ -4,13 +4,13 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 
 import 'package:bakaloo_flutter_app/core/constants/api_constants.dart';
 import 'package:bakaloo_flutter_app/core/constants/storage_keys.dart';
 import 'package:bakaloo_flutter_app/core/di/providers.dart';
 import 'package:bakaloo_flutter_app/core/maps/geo_point.dart';
+import 'package:bakaloo_flutter_app/core/maps/device_reverse_geocoder.dart';
 import 'package:bakaloo_flutter_app/core/maps/ola/ola_maps_service.dart';
 import 'package:bakaloo_flutter_app/core/storage/app_cache_manager.dart';
 import 'package:bakaloo_flutter_app/core/storage/hive_service.dart';
@@ -176,24 +176,31 @@ class GuestStorefrontNotifier extends Notifier<GuestStorefrontState> {
         return;
       }
       final position = await getResilientCurrentPosition();
-      final reverse = await ref.read(olaMapsServiceProvider).reverseGeocode(
-            GeoPoint(lat: position.latitude, lng: position.longitude),
-          );
-      final nativePlacemark = (reverse?.pincode?.trim().isNotEmpty ?? false)
-          ? null
-          : await _nativePlacemark(position);
-      final pincode = reverse?.pincode?.trim().isNotEmpty == true
-          ? reverse!.pincode!.trim()
-          : nativePlacemark?.postalCode?.trim() ?? '';
-      final resolvedCity = reverse?.city?.trim().isNotEmpty == true
-          ? reverse!.city!.trim()
-          : nativePlacemark?.locality?.trim();
+      await resolvePoint(
+          GeoPoint(lat: position.latitude, lng: position.longitude));
+    } catch (_) {
+      state = const GuestStorefrontState(
+        status: GuestStorefrontStatus.failed,
+        message:
+            'Could not detect your location. Search for your address instead.',
+      );
+    }
+  }
+
+  /// Manual search and GPS share the same backend serviceability contract.
+  Future<void> resolvePoint(GeoPoint position) async {
+    if (!position.isValid) return;
+    state = const GuestStorefrontState(status: GuestStorefrontStatus.resolving);
+    try {
+      // Resolve serviceability before requesting Ola details. The backend
+      // issues a short-lived storefront token only for a serviceable point;
+      // that token scopes the follow-up map request without exposing an Ola
+      // key or granting anonymous map access to every browser visitor.
       final response = await ref.read(dioClientProvider).post<dynamic>(
         ApiConstants.storefrontResolveLocation,
         data: {
-          'lat': position.latitude,
-          'lng': position.longitude,
-          if (pincode.isNotEmpty) 'pincode': pincode,
+          'lat': position.lat,
+          'lng': position.lng,
         },
       );
       final payload = response.data is Map
@@ -203,11 +210,8 @@ class GuestStorefrontNotifier extends Notifier<GuestStorefrontState> {
           ? Map<String, dynamic>.from(payload['data'] as Map)
           : const <String, dynamic>{};
       if (data['serviceable'] != true) {
-        state = GuestStorefrontState(
+        state = const GuestStorefrontState(
           status: GuestStorefrontStatus.unavailable,
-          pincode: pincode.isEmpty ? null : pincode,
-          city: resolvedCity?.isNotEmpty == true ? resolvedCity : null,
-          addressLine1: reverse?.addressLine1 ?? reverse?.displayName,
           message: 'Delivery is not available at this location yet.',
         );
         return;
@@ -219,14 +223,27 @@ class GuestStorefrontNotifier extends Notifier<GuestStorefrontState> {
       final shopId = shop['id'] as String?;
       if (token == null || token.isEmpty || shopId == null || shopId.isEmpty)
         throw StateError('Invalid storefront response');
+
+      final reverse = await ref
+          .read(olaMapsServiceProvider)
+          .reverseGeocode(position, storefrontToken: token);
+      final nativePlacemark = (reverse?.pincode?.trim().isNotEmpty ?? false)
+          ? null
+          : await _nativePlacemark(position);
+      final pincode = reverse?.pincode?.trim().isNotEmpty == true
+          ? reverse!.pincode!.trim()
+          : nativePlacemark?.postalCode?.trim() ?? '';
+      final resolvedCity = reverse?.city?.trim().isNotEmpty == true
+          ? reverse!.city!.trim()
+          : nativePlacemark?.locality?.trim();
       final next = GuestStorefrontState(
         status: GuestStorefrontStatus.serviceable,
         token: token,
         shopId: shopId,
         shopName: shop['name'] as String?,
         pincode: pincode,
-        lat: position.latitude,
-        lng: position.longitude,
+        lat: position.lat,
+        lng: position.lng,
         addressLine1:
             reverse?.addressLine1 ?? reverse?.displayName ?? 'My Location',
         city: resolvedCity?.isNotEmpty == true ? resolvedCity : 'Local Area',
@@ -237,8 +254,8 @@ class GuestStorefrontNotifier extends Notifier<GuestStorefrontState> {
         'shopId': shopId,
         'shopName': next.shopName,
         'pincode': pincode,
-        'lat': position.latitude,
-        'lng': position.longitude,
+        'lat': position.lat,
+        'lng': position.lng,
         'addressLine1': next.addressLine1,
         'city': next.city,
         'state': next.stateName,
@@ -271,16 +288,11 @@ class GuestStorefrontNotifier extends Notifier<GuestStorefrontState> {
     }
   }
 
-  Future<Placemark?> _nativePlacemark(Position position) async {
-    try {
-      final placemarks = await placemarkFromCoordinates(
-        position.latitude,
-        position.longitude,
-      ).timeout(const Duration(seconds: 8));
-      return placemarks.isEmpty ? null : placemarks.first;
-    } catch (_) {
-      return null;
-    }
+  Future<DevicePlacemark?> _nativePlacemark(GeoPoint position) {
+    return reverseGeocodeDeviceLocation(
+      position.lat,
+      position.lng,
+    ).timeout(const Duration(seconds: 8), onTimeout: () => null);
   }
 
   Future<void> _saveLocationToAuthenticatedAccount(
@@ -325,12 +337,9 @@ final storefrontAccessProvider = FutureProvider<bool>((ref) async {
 });
 
 final storefrontReadyProvider = Provider<bool>((ref) {
-  // A guest storefront is already completely resolved by the signed location
-  // token.  Do not put that synchronous state behind an AsyncValue: Home's
-  // product providers can otherwise run once while that FutureProvider is
-  // loading, cache an empty list, and leave the product rails blank.
-  if (ref.watch(authStateProvider) is! AuthAuthenticated) {
-    return ref.watch(guestStorefrontProvider).isReady;
-  }
-  return ref.watch(storefrontAccessProvider).value == true;
+  // Browsing the public catalogue must not depend on browser location
+  // permission or a saved delivery address. Delivery availability is
+  // resolved when a customer explicitly chooses a location and again by
+  // protected cart/checkout flows.
+  return true;
 });

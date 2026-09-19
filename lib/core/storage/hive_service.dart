@@ -1,8 +1,7 @@
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:path_provider/path_provider.dart';
-
 import 'package:bakaloo_flutter_app/core/constants/storage_keys.dart';
 import 'package:bakaloo_flutter_app/core/security/encryption_helper.dart';
+import 'package:bakaloo_flutter_app/core/storage/hive_storage_path.dart';
 
 class HiveService {
   const HiveService();
@@ -19,8 +18,8 @@ class HiveService {
   static late Box<dynamic> remoteThemeBox;
 
   static Future<void> init() async {
-    final directory = await getApplicationDocumentsDirectory();
-    await Hive.initFlutter(directory.path);
+    final path = await resolveHiveStoragePath();
+    await Hive.initFlutter(path);
     final cipher = await EncryptionHelper().getHiveCipher();
 
     productsBox = await Hive.openBox<dynamic>(StorageKeys.productsBox);

@@ -86,7 +86,12 @@ class SocketService {
     _socket = io.io(
       socketUrl,
       io.OptionBuilder()
-          .setTransports(<String>['websocket'])
+          // Prefer WebSocket for low-latency order updates, but retain the
+          // Socket.IO polling fallback supported by the audited backend. A
+          // Web deployment may sit behind a proxy that permits HTTPS while
+          // blocking WebSocket upgrades; WebSocket-only would silently lose
+          // realtime status in that otherwise valid browser session.
+          .setTransports(<String>['websocket', 'polling'])
           .setAuth(<String, dynamic>{'token': accessToken})
           .enableAutoConnect()
           .setReconnectionAttempts(AppConstants.socketReconnectAttempts)

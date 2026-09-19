@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:dartz/dartz.dart';
 
 import 'package:bakaloo_flutter_app/core/errors/failure.dart';
@@ -28,11 +30,11 @@ class ReorderResult {
 
 class InvoiceFileResult {
   const InvoiceFileResult({
-    required this.path,
+    required this.bytes,
     required this.fileName,
   });
 
-  final String path;
+  final Uint8List bytes;
   final String fileName;
 }
 

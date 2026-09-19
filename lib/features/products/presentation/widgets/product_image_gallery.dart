@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
+import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
 import 'package:bakaloo_flutter_app/features/products/presentation/widgets/product_highlights_overlay.dart';
 
 class ProductImageGallery extends StatefulWidget {
@@ -227,7 +228,7 @@ class _ProductImageGalleryState extends State<ProductImageGallery> {
                               mainAxisSize: MainAxisSize.min,
                               children: <Widget>[
                                 Text(
-                                  'FreshCuts',
+                                  'Bakaloo',
                                   style: TextStyle(
                                     fontFamily: 'PlusJakartaSans',
                                     fontSize: 16.sp,
@@ -279,9 +280,8 @@ class _ProductImageGalleryState extends State<ProductImageGallery> {
                           icon: widget.isWishlisted
                               ? PhosphorIcons.heartFill
                               : PhosphorIcons.heart,
-                          iconColor: widget.isWishlisted
-                              ? const Color(0xFFD02428)
-                              : null,
+                          iconColor:
+                              widget.isWishlisted ? AppColors.brandRed : null,
                           onTap: widget.onWishlistToggle,
                         ),
                       ],

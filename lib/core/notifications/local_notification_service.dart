@@ -9,7 +9,7 @@ class LocalNotificationService {
   }) : _plugin = plugin ?? FlutterLocalNotificationsPlugin();
 
   static const _androidChannelId = 'bakaloo_notifications';
-  static const _androidChannelName = 'FreshCuts Notifications';
+  static const _androidChannelName = 'Bakaloo Notifications';
   static const _androidChannelDescription = 'Order, payment and app updates';
 
   final FlutterLocalNotificationsPlugin _plugin;
@@ -69,7 +69,7 @@ class LocalNotificationService {
   Future<void> show(RemoteMessage message) async {
     final title = _stringValue(message.data['title']) ??
         message.notification?.title ??
-        'FreshCuts';
+        'Bakaloo';
     final body =
         _stringValue(message.data['body']) ?? message.notification?.body ?? '';
 

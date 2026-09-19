@@ -121,7 +121,12 @@ Widget _buildSeasonalMosaic(
   RemoteTheme theme,
   WidgetRef ref,
 ) {
-  final products = _resolveProducts(ref, entry, fallbackLimit: 8);
+  final products = _resolveProducts(
+    ref,
+    entry,
+    fallbackLimit: 8,
+    includeCategoryShelfFallback: true,
+  );
   if (products.isEmpty) {
     return const SizedBox.shrink();
   }
@@ -276,7 +281,12 @@ Widget _buildCategoryProductGrid(
   RemoteTheme theme,
   WidgetRef ref,
 ) {
-  final products = _resolveProducts(ref, entry, fallbackLimit: 12);
+  final products = _resolveProducts(
+    ref,
+    entry,
+    fallbackLimit: 12,
+    includeCategoryShelfFallback: true,
+  );
   if (products.isEmpty) {
     return const SizedBox.shrink();
   }
@@ -311,7 +321,12 @@ Widget _buildProductCarousel(
   RemoteTheme theme,
   WidgetRef ref,
 ) {
-  final products = _resolveProducts(ref, entry, fallbackLimit: 10);
+  final products = _resolveProducts(
+    ref,
+    entry,
+    fallbackLimit: 10,
+    includeCategoryShelfFallback: true,
+  );
   if (products.isEmpty) {
     return const SizedBox.shrink();
   }
@@ -337,6 +352,7 @@ Widget _buildTrendingProducts(
     entry,
     fallbackProducts: _resolveTrendingPool(ref),
     fallbackLimit: 8,
+    includeCategoryShelfFallback: true,
   );
   if (products.isEmpty) {
     return const SizedBox.shrink();
@@ -517,6 +533,7 @@ List<ProductEntity> _resolveProducts(
   SectionManifestEntry entry, {
   List<ProductEntity>? fallbackProducts,
   int fallbackLimit = 6,
+  bool includeCategoryShelfFallback = false,
 }) {
   final binding = entry.merchBinding ?? const <String, dynamic>{};
   final limit = entry.productLimit ?? fallbackLimit;
@@ -597,7 +614,65 @@ List<ProductEntity> _resolveProducts(
     }
   }
 
-  return basePool.take(limit).toList(growable: false);
+  final defaultProducts = basePool.take(limit).toList(growable: false);
+  if (defaultProducts.isNotEmpty || !includeCategoryShelfFallback) {
+    return defaultProducts;
+  }
+
+  // Some storefronts expose products only through the category endpoints.
+  // When an unbound home section has no server-resolved items and the generic
+  // `/products` pool is empty, use those real category product feeds. This is
+  // intentionally a last-resort browse fallback: explicit manual, category,
+  // and tag bindings must never be replaced with unrelated products.
+  final hasExplicitBinding =
+      _readStringList(binding['product_ids']).isNotEmpty ||
+          _readStringList(binding['category_ids']).isNotEmpty ||
+          _readStringList(binding['tags']).isNotEmpty ||
+          source == 'manual' ||
+          source == 'tag';
+  if (hasExplicitBinding) {
+    return const <ProductEntity>[];
+  }
+
+  return _resolveCategoryShelfFallback(ref, limit);
+}
+
+/// Returns real, in-stock products from the first active storefront
+/// categories. It keeps the homepage useful for backends that intentionally
+/// leave the global product feed empty while continuing to serve the
+/// category-specific product endpoints.
+List<ProductEntity> _resolveCategoryShelfFallback(WidgetRef ref, int limit) {
+  final categories = ref.watch(categoryCollectionProvider).asData?.value ??
+      const <CategoryEntity>[];
+  final activeCategories =
+      categories.where((category) => category.isActive).toList(growable: false);
+  final parentCategories = activeCategories
+      .where((category) => category.isParent)
+      .toList(growable: false);
+  final categoryIds =
+      (parentCategories.isNotEmpty ? parentCategories : activeCategories)
+          .take(4)
+          .map((category) => category.id)
+          .where((id) => id.trim().isNotEmpty)
+          .toList(growable: false);
+  if (categoryIds.isEmpty) {
+    return const <ProductEntity>[];
+  }
+
+  final maxItems = limit.clamp(1, 24).toInt();
+  final request = CategoryProductShelfRequest(
+    categoryIds: categoryIds,
+    limitPerCategory:
+        (maxItems / categoryIds.length).ceil().clamp(1, 6).toInt(),
+    maxItems: maxItems,
+  );
+  final products =
+      ref.watch(categoryProductShelfProvider(request)).asData?.value ??
+          const <ProductEntity>[];
+  return products
+      .where((product) => product.inStock)
+      .take(maxItems)
+      .toList(growable: false);
 }
 
 /// Parses the server-resolved product objects attached to a section manifest
@@ -1333,10 +1408,20 @@ class _ManifestProductGridSection extends StatelessWidget {
               final gap =
                   variant == ProductCardVariant.premiumFresh ? 12.w : 10.w;
               final minItemWidth = 104.w;
+              // A two-column server setting is appropriate on phones. On
+              // larger storefronts, use the available width for a denser
+              // catalog instead of stretching each product into a billboard.
+              final preferredColumns = constraints.maxWidth >= 1180
+                  ? 4
+                  : constraints.maxWidth >= 720
+                      ? 3
+                      : columns;
+              final maximumColumns =
+                  columns > preferredColumns ? columns : preferredColumns;
               final maxColumnsForWidth =
                   ((constraints.maxWidth + gap) / (minItemWidth + gap))
                       .floor()
-                      .clamp(1, columns);
+                      .clamp(2, maximumColumns);
               final effectiveColumns = maxColumnsForWidth;
               final itemWidth =
                   (constraints.maxWidth - (gap * (effectiveColumns - 1))) /

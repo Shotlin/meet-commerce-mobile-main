@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
+import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
 import 'package:bakaloo_flutter_app/features/checkout/domain/entities/delivery_slot_entity.dart';
 
 class CartDeliveryHeader extends StatelessWidget {
@@ -19,14 +20,17 @@ class CartDeliveryHeader extends StatelessWidget {
   final int itemCount;
   final SelectedDeliverySlot? selectedSlot;
   final VoidCallback? onScheduleTap;
+
   /// Opens the schedule sheet straight into ASAP/quick-delivery mode —
   /// a dedicated shortcut so the customer doesn't have to open "Schedule"
   /// and then realize ASAP was the tab they wanted all along.
   final VoidCallback? onExpressTap;
+
   /// Set only when the store is closed and the customer is still on ASAP —
   /// replaces the "Delivering in X mins" line with the next real available
   /// window instead of continuing to promise an estimate that can't be met.
   final String? nextAvailableLabel;
+
   /// Opens the "view store hours" sheet. Only rendered when provided.
   final VoidCallback? onViewHoursTap;
 
@@ -51,7 +55,7 @@ class CartDeliveryHeader extends StatelessWidget {
                     : Icons.access_time_outlined,
                 size: 28.sp,
                 color: isScheduled
-                    ? const Color(0xFFD02428)
+                    ? AppColors.brandRed
                     : isClosed
                         ? const Color(0xFFB45309)
                         : const Color(0xFF666666),
@@ -67,7 +71,7 @@ class CartDeliveryHeader extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 15.sp,
                           fontWeight: FontWeight.w700,
-                          color: const Color(0xFFD02428),
+                          color: AppColors.brandRed,
                           fontFamily: 'Inter',
                         ),
                       )
@@ -108,8 +112,9 @@ class CartDeliveryHeader extends StatelessWidget {
                     SizedBox(height: 2.h),
                     Text(
                       isScheduled
-                          ? slot.displayLabel(estimateMinutes).replaceFirst(
-                              'Scheduled for ', '')
+                          ? slot
+                              .displayLabel(estimateMinutes)
+                              .replaceFirst('Scheduled for ', '')
                           : isClosed
                               ? nextAvailableLabel!
                               : itemLabel,
@@ -119,7 +124,7 @@ class CartDeliveryHeader extends StatelessWidget {
                             ? FontWeight.w500
                             : FontWeight.w400,
                         color: isScheduled
-                            ? const Color(0xFFD02428)
+                            ? AppColors.brandRed
                             : isClosed
                                 ? const Color(0xFFB45309)
                                 : const Color(0xFF888888),
@@ -193,7 +198,7 @@ class CartDeliveryHeader extends StatelessWidget {
                         : Icons.calendar_month_outlined,
                     size: 16.sp,
                     color: isScheduled
-                        ? const Color(0xFFD02428)
+                        ? AppColors.brandRed
                         : const Color(0xFF0AC26B),
                   ),
                   label: Text(
@@ -202,7 +207,7 @@ class CartDeliveryHeader extends StatelessWidget {
                       fontSize: 13.sp,
                       fontWeight: FontWeight.w600,
                       color: isScheduled
-                          ? const Color(0xFFD02428)
+                          ? AppColors.brandRed
                           : const Color(0xFF0AC26B),
                       fontFamily: 'Inter',
                     ),
@@ -210,11 +215,11 @@ class CartDeliveryHeader extends StatelessWidget {
                   style: OutlinedButton.styleFrom(
                     backgroundColor: Colors.white,
                     foregroundColor: isScheduled
-                        ? const Color(0xFFD02428)
+                        ? AppColors.brandRed
                         : const Color(0xFF0AC26B),
                     side: BorderSide(
                       color: isScheduled
-                          ? const Color(0xFFD02428)
+                          ? AppColors.brandRed
                           : const Color(0xFF0AC26B),
                       width: 1.5,
                     ),

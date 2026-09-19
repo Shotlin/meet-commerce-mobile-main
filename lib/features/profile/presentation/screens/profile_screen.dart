@@ -5,8 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
-import 'package:in_app_review/in_app_review.dart';
-import 'package:local_auth/local_auth.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:share_plus/share_plus.dart';
@@ -14,6 +12,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:bakaloo_flutter_app/core/constants/api_constants.dart';
 import 'package:bakaloo_flutter_app/core/constants/app_constants.dart';
+import 'package:bakaloo_flutter_app/core/platform/app_review.dart';
+import 'package:bakaloo_flutter_app/core/security/device_authentication.dart';
 import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
 import 'package:bakaloo_flutter_app/core/utils/app_toast.dart';
 import 'package:bakaloo_flutter_app/core/theme/app_text_styles.dart';
@@ -39,8 +39,7 @@ class ProfileScreen extends ConsumerStatefulWidget {
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   static const Color _brandColor = AppColors.brandRed;
 
-  final LocalAuthentication _localAuth = LocalAuthentication();
-  final InAppReview _inAppReview = InAppReview.instance;
+  final DeviceAuthentication _deviceAuthentication = DeviceAuthentication();
 
   String _appVersion = '1.0.0';
   String _appBuildNumber = '1';
@@ -288,7 +287,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     Gap(8.h),
 
                     _AccountSection(
-                      header: 'FreshCuts Zone',
+                      header: 'Bakaloo Zone',
                       rows: <Widget>[
                         _AccountRow(
                           icon: PhosphorIcons.forkKnifeLight,
@@ -347,7 +346,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           title: 'Share the app',
                           onTap: () {
                             Share.share(
-                              'Order fresh meat & seafood on FreshCuts: ${ApiConstants.webBaseUrl}',
+                              'Order fresh meat & seafood on Bakaloo: ${ApiConstants.webBaseUrl}',
                             );
                           },
                         ),
@@ -457,17 +456,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   Future<bool> _authenticateForDelete() async {
     try {
-      final canUseBiometric = await _localAuth.canCheckBiometrics;
-      final deviceSupported = await _localAuth.isDeviceSupported();
-      if (!canUseBiometric || !deviceSupported) {
-        return true;
-      }
-      return await _localAuth.authenticate(
-        localizedReason: 'Confirm your identity to delete account',
-        options: const AuthenticationOptions(
-          biometricOnly: true,
-          stickyAuth: false,
-        ),
+      return _deviceAuthentication.authenticateIfAvailable(
+        reason: 'Confirm your identity to delete account',
+        preferBiometrics: true,
+        stickyAuth: false,
       );
     } catch (_) {
       return false;
@@ -561,16 +553,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   void _showAbout() {
     showAboutDialog(
       context: context,
-      applicationName: 'FreshCuts',
+      applicationName: 'Bakaloo',
       applicationVersion: _appVersion,
-      applicationLegalese: '© ${DateTime.now().year} FreshCuts',
+      applicationLegalese: '© ${DateTime.now().year} Bakaloo',
     );
   }
 
   Future<void> _rateApp() async {
     try {
-      if (await _inAppReview.isAvailable()) {
-        await _inAppReview.requestReview();
+      if (await requestAppReview()) {
         return;
       }
     } catch (_) {

@@ -513,7 +513,7 @@ class _ReviewTile extends StatelessWidget {
             children: <Widget>[
               Expanded(
                 child: Text(
-                  review.userName ?? 'FreshCuts Customer',
+                  review.userName ?? 'Bakaloo Customer',
                   style: AppTextStyles.labelLarge.copyWith(
                     fontWeight: FontWeight.w700,
                   ),

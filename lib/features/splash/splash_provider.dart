@@ -49,7 +49,22 @@ class SplashController extends _$SplashController {
         return;
       }
 
-      if (!JwtDecoder.isExpired(accessToken)) {
+      // Tokens live in browser/device storage and can be truncated or
+      // corrupted by a cleared IndexedDB/WebCrypto store. Treat an
+      // undecodable token as an unusable session instead of allowing
+      // JwtDecoder to abort startup while the splash remains mounted forever.
+      final bool accessTokenExpired;
+      try {
+        accessTokenExpired = JwtDecoder.isExpired(accessToken);
+      } catch (_) {
+        await secureStorage.clearAll();
+        if (context.mounted) {
+          context.go(RouteNames.home);
+        }
+        return;
+      }
+
+      if (!accessTokenExpired) {
         await ref
             .read(authNotifierProvider.notifier)
             .restoreSession(accessToken);

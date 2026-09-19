@@ -1,6 +1,6 @@
 import 'dart:async';
-import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:location/location.dart' as location_pkg;
@@ -27,7 +27,14 @@ import 'package:location/location.dart' as location_pkg;
 /// in-app — so there this falls back to opening Settings directly, same as
 /// before.
 Future<bool> requestEnableLocationService() async {
-  if (!Platform.isAndroid) {
+  // Browsers own the location service and permission UX. There is no browser
+  // equivalent of Android's SettingsClient or an app deep-link to system
+  // location settings, so callers can fall back to manual address entry.
+  if (kIsWeb) {
+    return false;
+  }
+
+  if (defaultTargetPlatform != TargetPlatform.android) {
     await Geolocator.openLocationSettings();
     return _waitForServiceEnabled();
   }
@@ -69,6 +76,11 @@ Future<bool> requestEnableLocationService() async {
 /// direct, authoritative `isLocationServiceEnabled()` poll instead of
 /// waiting out the clock.
 Future<bool> _waitForServiceEnabled() async {
+  // geolocator_web does not implement the native service-status stream.
+  // Browser permission is checked by the explicit customer action instead.
+  if (kIsWeb) {
+    return Geolocator.isLocationServiceEnabled();
+  }
   if (await Geolocator.isLocationServiceEnabled()) {
     return true;
   }
@@ -96,6 +108,9 @@ Future<bool> _waitForServiceEnabled() async {
 /// point just resolves instantly with the same deniedForever result — this
 /// app Settings deep link is the only way back.
 Future<void> openLocationPermissionSettings() {
+  if (kIsWeb) {
+    return Future<void>.value();
+  }
   return Geolocator.openAppSettings();
 }
 

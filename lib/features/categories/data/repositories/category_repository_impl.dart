@@ -1,12 +1,9 @@
-import 'dart:async';
-
 import 'package:dartz/dartz.dart';
 import 'package:dio/dio.dart';
 
 import 'package:bakaloo_flutter_app/core/constants/api_constants.dart';
 import 'package:bakaloo_flutter_app/core/errors/error_handler.dart';
 import 'package:bakaloo_flutter_app/core/errors/failure.dart';
-import 'package:bakaloo_flutter_app/core/storage/cache_strategy.dart';
 import 'package:bakaloo_flutter_app/features/categories/data/datasources/category_remote_datasource.dart';
 import 'package:bakaloo_flutter_app/features/categories/data/local/category_local_datasource.dart';
 import 'package:bakaloo_flutter_app/features/categories/domain/entities/category_entity.dart';
@@ -31,16 +28,6 @@ class CategoryRepositoryImpl implements CategoryRepository {
       _localDataSource.getCategories()?.map(_mapCategory).toList() ??
           const <CategoryEntity>[],
     );
-    final isFresh = _localDataSource.isFresh(
-      'categories_all',
-      CacheStrategy.categories.ttl!,
-    );
-
-    if (cached.isNotEmpty && isFresh) {
-      unawaited(_refreshCategories());
-      return Right(cached);
-    }
-
     try {
       final categories =
           _sanitizeCategories(await _remoteDataSource.getCategories());
@@ -73,16 +60,6 @@ class CategoryRepositoryImpl implements CategoryRepository {
 
     if (page == 1) {
       final cached = _cachedProducts(cacheKey);
-      final isFresh = _localDataSource.isFresh(
-        cacheKey,
-        const Duration(minutes: 10),
-      );
-
-      if (cached != null && isFresh) {
-        unawaited(_refreshCategoryProducts(categoryId, limit));
-        return Right(cached);
-      }
-
       try {
         final remotePage = await _remoteDataSource.getCategoryProducts(
           categoryId: categoryId,
@@ -154,32 +131,6 @@ class CategoryRepositoryImpl implements CategoryRepository {
         UnknownFailure(message: 'Unable to load more category products.'),
       );
     }
-  }
-
-  Future<void> _refreshCategories() async {
-    try {
-      final categories =
-          _sanitizeCategories(await _remoteDataSource.getCategories());
-      await _localDataSource.cacheCategories(
-        categories.map(_toCategoryJson).toList(),
-      );
-    } catch (_) {}
-  }
-
-  Future<void> _refreshCategoryProducts(String categoryId, int limit) async {
-    try {
-      final remotePage = await _remoteDataSource.getCategoryProducts(
-        categoryId: categoryId,
-        page: 1,
-        limit: limit,
-      );
-      await _localDataSource.cacheCategoryProducts(
-        categoryId: categoryId,
-        items:
-            remotePage.items.map((ProductModel item) => item.toJson()).toList(),
-        pagination: remotePage.pagination,
-      );
-    } catch (_) {}
   }
 
   ProductListResult? _cachedProducts(String cacheKey) {

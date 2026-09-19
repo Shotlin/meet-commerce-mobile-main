@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
+import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
+
 /// Inline "Quantity" stepper + "Add to Cart" button, matching the
 /// reference's in-page layout. Wired to the same add/update handlers as
 /// the screen's persistent bottom bar — either one keeps cart state in
@@ -79,7 +81,7 @@ class ProductQuantityRow extends StatelessWidget {
               SizedBox(width: 14.w),
               Expanded(
                 child: Material(
-                  color: const Color(0xFFD02428),
+                  color: AppColors.brandRed,
                   borderRadius: BorderRadius.circular(100.r),
                   child: InkWell(
                     onTap: onAddToCart,
@@ -148,9 +150,8 @@ class _StepButton extends StatelessWidget {
             child: PhosphorIcon(
               icon,
               size: 15.sp,
-              color: onTap == null
-                  ? const Color(0xFFCCCCCC)
-                  : const Color(0xFFD02428),
+              color:
+                  onTap == null ? const Color(0xFFCCCCCC) : AppColors.brandRed,
             ),
           ),
         ),

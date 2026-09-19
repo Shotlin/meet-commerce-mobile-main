@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
+import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
 import 'package:bakaloo_flutter_app/features/products/domain/entities/product_entity.dart';
 import 'package:bakaloo_flutter_app/shared/widgets/rating_badge.dart';
 
@@ -93,7 +94,7 @@ class ProductInfoHeader extends StatelessWidget {
                   fontFamily: 'Inter',
                   fontSize: 26.sp,
                   fontWeight: FontWeight.w800,
-                  color: const Color(0xFFD02428),
+                  color: AppColors.brandRed,
                   height: 1,
                 ),
               ),
@@ -163,7 +164,7 @@ class _FeatureBadge extends StatelessWidget {
         PhosphorIcon(
           PhosphorIcons.leafBold,
           size: 15.sp,
-          color: const Color(0xFFD02428),
+          color: AppColors.brandRed,
         ),
         SizedBox(width: 6.w),
         Expanded(
