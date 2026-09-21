@@ -850,12 +850,6 @@ String? _mosaicTabRoute(String key) {
   switch (key) {
     case 'home':
       return '/home';
-    case 'off_zone':
-      return '/off_zone';
-    case 'super_mall':
-      return '/super_mall';
-    case 'cafe':
-      return '/cafe';
   }
   return null;
 }

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:bakaloo_flutter_app/core/config/app_config.dart';
 import 'package:bakaloo_flutter_app/core/theme/remote_theme_model.dart';
 import 'package:bakaloo_flutter_app/core/theme/remote_theme_provider.dart';
 import 'package:bakaloo_flutter_app/core/theme/section_manifest_model.dart';
@@ -13,22 +12,18 @@ class DynamicHomeSections extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Already filtered (visibility / platform policy) by the provider, and the
+    // list identity only changes when the manifest content actually changes.
     final List<SectionManifestEntry> sections = ref.watch(
-      activeSectionManifestProvider.select(
-        (m) => m.sections.where(_isSectionAllowed).toList(growable: false),
-      ),
+      activeSectionsProvider.select((state) => state.sections),
     );
 
-    // Use .select() to avoid rebuilding the full list on unrelated theme changes.
-    final int sectionCount = sections.length;
-
-    if (sectionCount == 0) {
+    if (sections.isEmpty) {
       return const SliverToBoxAdapter(child: SizedBox.shrink());
     }
 
-    // Pass theme down only when sections actually need it; each slot will
-    // read the theme itself via ref so it only rebuilds when its own section
-    // data changes (not when unrelated theme fields change).
+    // Each slot reads the theme itself via ref so it only rebuilds when its own
+    // section data changes (not when unrelated theme fields change).
     return SliverList(
       delegate: SliverChildBuilderDelegate(
         (BuildContext context, int index) {
@@ -41,33 +36,6 @@ class DynamicHomeSections extends ConsumerWidget {
         childCount: sections.length,
       ),
     );
-  }
-}
-
-bool _isSectionAllowed(SectionManifestEntry entry) {
-  if (AppConfig.allowRemoteMarketingAssets) {
-    return true;
-  }
-
-  // These section types can display arbitrary dashboard-supplied campaign
-  // images or animations. Until a branded asset review has been completed,
-  // suppress them on Web while keeping live catalogue/product sections.
-  switch (entry.type) {
-    case SectionType.animatedBanner:
-    case SectionType.feeStrip:
-    case SectionType.seasonalMosaic:
-    case SectionType.promoCarousel:
-    case SectionType.bankOffers:
-    case SectionType.customBanner:
-    case SectionType.archedProductShowcase:
-      return false;
-    case SectionType.roundCategoryIcons:
-    case SectionType.categoryProductGrid:
-    case SectionType.productCarousel:
-    case SectionType.trendingProducts:
-    case SectionType.textHeader:
-    case SectionType.spacer:
-      return true;
   }
 }
 

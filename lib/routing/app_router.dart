@@ -27,9 +27,6 @@ import 'package:bakaloo_flutter_app/features/reviews/presentation/screens/review
 import 'package:bakaloo_flutter_app/features/addresses/domain/entities/address_entity.dart';
 import 'package:bakaloo_flutter_app/features/auth/domain/entities/user_entity.dart';
 import 'package:bakaloo_flutter_app/features/auth/presentation/providers/auth_gate_controller.dart';
-import 'package:bakaloo_flutter_app/features/cafe/presentation/screens/cafe_screen.dart';
-import 'package:bakaloo_flutter_app/features/off_zone/presentation/screens/off_zone_screen.dart';
-import 'package:bakaloo_flutter_app/features/super_mall/presentation/screens/super_mall_screen.dart';
 import 'package:bakaloo_flutter_app/features/auth/presentation/providers/auth_notifier.dart';
 import 'package:bakaloo_flutter_app/features/auth/presentation/providers/auth_state.dart';
 import 'package:bakaloo_flutter_app/features/search/presentation/screens/search_screen.dart';
@@ -254,24 +251,6 @@ GoRouter appRouter(Ref ref) {
                 path: RouteNames.home,
                 builder: (BuildContext context, GoRouterState state) {
                   return const HomeScreen();
-                },
-              ),
-              GoRoute(
-                path: RouteNames.offZone,
-                builder: (BuildContext context, GoRouterState state) {
-                  return const OffZoneScreen();
-                },
-              ),
-              GoRoute(
-                path: RouteNames.superMall,
-                builder: (BuildContext context, GoRouterState state) {
-                  return const SuperMallScreen();
-                },
-              ),
-              GoRoute(
-                path: RouteNames.cafe,
-                builder: (BuildContext context, GoRouterState state) {
-                  return const CafeScreen();
                 },
               ),
             ],

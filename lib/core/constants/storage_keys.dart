@@ -16,6 +16,7 @@ class StorageKeys {
   static const settingsBox = 'settings';
   static const cacheMetaBox = 'cache_meta';
   static const remoteThemeBox = 'remote_theme';
+  static const sectionManifestBox = 'section_manifests';
 
   static const onboardingShown = 'onboarding_shown';
   static const walletBiometric = 'wallet_biometric_enabled';

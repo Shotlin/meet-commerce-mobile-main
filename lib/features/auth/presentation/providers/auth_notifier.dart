@@ -27,10 +27,7 @@ import 'package:bakaloo_flutter_app/features/auth/domain/usecases/send_otp_useca
 import 'package:bakaloo_flutter_app/features/auth/domain/usecases/verify_otp_usecase.dart';
 import 'package:bakaloo_flutter_app/features/auth/presentation/providers/auth_state.dart';
 import 'package:bakaloo_flutter_app/features/addresses/presentation/providers/address_provider.dart';
-import 'package:bakaloo_flutter_app/core/theme/remote_theme_provider.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/providers/cart_provider.dart';
-import 'package:bakaloo_flutter_app/features/home/presentation/providers/banner_provider.dart';
-import 'package:bakaloo_flutter_app/features/home/presentation/providers/home_provider.dart';
 import 'package:bakaloo_flutter_app/features/wallet/presentation/providers/wallet_provider.dart';
 
 part 'auth_notifier.g.dart';
@@ -235,67 +232,21 @@ class AuthNotifier extends _$AuthNotifier {
     state = const AuthUnauthenticated();
   }
 
-  /// PHASE 6 FIX: Invalidate user-scoped Riverpod providers so they refetch
-  /// fresh data for the newly authenticated user instead of serving the
-  /// previous session's in-memory state. Best-effort — wrapped so a missing
-  /// provider never blocks login.
+  /// Invalidate user-scoped Riverpod providers so they refetch fresh data for
+  /// the newly authenticated user instead of serving the previous session's
+  /// in-memory state. Best-effort — a missing provider never blocks login.
   ///
-  /// FIX: the home-feed/theme providers (homeProvider, homeTrendingProducts,
-  /// homeFeaturedProducts, homeDeals, homeCategoryProducts,
-  /// selectedTabHomeContentProvider, remoteThemeProvider) are all keepAlive
-  /// and were missing here entirely — whichever response one of them
-  /// happened to fetch FIRST (e.g. during the brief anonymous window before
-  /// login completes) stuck around for the rest of the app session, so a
-  /// customer could keep seeing the pre-login/pre-allocation product set
-  /// (or the platform-default theme) even after their real shop allocation
-  /// resolved. This call alone plus the recompute-triggered refresh in
-  /// _triggerAllocationAutoAssign below closes that gap.
+  /// Storefront content (theme, tabs, sections, banners, products) is NOT
+  /// listed here on purpose: it is keyed by `StorefrontScope`, so when the
+  /// customer's shop allocation resolves to a different shop the scope changes
+  /// and every storefront provider rebuilds for it automatically — there is no
+  /// hand-maintained invalidation list to fall out of date.
   void _invalidateUserScopedProviders() {
-    // Imported lazily by name to avoid circular imports; these are the
-    // keepAlive providers that hold per-user state.
     try {
       ref.invalidate(cartProvider);
     } catch (_) {}
     try {
       ref.invalidate(walletProvider);
-    } catch (_) {}
-    unawaited(_invalidateShopScopedHomeProviders());
-  }
-
-  /// Shop-allocation-dependent home/theme providers — split out so both
-  /// login (_invalidateUserScopedProviders) and a freshly-resolved
-  /// allocation (_triggerAllocationAutoAssign) can refresh them.
-  ///
-  /// Invalidating the Riverpod providers alone isn't enough: their build
-  /// functions (via ProductRepositoryImpl) read a page-1 product list from a
-  /// local Hive cache first (10-minute TTL, keyed only by page/limit — never
-  /// by shop), so a re-run just returns the same stale cached page again.
-  /// AppCacheManager.clearShopScopedCaches() drops that local cache too.
-  Future<void> _invalidateShopScopedHomeProviders() async {
-    await AppCacheManager.clearShopScopedCaches();
-    try {
-      ref.invalidate(homeProvider);
-    } catch (_) {}
-    try {
-      ref.invalidate(homeFeaturedProductsProvider);
-    } catch (_) {}
-    try {
-      ref.invalidate(homeDealsProvider);
-    } catch (_) {}
-    try {
-      ref.invalidate(homeTrendingProductsProvider);
-    } catch (_) {}
-    try {
-      ref.invalidate(homeNewArrivalsProvider);
-    } catch (_) {}
-    try {
-      ref.invalidate(homeCategoryProductsProvider);
-    } catch (_) {}
-    try {
-      ref.invalidate(selectedTabHomeContentProvider);
-    } catch (_) {}
-    try {
-      ref.invalidate(remoteThemeProvider);
     } catch (_) {}
   }
 
@@ -385,16 +336,11 @@ class AuthNotifier extends _$AuthNotifier {
         ApiConstants.allocationAutoAssign,
         data: <String, dynamic>{},
       );
-      // Persist the resolved shop scope BEFORE invalidating providers below,
-      // so the refetch they trigger reads/writes the local cache under the
-      // correct (new) scope key instead of the stale one. See
-      // AppCacheManager.currentShopScope — this is what makes the fix
-      // correct regardless of timing, not just the invalidation below.
+      // Committing the resolved shop scope is the whole job: every storefront
+      // provider watches it, so a changed allocation re-keys and reloads the
+      // theme, sections, banners and products together (see
+      // _invalidateUserScopedProviders' doc).
       await AppCacheManager.applyAllocationResponse(response.data);
-      // The home/theme providers may already have fetched (anonymously, or
-      // pre-allocation) before this completes — refresh them now that a real
-      // allocation might exist. See _invalidateUserScopedProviders' doc.
-      await _invalidateShopScopedHomeProviders();
     } on DioException catch (e) {
       // 401 means token expired — ignore; the refresh interceptor will handle it.
       // Any other error is non-fatal: the anonymous fallback keeps products visible.

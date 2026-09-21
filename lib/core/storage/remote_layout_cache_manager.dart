@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:hive_flutter/hive_flutter.dart';
 
 import 'package:bakaloo_flutter_app/core/storage/hive_service.dart';
 
@@ -15,11 +14,12 @@ import 'package:bakaloo_flutter_app/core/storage/hive_service.dart';
 /// On app start [RemoteLayoutCacheManager.ensureCurrentVersion] checks the
 /// stored version against this constant. A mismatch wipes all remote layout
 /// keys while preserving auth/user/cart data.
-const int remoteLayoutCacheVersion = 2;
-
-/// Box and key names used by the section manifest provider (not in StorageKeys
-/// because the section manifest provider manages its own box).
-const String _sectionManifestBoxName = 'section_manifests';
+///
+/// v3: layout caches moved to scope-keyed `layout_theme_v3@…` /
+/// `layout_sections_v3@…` entries. Everything written by older builds
+/// (`tab_themes_data_*`, `tab_home_data_*`, `section_manifest_*`, and the
+/// unversioned legacy theme keys) is removed once and never read again.
+const int remoteLayoutCacheVersion = 3;
 
 /// Keys inside [HiveService.remoteThemeBox] that belong to old deployments
 /// and can be wiped safely on a version bump.
@@ -96,15 +96,7 @@ class RemoteLayoutCacheManager {
 
   static Future<void> _clearSectionManifestBox() async {
     try {
-      if (!Hive.isBoxOpen(_sectionManifestBoxName)) {
-        // Open it just to wipe, then close.
-        final box =
-            await Hive.openBox<dynamic>(_sectionManifestBoxName);
-        await box.clear();
-        await box.close();
-      } else {
-        await Hive.box<dynamic>(_sectionManifestBoxName).clear();
-      }
+      await HiveService.sectionManifestBox.clear();
       debugPrint('[CacheManager] sectionManifestBox: cleared.');
     } catch (error) {
       debugPrint('[CacheManager] sectionManifestBox clear failed: $error');

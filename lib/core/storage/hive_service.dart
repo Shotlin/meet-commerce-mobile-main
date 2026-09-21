@@ -17,6 +17,11 @@ class HiveService {
   static late Box<dynamic> cacheMetaBox;
   static late Box<dynamic> remoteThemeBox;
 
+  /// Persisted section manifests. Opened at startup (not lazily) so the first
+  /// frame can read a cached manifest synchronously instead of showing a
+  /// skeleton while an async box open completes.
+  static late Box<dynamic> sectionManifestBox;
+
   static Future<void> init() async {
     final path = await resolveHiveStoragePath();
     await Hive.initFlutter(path);
@@ -40,6 +45,8 @@ class HiveService {
     settingsBox = await _openSensitiveBox(StorageKeys.settingsBox, cipher);
     cacheMetaBox = await Hive.openBox<dynamic>(StorageKeys.cacheMetaBox);
     remoteThemeBox = await Hive.openBox<dynamic>(StorageKeys.remoteThemeBox);
+    sectionManifestBox =
+        await Hive.openBox<dynamic>(StorageKeys.sectionManifestBox);
   }
 
   static bool isFresh(String key, Duration ttl) {

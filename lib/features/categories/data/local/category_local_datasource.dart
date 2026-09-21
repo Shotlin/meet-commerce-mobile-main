@@ -1,3 +1,4 @@
+import 'package:bakaloo_flutter_app/core/storage/app_cache_manager.dart';
 import 'package:bakaloo_flutter_app/core/storage/hive_service.dart';
 import 'package:bakaloo_flutter_app/shared/entities/pagination_entity.dart';
 
@@ -20,8 +21,10 @@ class CategoryLocalDataSource {
     await HiveService.markCached('categories_all');
   }
 
-  Map<String, dynamic>? getCategoryProducts(String categoryId) {
-    final value = HiveService.categoriesBox.get(_productsKey(categoryId));
+  /// [key] is a full key from [productsCacheKey], captured when the request
+  /// started — never rebuilt from mutable state after an `await`.
+  Map<String, dynamic>? getCategoryProducts(String key) {
+    final value = HiveService.categoriesBox.get(key);
     if (value is Map) {
       return Map<String, dynamic>.from(value);
     }
@@ -29,11 +32,10 @@ class CategoryLocalDataSource {
   }
 
   Future<void> cacheCategoryProducts({
-    required String categoryId,
+    required String key,
     required List<Map<String, dynamic>> items,
     required PaginationEntity pagination,
   }) async {
-    final key = _productsKey(categoryId);
     await HiveService.categoriesBox.put(
       key,
       <String, dynamic>{
@@ -46,7 +48,12 @@ class CategoryLocalDataSource {
 
   bool isFresh(String key, Duration ttl) => HiveService.isFresh(key, ttl);
 
-  String productsCacheKey(String categoryId) => _productsKey(categoryId);
-
-  String _productsKey(String categoryId) => 'category_products_$categoryId';
+  /// Category products are shop- and price-mode-specific server-side, so the
+  /// offline copy is keyed by both: a category cached for Store A can never be
+  /// served as Store B's, or a retail list as a wholesale one.
+  String productsCacheKey(String categoryId) => AppCacheManager.scopedKey(
+        'category_products_$categoryId',
+        shopScope: AppCacheManager.currentShopScope,
+        extra: AppCacheManager.currentPriceMode,
+      );
 }

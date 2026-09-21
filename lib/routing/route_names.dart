@@ -27,8 +27,5 @@ class RouteNames {
   static const myReviews = '/profile/reviews';
   static const settings = '/profile/settings';
   static const onboarding = '/onboarding';
-  static const offZone = '/off_zone';
-  static const superMall = '/super_mall';
-  static const cafe = '/cafe';
   static const locationUnavailable = '/location-unavailable';
 }

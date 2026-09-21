@@ -13,18 +13,13 @@ import 'package:bakaloo_flutter_app/core/constants/api_constants.dart';
 import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
 import 'package:bakaloo_flutter_app/core/theme/app_text_styles.dart';
 import 'package:bakaloo_flutter_app/core/theme/remote_theme_model.dart';
-import 'package:bakaloo_flutter_app/core/theme/remote_theme_provider.dart';
 import 'package:bakaloo_flutter_app/core/theme/section_manifest_model.dart';
 import 'package:bakaloo_flutter_app/features/categories/domain/entities/category_entity.dart';
 import 'package:bakaloo_flutter_app/features/categories/presentation/providers/category_provider.dart';
 import 'package:bakaloo_flutter_app/features/home/domain/entities/banner_entity.dart';
 import 'package:bakaloo_flutter_app/features/home/presentation/providers/banner_provider.dart';
-import 'package:bakaloo_flutter_app/features/home/presentation/providers/home_provider.dart';
 import 'package:bakaloo_flutter_app/features/home/presentation/widgets/animated_banner_section.dart';
 import 'package:bakaloo_flutter_app/features/home/presentation/widgets/custom_banner_section.dart';
-// PHASE 2C: Import memoized pool provider from dedicated provider file.
-import 'package:bakaloo_flutter_app/features/home/presentation/providers/home_product_pool_provider.dart';
-import 'package:bakaloo_flutter_app/features/home/presentation/providers/manual_products_provider.dart';
 import 'package:bakaloo_flutter_app/features/home/presentation/widgets/seasonal_deal_mosaic.dart';
 import 'package:bakaloo_flutter_app/features/home/presentation/widgets/spacer_section.dart';
 import 'package:bakaloo_flutter_app/features/home/presentation/widgets/text_header_section.dart';
@@ -121,12 +116,7 @@ Widget _buildSeasonalMosaic(
   RemoteTheme theme,
   WidgetRef ref,
 ) {
-  final products = _resolveProducts(
-    ref,
-    entry,
-    fallbackLimit: 8,
-    includeCategoryShelfFallback: true,
-  );
+  final products = _resolveProducts(entry);
   if (products.isEmpty) {
     return const SizedBox.shrink();
   }
@@ -176,17 +166,9 @@ Widget _buildSeasonalMosaic(
     heroTile: heroTheme,
     miniTiles: miniTiles,
   );
-  final heroCandidates = _mergeUniqueProducts(
-    <List<ProductEntity>>[
-      _resolveTrendingPool(ref),
-      _resolveFeaturedPool(ref),
-      products,
-    ],
-  );
-
   return SeasonalDealMosaic(
     products: products,
-    heroCandidates: heroCandidates,
+    heroCandidates: products,
     mosaicTheme: mosaicTheme,
     layoutVariant: entry.layoutVariant ?? 'hero_plus_four',
   );
@@ -281,12 +263,7 @@ Widget _buildCategoryProductGrid(
   RemoteTheme theme,
   WidgetRef ref,
 ) {
-  final products = _resolveProducts(
-    ref,
-    entry,
-    fallbackLimit: 12,
-    includeCategoryShelfFallback: true,
-  );
+  final products = _resolveProducts(entry);
   if (products.isEmpty) {
     return const SizedBox.shrink();
   }
@@ -321,12 +298,7 @@ Widget _buildProductCarousel(
   RemoteTheme theme,
   WidgetRef ref,
 ) {
-  final products = _resolveProducts(
-    ref,
-    entry,
-    fallbackLimit: 10,
-    includeCategoryShelfFallback: true,
-  );
+  final products = _resolveProducts(entry);
   if (products.isEmpty) {
     return const SizedBox.shrink();
   }
@@ -347,13 +319,7 @@ Widget _buildTrendingProducts(
   RemoteTheme theme,
   WidgetRef ref,
 ) {
-  final products = _resolveProducts(
-    ref,
-    entry,
-    fallbackProducts: _resolveTrendingPool(ref),
-    fallbackLimit: 8,
-    includeCategoryShelfFallback: true,
-  );
+  final products = _resolveProducts(entry);
   if (products.isEmpty) {
     return const SizedBox.shrink();
   }
@@ -433,10 +399,14 @@ Widget _buildTextHeader(
   RemoteTheme theme,
   WidgetRef ref,
 ) {
+  final String? text = _readString(entry.config['text']) ?? entry.title;
+  if (text == null || text.trim().isEmpty) {
+    // Nothing configured in the Theme Builder => nothing to show (this used to
+    // fall back to a bundled "Summer Sip & Scoop" campaign title).
+    return const SizedBox.shrink();
+  }
   return TextHeaderSection(
-    text: _readString(entry.config['text']) ??
-        entry.title ??
-        theme.meta.seasonLabel,
+    text: text,
     fontSize: _readDouble(entry.config['font_size']) ?? 18,
     color: _readString(entry.config['color']) ?? '#000000',
     alignment: _readString(entry.config['alignment']) ?? 'left',
@@ -528,159 +498,36 @@ List<_CategoryRailItem> _resolveConfiguredCategoryRailItems(
   return items.take(10).toList(growable: false);
 }
 
-List<ProductEntity> _resolveProducts(
-  WidgetRef ref,
-  SectionManifestEntry entry, {
-  List<ProductEntity>? fallbackProducts,
-  int fallbackLimit = 6,
-  bool includeCategoryShelfFallback = false,
-}) {
-  final binding = entry.merchBinding ?? const <String, dynamic>{};
-  final limit = entry.productLimit ?? fallbackLimit;
-
-  // PRIMARY PATH: use the products the backend already resolved for this
-  // section. The public section-manifest endpoint resolves `merch_binding`
-  // (manual `product_ids` + optional category fill) server-side and returns
-  // the ordered, stock-filtered product objects in `entry.products`. Preferring
-  // them guarantees hand-picked grids render exactly what the dashboard pinned,
-  // even when those products are not part of the home feed's product pool.
-  //
-  // Only clamp when the admin explicitly configured a limit for THIS
-  // section (`entry.productLimit`). Falling back to the generic
-  // `fallbackLimit` here — as this used to do — silently re-truncated an
-  // already-complete, backend-resolved list, which was the root cause of
-  // "some products in a category-linked section don't show up": the
-  // backend correctly sent every product, but this widget only rendered
-  // the first 6-12 of them.
-  final List<ProductEntity> resolvedFromManifest =
-      _parseManifestProducts(entry);
-  if (resolvedFromManifest.isNotEmpty) {
-    return entry.productLimit != null
-        ? resolvedFromManifest.take(entry.productLimit!).toList(growable: false)
-        : resolvedFromManifest;
-  }
-
-  final source = _readString(binding['source']) ?? 'category';
-  final basePool = fallbackProducts ?? _resolveDefaultProductPool(ref);
-
-  if (source == 'manual') {
-    final productIds = _readStringList(binding['product_ids']);
-    if (productIds.isNotEmpty) {
-      // First try to resolve from the already-loaded pool (fast path)
-      final fromPool = _filterByIds(basePool, productIds);
-      if (fromPool.length >= productIds.length) {
-        // All products found in pool — use directly
-        return fromPool.take(limit).toList(growable: false);
-      }
-      // Some products missing from pool — fetch them directly from API
-      // This handles products from categories not loaded on the home feed
-      final fetched = ref
-          .watch(manualProductsByIdsProvider(productIds.join(',')))
-          .asData
-          ?.value;
-      if (fetched != null && fetched.isNotEmpty) {
-        return fetched.take(limit).toList(growable: false);
-      }
-      // Fall back to what we have from pool while API loads
-      if (fromPool.isNotEmpty) {
-        return fromPool.take(limit).toList(growable: false);
-      }
-    }
-  }
-
-  if (source == 'tag') {
-    final tags = _readStringList(binding['tags']);
-    final tagged = _filterByTags(basePool, tags);
-    if (tagged.isNotEmpty) {
-      return tagged.take(limit).toList(growable: false);
-    }
-  }
-
-  final categoryIds = _readStringList(binding['category_ids']);
-  if (categoryIds.isNotEmpty) {
-    final scoped = <ProductEntity>[];
-    for (final categoryId in categoryIds.take(4)) {
-      final productsAsync = ref.watch(homeCategoryProductsProvider(categoryId));
-      final categoryProducts =
-          productsAsync.asData?.value ?? const <ProductEntity>[];
-      scoped.addAll(categoryProducts.where((product) => product.inStock));
-    }
-    final merged = _mergeUniqueProducts(<List<ProductEntity>>[
-      scoped,
-      basePool,
-    ]);
-    if (merged.isNotEmpty) {
-      return merged.take(limit).toList(growable: false);
-    }
-  }
-
-  final defaultProducts = basePool.take(limit).toList(growable: false);
-  if (defaultProducts.isNotEmpty || !includeCategoryShelfFallback) {
-    return defaultProducts;
-  }
-
-  // Some storefronts expose products only through the category endpoints.
-  // When an unbound home section has no server-resolved items and the generic
-  // `/products` pool is empty, use those real category product feeds. This is
-  // intentionally a last-resort browse fallback: explicit manual, category,
-  // and tag bindings must never be replaced with unrelated products.
-  final hasExplicitBinding =
-      _readStringList(binding['product_ids']).isNotEmpty ||
-          _readStringList(binding['category_ids']).isNotEmpty ||
-          _readStringList(binding['tags']).isNotEmpty ||
-          source == 'manual' ||
-          source == 'tag';
-  if (hasExplicitBinding) {
-    return const <ProductEntity>[];
-  }
-
-  return _resolveCategoryShelfFallback(ref, limit);
+/// Products for a product section.
+///
+/// The backend resolves every product section server-side — manual picks,
+/// category fill, and the live Trending/Featured/Deals feeds for unbound
+/// sections — filtered to the customer's shop and priced for their B2C/B2B
+/// mode, and ships the ordered result inside the manifest entry
+/// (`entry.products`). That is the ONLY source used here.
+///
+/// There is deliberately no client-side fallback to other feeds: a section the
+/// server resolved to "nothing available at this shop" renders nothing rather
+/// than borrowing unrelated products from another endpoint, tab or store.
+List<ProductEntity> _resolveProducts(SectionManifestEntry entry) {
+  final List<ProductEntity> resolved = _parseManifestProducts(entry);
+  final int? limit = entry.productLimit;
+  return limit != null && resolved.length > limit
+      ? resolved.take(limit).toList(growable: false)
+      : resolved;
 }
 
-/// Returns real, in-stock products from the first active storefront
-/// categories. It keeps the homepage useful for backends that intentionally
-/// leave the global product feed empty while continuing to serve the
-/// category-specific product endpoints.
-List<ProductEntity> _resolveCategoryShelfFallback(WidgetRef ref, int limit) {
-  final categories = ref.watch(categoryCollectionProvider).asData?.value ??
-      const <CategoryEntity>[];
-  final activeCategories =
-      categories.where((category) => category.isActive).toList(growable: false);
-  final parentCategories = activeCategories
-      .where((category) => category.isParent)
-      .toList(growable: false);
-  final categoryIds =
-      (parentCategories.isNotEmpty ? parentCategories : activeCategories)
-          .take(4)
-          .map((category) => category.id)
-          .where((id) => id.trim().isNotEmpty)
-          .toList(growable: false);
-  if (categoryIds.isEmpty) {
-    return const <ProductEntity>[];
-  }
-
-  final maxItems = limit.clamp(1, 24).toInt();
-  final request = CategoryProductShelfRequest(
-    categoryIds: categoryIds,
-    limitPerCategory:
-        (maxItems / categoryIds.length).ceil().clamp(1, 6).toInt(),
-    maxItems: maxItems,
-  );
-  final products =
-      ref.watch(categoryProductShelfProvider(request)).asData?.value ??
-          const <ProductEntity>[];
-  return products
-      .where((product) => product.inStock)
-      .take(maxItems)
-      .toList(growable: false);
-}
+final Expando<List<ProductEntity>> _manifestProductCache =
+    Expando<List<ProductEntity>>('manifestProducts');
 
 /// Parses the server-resolved product objects attached to a section manifest
-/// entry into [ProductEntity]s. Malformed individual records are skipped so a
-/// single bad product never blanks the whole section.
+/// entry into [ProductEntity]s — once per entry, not once per rebuild.
+/// Malformed individual records are skipped so a single bad product never
+/// blanks the whole section.
 List<ProductEntity> _parseManifestProducts(SectionManifestEntry entry) {
-  if (entry.products.isEmpty) {
-    return const <ProductEntity>[];
+  final List<ProductEntity>? cached = _manifestProductCache[entry];
+  if (cached != null) {
+    return cached;
   }
   final List<ProductEntity> result = <ProductEntity>[];
   for (final Map<String, dynamic> raw in entry.products) {
@@ -690,38 +537,9 @@ List<ProductEntity> _parseManifestProducts(SectionManifestEntry entry) {
       // Skip an unparseable product rather than failing the whole section.
     }
   }
-  return result;
-}
-
-List<ProductEntity> _resolveDefaultProductPool(WidgetRef ref) {
-  // PHASE 2C: Read from the memoized provider — computed once per Riverpod
-  // build cycle instead of once per section builder call.
-  return ref.watch(memoizedDefaultProductPoolProvider);
-}
-
-List<ProductEntity> _resolveFeaturedPool(WidgetRef ref) {
-  // PHASE 2D: Re-use the memoized pool for featured — it already includes
-  // tabHome.featuredProducts merged with homeFeaturedProductsProvider.
-  // Filter to only featured/seasonal products to preserve current behaviour.
-  final tabHome = ref.watch(selectedTabHomeContentProvider).asData?.value;
-  final featured = ref.watch(homeFeaturedProductsProvider).asData?.value ??
-      const <ProductEntity>[];
-  // Only merge these two small lists; skip the full pool expansion.
-  return _mergeUniqueProducts(<List<ProductEntity>>[
-    tabHome?.featuredProducts ?? const <ProductEntity>[],
-    featured,
-  ]);
-}
-
-List<ProductEntity> _resolveTrendingPool(WidgetRef ref) {
-  final tabHome = ref.watch(selectedTabHomeContentProvider).asData?.value;
-  final trending = ref.watch(homeTrendingProductsProvider).asData?.value ??
-      const <ProductEntity>[];
-  // PHASE 2D: Merge only the two relevant lists; skip full pool re-merge.
-  return _mergeUniqueProducts(<List<ProductEntity>>[
-    tabHome?.trendingProducts ?? const <ProductEntity>[],
-    trending,
-  ]);
+  final List<ProductEntity> frozen = List<ProductEntity>.unmodifiable(result);
+  _manifestProductCache[entry] = frozen;
+  return frozen;
 }
 
 List<_PromoItem> _resolvePromoItems(WidgetRef ref, SectionManifestEntry entry) {
@@ -843,33 +661,6 @@ List<ProductEntity> _mergeUniqueProducts(List<List<ProductEntity>> groups) {
     }
   }
   return merged;
-}
-
-List<ProductEntity> _filterByIds(
-  List<ProductEntity> products,
-  List<String> ids,
-) {
-  if (ids.isEmpty) {
-    return const <ProductEntity>[];
-  }
-  return products
-      .where((ProductEntity product) => ids.contains(product.id))
-      .toList(growable: false);
-}
-
-List<ProductEntity> _filterByTags(
-  List<ProductEntity> products,
-  List<String> tags,
-) {
-  if (tags.isEmpty) {
-    return const <ProductEntity>[];
-  }
-  final normalizedTags = tags.map((String tag) => tag.toLowerCase()).toSet();
-  return products.where((ProductEntity product) {
-    return product.tags.any(
-      (String tag) => normalizedTags.contains(tag.toLowerCase()),
-    );
-  }).toList(growable: false);
 }
 
 String? _readString(dynamic value) {
@@ -1862,7 +1653,7 @@ Widget _buildArchedProductShowcase(
   RemoteTheme theme,
   WidgetRef ref,
 ) {
-  final products = _resolveProducts(ref, entry, fallbackLimit: 10);
+  final products = _resolveProducts(entry);
   final categoriesAsync = ref.watch(categoryCollectionProvider);
   final categories = categoriesAsync.asData?.value ?? const <CategoryEntity>[];
   final containerColor = _resolveColor(

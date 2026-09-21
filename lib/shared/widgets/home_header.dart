@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import 'package:bakaloo_flutter_app/core/providers/price_mode_provider.dart';
-import 'package:bakaloo_flutter_app/core/providers/store_provider.dart';
 import 'package:bakaloo_flutter_app/core/theme/remote_theme_model.dart';
 import 'package:bakaloo_flutter_app/features/notifications/presentation/providers/unread_count_provider.dart';
 import 'package:bakaloo_flutter_app/routing/route_names.dart';
@@ -33,8 +32,7 @@ class HomeHeader extends ConsumerWidget {
   final Color? searchZoneColor;
 
   /// Admin-set delivery-time badge (e.g. 45 → "⚡ 45 mins delivery"), shown
-  /// only on the main Zepto store front in place of its static "6 mins"
-  /// tagline. Other store fronts keep their own static taglines.
+  /// when the dashboard has configured one; nothing is shown otherwise.
   final int? deliveryEtaMinutes;
 
   /// When something is already occupying the status-bar area above this
@@ -50,7 +48,6 @@ class HomeHeader extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final topInset = topPaddingOverride ?? MediaQuery.paddingOf(context).top;
-    final store = ref.watch(selectedStoreProvider);
 
     // Use the dashboard-configured top bar color when available.
     // Fall back to the default lavender gradient only when no theme is provided.
@@ -99,22 +96,25 @@ class HomeHeader extends ConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: <Widget>[
-                          Text(
-                            (deliveryEtaMinutes != null && store.id == 'zepto')
-                                ? '⚡ $deliveryEtaMinutes mins delivery'
-                                : store.subtitle,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontFamily: 'Poppins',
-                              fontSize: 17.sp,
-                              fontWeight: FontWeight.w700,
-                              height: 1.05,
-                              letterSpacing: -0.5,
-                              color: topTextColor,
+                          // Only the dashboard-configured ETA is shown. There
+                          // is no bundled fallback claim (this used to print a
+                          // hard-coded "6 mins" when no ETA was configured).
+                          if (deliveryEtaMinutes != null) ...<Widget>[
+                            Text(
+                              '⚡ $deliveryEtaMinutes mins delivery',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontSize: 17.sp,
+                                fontWeight: FontWeight.w700,
+                                height: 1.05,
+                                letterSpacing: -0.5,
+                                color: topTextColor,
+                              ),
                             ),
-                          ),
-                          Gap(4.h),
+                            Gap(4.h),
+                          ],
                           Semantics(
                             button: true,
                             label: 'Delivery address: $addressText',

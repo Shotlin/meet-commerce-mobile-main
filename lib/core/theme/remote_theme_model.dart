@@ -109,9 +109,11 @@ class TopBarTheme {
     );
   }
 
+  /// Neutral, brand-agnostic fallback used only for fields a theme omits.
+  /// The real look always comes from the Theme Builder.
   factory TopBarTheme.defaults() => const TopBarTheme(
-        backgroundColor: Color(0xFF88D4FE),
-        textColor: Color(0xFF000000),
+        backgroundColor: Color(0xFFFFFFFF),
+        textColor: Color(0xFF1C1C1C),
         colorEnabled: true,
       );
 
@@ -146,8 +148,8 @@ class StoreSelectorTheme {
   }
 
   factory StoreSelectorTheme.defaults() => const StoreSelectorTheme(
-        backgroundColor: Color(0xFF88D4FE),
-        activeChipColor: Color(0xFFB1EAFF),
+        backgroundColor: Color(0xFFFFFFFF),
+        activeChipColor: Color(0xFFEEEEEE),
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -238,14 +240,7 @@ class SearchZoneTheme {
   /// [HeaderBackgroundTheme.imageUrl] shows through. Defaults to true.
   final bool colorEnabled;
 
-  static const List<String> _defaultSearchHints = <String>[
-    'fresh vegetables',
-    'Amul butter',
-    'cold drinks',
-    'snacks',
-    'dishwash liquid',
-    'Safai Abhiyaan products',
-  ];
+  static const List<String> _defaultSearchHints = <String>[];
 
   factory SearchZoneTheme.fromJson(Map<String, dynamic> json) {
     final defaults = SearchZoneTheme.defaults();
@@ -268,8 +263,8 @@ class SearchZoneTheme {
   }
 
   factory SearchZoneTheme.defaults() => SearchZoneTheme(
-        backgroundColor: const Color(0xFFB1EAFF),
-        waveColor: const Color(0xFF88D4FE),
+        backgroundColor: const Color(0xFFFFFFFF),
+        waveColor: const Color(0xFFFFFFFF),
         searchHints: List<String>.from(_defaultSearchHints),
         promoBoxImageUrl: null,
         colorEnabled: true,
@@ -317,10 +312,10 @@ class BannerAnimationTheme {
         imageUrl: null,
         lottieUrl: null,
         backgroundGradient: <Color>[
-          const Color(0xFFB1EAFF),
-          const Color(0xFFA8E6FF),
+          const Color(0xFFF5F5F5),
+          const Color(0xFFEEEEEE),
         ],
-        containerColor: const Color(0xFFD8F4FF),
+        containerColor: const Color(0xFFF5F5F5),
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -464,16 +459,18 @@ class HeroTileTheme {
     );
   }
 
+  // No bundled campaign copy: a mosaic tile shows only what the Theme Builder
+  // configured. (This used to invent "Summer Cool Deals / BUY 2 GET 1".)
   factory HeroTileTheme.defaults() => HeroTileTheme(
-        title: 'Summer\nCool Deals',
+        title: '',
         gradient: <Color>[
-          const Color(0xFF3F99FE),
-          const Color(0xFF55C5FD),
+          const Color(0xFFF1F1F1),
+          const Color(0xFFE6E6E6),
         ],
-        badgeText: 'BUY 2\nGET 1',
+        badgeText: '',
         badgeGradient: <Color>[
-          const Color(0xFFFF4CB7),
-          const Color(0xFFD91B83),
+          const Color(0xFFE6E6E6),
+          const Color(0xFFDADADA),
         ],
       );
 
@@ -545,39 +542,18 @@ class SeasonalMosaicTheme {
   final HeroTileTheme heroTile;
   final List<MiniTileTheme> miniTiles;
 
+  // Four neutral placeholder slots (the mosaic layout needs four). They carry
+  // no campaign text; the Theme Builder supplies titles/images/gradients.
   static final List<MiniTileTheme> _defaultMiniTiles = <MiniTileTheme>[
-    MiniTileTheme(
-      title: 'Frozen\nFizz',
-      gradient: <Color>[
-        const Color(0xFF3F99FE),
-        const Color(0xFF55C5FD),
-      ],
-      imageUrl: null,
-    ),
-    MiniTileTheme(
-      title: 'Scoop\nMagic',
-      gradient: <Color>[
-        const Color(0xFF4F97FF),
-        const Color(0xFF397BF1),
-      ],
-      imageUrl: null,
-    ),
-    MiniTileTheme(
-      title: 'Crunch\nBreak',
-      gradient: <Color>[
-        const Color(0xFF43A5FF),
-        const Color(0xFF2E83F3),
-      ],
-      imageUrl: null,
-    ),
-    MiniTileTheme(
-      title: 'Dairy\nDaily',
-      gradient: <Color>[
-        const Color(0xFF5AA8FF),
-        const Color(0xFF4283F3),
-      ],
-      imageUrl: null,
-    ),
+    for (int i = 0; i < 4; i++)
+      MiniTileTheme(
+        title: '',
+        gradient: <Color>[
+          const Color(0xFFF1F1F1),
+          const Color(0xFFE6E6E6),
+        ],
+        imageUrl: null,
+      ),
   ];
 
   static List<MiniTileTheme> get defaultMiniTiles => _defaultMiniTiles
@@ -620,7 +596,7 @@ class SeasonalMosaicTheme {
   }
 
   factory SeasonalMosaicTheme.defaults() => SeasonalMosaicTheme(
-        containerColor: const Color(0xFFD8F4FF),
+        containerColor: const Color(0xFFF5F5F5),
         heroTile: HeroTileTheme.defaults(),
         miniTiles: defaultMiniTiles,
       );
@@ -685,7 +661,7 @@ class ThemeMeta {
   }
 
   factory ThemeMeta.defaults() => const ThemeMeta(
-        seasonLabel: 'Summer Sip & Scoop',
+        seasonLabel: '',
         statusBarBrightness: 'light',
       );
 
@@ -776,7 +752,10 @@ class RemoteTheme {
         meta: ThemeMeta.fromJson(_asMap(json['meta'])),
       );
 
-  factory RemoteTheme.defaults() => RemoteTheme(
+  /// Neutral, brand-agnostic theme shown ONLY while a storefront's own theme
+  /// is unresolved (first load of a shop). It is deliberately plain white/grey
+  /// so it can never be mistaken for — or leak — any store's real theme.
+  factory RemoteTheme.neutral() => RemoteTheme(
         sections: ThemeSections.defaults(),
         meta: ThemeMeta.defaults(),
       );
@@ -951,36 +930,6 @@ class TabThemesResponse {
       tabs: tabsList,
       tabMap: tabMap,
       deliveryEtaMinutes: (json['delivery_eta_minutes'] as num?)?.toInt(),
-    );
-  }
-
-  factory TabThemesResponse.defaults({String storeKey = 'zepto'}) {
-    final TabThemeEntry defaultEntry = TabThemeEntry(
-      storeKey: storeKey,
-      tabId: null,
-      themeId: null,
-      tabKey: 'all',
-      tabLabel: 'All',
-      tabIconUrl: null,
-      tabTextColor: Colors.black,
-      tabOrder: 0,
-      variant: 'A',
-      themeData: RemoteTheme.defaults(),
-    );
-    return TabThemesResponse(
-      storeKey: storeKey,
-      etag: null,
-      tabs: <TabThemeEntry>[defaultEntry],
-      tabMap: <String, TabThemeEntry>{'all': defaultEntry},
-    );
-  }
-
-  factory TabThemesResponse.empty({String storeKey = 'zepto'}) {
-    return TabThemesResponse(
-      storeKey: storeKey,
-      etag: null,
-      tabs: const <TabThemeEntry>[],
-      tabMap: const <String, TabThemeEntry>{},
     );
   }
 
