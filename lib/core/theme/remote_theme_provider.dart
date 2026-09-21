@@ -110,6 +110,10 @@ String _tabHomeStorageKey(SectionScopeKey key) => AppCacheManager.scopedKey(
 /// Memory, then disk. Content restored from disk is stale (revalidated on
 /// first use in this process) but renders immediately.
 Held<TabThemesResponse>? peekTheme(ThemeScopeKey key) {
+  if (key.isUnresolved) {
+    // No shop, no storefront: nothing is ever stored for (or read from) it.
+    return null;
+  }
   final Held<TabThemesResponse>? cached = _themeMemory.get(key.id);
   if (cached != null) {
     return cached;
@@ -153,6 +157,8 @@ LayoutClaim<TabThemesResponse> claimTheme(
       current: _themeMemory.get(key.id) ?? peekTheme(key),
       token: token,
       parse: TabThemesResponse.fromJson,
+      accept: (Map<String, dynamic> data) =>
+          payloadMatchesShopScope(data, key.shopScope),
       apply: (Held<TabThemesResponse> next, {required bool changed}) {
         _themeMemory.put(key.id, next);
         unawaited(
@@ -182,6 +188,9 @@ void markThemeStale({String? storeKey}) => _themeMemory.markStale(
 // ─── Tab-home content (products for sections that carry none) ────────────────
 
 Held<TabHomeContentResponse>? peekTabHome(SectionScopeKey key) {
+  if (key.isUnresolved) {
+    return null;
+  }
   final Held<TabHomeContentResponse>? cached = _tabHomeMemory.get(key.id);
   if (cached != null) {
     return cached;
@@ -225,6 +234,8 @@ LayoutClaim<TabHomeContentResponse> claimTabHome(
       current: _tabHomeMemory.get(key.id) ?? peekTabHome(key),
       token: token,
       parse: TabHomeContentResponse.fromJson,
+      accept: (Map<String, dynamic> data) =>
+          payloadMatchesShopScope(data, key.shopScope),
       apply: (Held<TabHomeContentResponse> next, {required bool changed}) {
         _tabHomeMemory.put(key.id, next);
         unawaited(
@@ -293,6 +304,14 @@ const int _maxFirstLoadRetries = 3;
 final tabThemesForStoreProvider =
     FutureProvider.autoDispose.family<TabThemesResponse, ThemeScopeKey>(
         (Ref ref, ThemeScopeKey key) async {
+  if (key.isUnresolved) {
+    // No shop resolved yet (a guest that has not been located, an account
+    // whose allocation has not arrived): there is no storefront to fetch, and
+    // asking anonymously would return the platform default — the wrong-theme
+    // flash. Stay in loading (placeholders) until the scope changes, which
+    // disposes this provider and builds the real one.
+    return Completer<TabThemesResponse>().future;
+  }
   _rebuildOnChange(ref, themeChangeId(key));
 
   final Held<TabThemesResponse>? held = peekTheme(key);
@@ -322,8 +341,12 @@ final tabThemesForStoreProvider =
   }
   if (outcome.status != FetchStatus.cancelled && ref.mounted) {
     // Offline/unreachable with nothing cached: surface the availability
-    // screen and retry a few times with backoff.
-    reportLayoutHealth(ref, healthy: false);
+    // screen and retry a few times with backoff. A response for another shop
+    // (StorefrontScopeMismatch) is not an outage: keep the placeholders and
+    // retry — the scope/credentials converge within moments.
+    if (outcome.error is! StorefrontScopeMismatch) {
+      reportLayoutHealth(ref, healthy: false);
+    }
     final int attempt = (_themeRetries[key.id] ?? 0) + 1;
     if (attempt <= _maxFirstLoadRetries) {
       _themeRetries[key.id] = attempt;
@@ -385,6 +408,9 @@ final themeResolvedProvider = Provider<bool>((Ref ref) {
 final tabHomeContentProvider = FutureProvider.autoDispose
     .family<TabHomeContentResponse?, SectionScopeKey>(
         (Ref ref, SectionScopeKey key) async {
+  if (key.isUnresolved) {
+    return null;
+  }
   _rebuildOnChange(ref, tabHomeChangeId(key));
 
   final Held<TabHomeContentResponse>? held = peekTabHome(key);

@@ -118,7 +118,9 @@ Map<String, dynamic> themePayload({
     'message': 'Tab themes',
     'data': <String, dynamic>{
       'store_key': storeKey,
-      'shop_id': shopId,
+      // Omitted unless a test names the shop (a payload from a backend that
+      // does not echo it); the integrity guard only compares a present field.
+      if (shopId != null) 'shop_id': shopId,
       'delivery_eta_minutes': 30,
       'tabs': <Map<String, dynamic>>[
         for (final String key in tabKeys)
@@ -148,6 +150,7 @@ Map<String, dynamic> sectionsPayload({
   required String storeKey,
   required String tabKey,
   required String title,
+  String? shopId,
 }) {
   return <String, dynamic>{
     'success': true,
@@ -155,6 +158,7 @@ Map<String, dynamic> sectionsPayload({
     'data': <String, dynamic>{
       'tab_key': tabKey,
       'store_key': storeKey,
+      if (shopId != null) 'shop_id': shopId,
       'sections': <Map<String, dynamic>>[
         <String, dynamic>{
           'id': 'sec-$tabKey',
@@ -171,6 +175,7 @@ Map<String, dynamic> sectionsPayload({
 Map<String, dynamic> tabHomePayload({
   required String storeKey,
   required String tabKey,
+  String? shopId,
 }) {
   return <String, dynamic>{
     'success': true,
@@ -178,6 +183,7 @@ Map<String, dynamic> tabHomePayload({
     'data': <String, dynamic>{
       'store_key': storeKey,
       'tab_key': tabKey,
+      if (shopId != null) 'shop_id': shopId,
       'seasonal_products': <dynamic>[],
       'featured_products': <dynamic>[],
       'deal_products': <dynamic>[],

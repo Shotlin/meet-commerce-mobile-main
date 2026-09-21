@@ -21,32 +21,42 @@ const List<String> kTabs = <String>['all', 'chicken', 'fish', 'mutton', 'eggs'];
 
 String colorFor(String shop) => shop == 'shopB' ? kGreen : kRed;
 
-/// Answers a request the way the real backend would for [shop].
-void serve(FakeRequest r, String shop) {
+/// Answers a request the way the real backend would for [shop]: the payload
+/// names the shop it was built for. [content] picks the content variant (a
+/// dashboard edit) without changing which shop answers.
+void serve(FakeRequest r, String shop, {String? content}) {
+  final String variant = content ?? shop;
   if (r.isTheme) {
     r.respondJson(
       themePayload(
         storeKey: 'zepto',
         shopId: shop,
         tabKeys: kTabs,
-        topBarColor: colorFor(shop),
+        topBarColor: colorFor(variant),
       ),
       headers: <String, List<String>>{
-        'etag': <String>['"theme-$shop"'],
+        'etag': <String>['"theme-$variant"'],
       },
     );
     return;
   }
   if (r.homeTabKey != null) {
-    r.respondJson(tabHomePayload(storeKey: 'zepto', tabKey: r.homeTabKey!));
+    r.respondJson(
+      tabHomePayload(storeKey: 'zepto', tabKey: r.homeTabKey!, shopId: shop),
+    );
     return;
   }
   final String tab = r.tabKey!;
   final String mode = r.query['priceMode'] as String;
   r.respondJson(
-    sectionsPayload(storeKey: 'zepto', tabKey: tab, title: '$shop:$tab:$mode'),
+    sectionsPayload(
+      storeKey: 'zepto',
+      tabKey: tab,
+      title: '$variant:$tab:$mode',
+      shopId: shop,
+    ),
     headers: <String, List<String>>{
-      'etag': <String>['"sec-$shop-$tab-$mode"'],
+      'etag': <String>['"sec-$variant-$tab-$mode"'],
     },
   );
 }
@@ -434,12 +444,13 @@ void main() {
       expect(refetch.where((r) => r.tabKey == 'all'), hasLength(1));
 
       // Theme lands first: nothing is applied until the sections arrive too.
-      serve(refetch.firstWhere((r) => r.isTheme), 'shopB');
+      serve(refetch.firstWhere((r) => r.isTheme), 'shopA', content: 'shopB');
       await settle();
       expect(signals, isEmpty, reason: 'held so both land in one frame');
       expect(topBar(container), 0xFFD32F2F);
 
-      serve(refetch.firstWhere((r) => r.tabKey == 'all'), 'shopB');
+      serve(refetch.firstWhere((r) => r.tabKey == 'all'), 'shopA',
+          content: 'shopB');
       await refresh;
       await settle();
       expect(signals, hasLength(2));

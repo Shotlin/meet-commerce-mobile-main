@@ -82,8 +82,7 @@ class AppCacheManager {
     }
     try {
       final stored = HiveService.settingsBox.get(_shopScopeKey) as String?;
-      _shopScopeNotifier.value =
-          (stored == null || stored.isEmpty) ? anonShopScope : stored;
+      _shopScopeNotifier.value = _canonicalStoredScope(stored);
       _shopScopeSeeded = true;
     } catch (_) {
       // Hive not ready yet — stay on 'anon' and retry on the next read.
@@ -240,10 +239,53 @@ class AppCacheManager {
   /// products.service.js `_scopeKey`, which does the same thing server-side.
   static String get currentShopScope {
     try {
-      final stored = HiveService.settingsBox.get(_shopScopeKey) as String?;
-      return (stored == null || stored.isEmpty) ? anonShopScope : stored;
+      return _canonicalStoredScope(
+        HiveService.settingsBox.get(_shopScopeKey) as String?,
+      );
     } catch (_) {
       return anonShopScope;
+    }
+  }
+
+  /// A stored scope is one shop id or `anon`. Earlier builds stored EVERY
+  /// allocated shop joined by `,`; that names no single storefront, so it is
+  /// replaced by the device's guest shop (or `anon` until the next allocation
+  /// call resolves the account's primary shop).
+  static String _canonicalStoredScope(String? stored) {
+    if (stored == null || stored.isEmpty) {
+      return anonShopScope;
+    }
+    if (stored.contains(',')) {
+      return guestStorefrontShopId() ?? anonShopScope;
+    }
+    return stored;
+  }
+
+  /// The shop of this device's saved guest storefront (signed token + shop id,
+  /// not expired), or null. The guest record is the source of truth for a
+  /// guest's shop: the scope is set from it and the token sent on requests
+  /// comes from the same record.
+  static String? guestStorefrontShopId() {
+    try {
+      final raw =
+          HiveService.settingsBox.get(StorageKeys.guestStorefrontLocation);
+      if (raw is! Map) {
+        return null;
+      }
+      final expiresAt = DateTime.tryParse(raw['expiresAt'] as String? ?? '');
+      if (expiresAt != null && !expiresAt.isAfter(DateTime.now())) {
+        return null;
+      }
+      final token = raw['token'];
+      final shopId = raw['shopId'];
+      return token is String &&
+              token.isNotEmpty &&
+              shopId is String &&
+              shopId.isNotEmpty
+          ? shopId
+          : null;
+    } catch (_) {
+      return null;
     }
   }
 
@@ -258,21 +300,25 @@ class AppCacheManager {
     }
   }
 
-  /// Call after any allocation call (auto-assign/recompute) resolves with a
-  /// shop id list — including an empty list, which maps to [anonShopScope].
-  /// Clears the shop-scoped caches only when the scope actually changed, so
-  /// unrelated calls (e.g. a recompute that confirms the same shop) don't pay
-  /// for a needless refetch.
+  /// Sets the storefront shop. The scope is ONE shop id — the customer's
+  /// primary shop — so [shopIds] is "the primary shop", first element only (an
+  /// empty list means no shop: [anonShopScope]). A signed-in customer can be
+  /// allocated to several shops, but the backend serves the theme, sections,
+  /// products and banners from the primary one only, exactly like a guest's
+  /// token, so that is the only identity the caches may use.
+  ///
+  /// Nothing is wiped; the scope is published only when it actually changed.
   static Future<void> setShopScope(List<String> shopIds) async {
-    final sorted = [...shopIds]..sort();
-    final next = sorted.isEmpty ? anonShopScope : sorted.join(',');
-    await _applyShopScope(next);
+    await _applyShopScope(shopIds.isEmpty ? anonShopScope : shopIds.first);
   }
 
-  /// Call on logout so the next anonymous session (or a different customer
-  /// logging in on the same device) never reads the previous customer's
-  /// shop-scoped cache before their own allocation resolves.
-  static Future<void> resetShopScope() => _applyShopScope(anonShopScope);
+  /// Call on logout: the device goes back to browsing as a guest. The scope
+  /// returns to the saved guest storefront's shop (whose token is what the app
+  /// sends from now on), or [anonShopScope] when the device has none — never
+  /// to `anon` while a valid guest token is being sent, and never leaving the
+  /// previous customer's shop scope behind.
+  static Future<void> resetShopScope() =>
+      _applyShopScope(guestStorefrontShopId() ?? anonShopScope);
 
   /// Parses an allocation endpoint's response body — auto-assign and
   /// recompute are both shaped `{success, message, data: {shops: [...]}}`
@@ -288,13 +334,20 @@ class AppCacheManager {
       if (shops is! List) {
         return;
       }
-      final shopIds = shops
+      final List<Map<dynamic, dynamic>> valid = shops
           .whereType<Map>()
-          .map((shop) => shop['shop_id'])
-          .whereType<String>()
-          .where((id) => id.isNotEmpty)
+          .where((shop) => shop['shop_id'] is String && '${shop['shop_id']}'.isNotEmpty)
           .toList();
-      await setShopScope(shopIds);
+      // The PRIMARY allocation, like the backend; else the first one.
+      final Map<dynamic, dynamic>? primary = valid.isEmpty
+          ? null
+          : valid.firstWhere(
+              (shop) => shop['is_primary'] == true,
+              orElse: () => valid.first,
+            );
+      await setShopScope(
+        primary == null ? const <String>[] : <String>[primary['shop_id'] as String],
+      );
     } catch (error) {
       debugPrint('[AppCacheManager] applyAllocationResponse failed: $error');
     }

@@ -37,6 +37,9 @@ void resetSectionLayoutForTests() {
 
 /// Memory, then disk (disk-restored content is stale but renders at once).
 Held<SectionManifestResponse>? peekSections(SectionScopeKey key) {
+  if (key.isUnresolved) {
+    return null;
+  }
   final Held<SectionManifestResponse>? cached = _sectionMemory.get(key.id);
   if (cached != null) {
     return cached;
@@ -83,6 +86,8 @@ LayoutClaim<SectionManifestResponse> claimSections(
       current: _sectionMemory.get(key.id) ?? peekSections(key),
       token: token,
       parse: SectionManifestResponse.fromJson,
+      accept: (Map<String, dynamic> data) =>
+          payloadMatchesShopScope(data, key.shopScope),
       apply: (Held<SectionManifestResponse> next, {required bool changed}) {
         _sectionMemory.put(key.id, next);
         unawaited(
@@ -145,6 +150,11 @@ final activeSectionKeyProvider = Provider<SectionScopeKey>((Ref ref) {
 final sectionManifestProvider = FutureProvider.autoDispose
     .family<SectionManifestResponse, SectionScopeKey>(
         (Ref ref, SectionScopeKey key) async {
+  if (key.isUnresolved) {
+    // See tabThemesForStoreProvider: no shop ⇒ nothing to request, placeholders
+    // until the scope changes.
+    return Completer<SectionManifestResponse>().future;
+  }
   final StreamSubscription<String> sub = layoutChanges.stream
       .where((String id) => id == sectionChangeId(key))
       .listen((_) {
@@ -248,6 +258,9 @@ class StorefrontSync {
       return;
     }
     final StorefrontScope scope = _ref.read(storefrontScopeProvider);
+    if (!scope.isResolved) {
+      return;
+    }
     final SectionScopeKey sectionKey =
         scope.sectionKey(_ref.read(activeTabKeyProvider));
     final ThemeScopeKey themeKey = scope.themeKey;

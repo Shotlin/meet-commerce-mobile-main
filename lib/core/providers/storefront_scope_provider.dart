@@ -14,8 +14,13 @@ class ThemeScopeKey {
 
   final String storeKey;
 
-  /// `anon` or the sorted allocated shop ids joined by `,`.
+  /// The storefront shop id (the customer's PRIMARY shop — for a guest the shop
+  /// named by the signed storefront token, for an account its primary
+  /// allocation), or `anon` while no shop has been resolved.
   final String shopScope;
+
+  /// No shop resolved yet: there is no storefront to request or show.
+  bool get isUnresolved => shopScope == AppCacheManager.anonShopScope;
 
   String get id => '$storeKey|$shopScope';
 
@@ -54,6 +59,8 @@ class SectionScopeKey {
   ThemeScopeKey get themeKey =>
       ThemeScopeKey(storeKey: storeKey, shopScope: shopScope);
 
+  bool get isUnresolved => shopScope == AppCacheManager.anonShopScope;
+
   String get id => '$storeKey|$shopScope|$priceMode|$tabKey';
 
   @override
@@ -71,7 +78,16 @@ class SectionScopeKey {
   String toString() => 'SectionScopeKey($id)';
 }
 
-/// Everything that can make two storefront payloads differ for one customer.
+/// THE storefront context: everything that can make two storefront payloads
+/// differ for one customer, and nothing else.
+///
+/// Guest or signed in makes no difference: [shopScope] is the id of the ONE
+/// shop the storefront is served from (a guest gets it from the signed token,
+/// an account from its primary allocation), so a guest and an account at the
+/// same location share the same context — and therefore the same cached public
+/// storefront. Login state is deliberately NOT part of the identity. The theme
+/// version is not part of the key either (it cannot be known before the
+/// request): each entry carries its own ETag, which is its version.
 @immutable
 class StorefrontScope {
   const StorefrontScope({
@@ -83,6 +99,13 @@ class StorefrontScope {
   final String storeKey;
   final String shopScope;
   final String priceMode;
+
+  /// True once a shop has been resolved. Until then nothing storefront-related
+  /// is requested or shown (placeholders only).
+  bool get isResolved => shopScope != AppCacheManager.anonShopScope;
+
+  /// The resolved shop id, or null while unresolved.
+  String? get shopId => isResolved ? shopScope : null;
 
   ThemeScopeKey get themeKey =>
       ThemeScopeKey(storeKey: storeKey, shopScope: shopScope);

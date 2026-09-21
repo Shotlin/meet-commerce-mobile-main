@@ -113,10 +113,28 @@ class GuestStorefrontNotifier extends Notifier<GuestStorefrontState> {
             lat: (raw['lat'] as num?)?.toDouble(),
             lng: (raw['lng'] as num?)?.toDouble(),
           );
+          // The request interceptor sends the storefront token from Hive ONLY.
+          // A record restored from the encrypted backup (Hive box rotated, or
+          // an iOS reinstall where the Keychain survives) must be put back,
+          // otherwise every storefront request would go out anonymously while
+          // the scope below claims a real shop.
+          final dynamic inHive =
+              HiveService.settingsBox.get(StorageKeys.guestStorefrontLocation);
+          if (inHive is! Map || inHive['token'] != token) {
+            await HiveService.settingsBox.put(
+              StorageKeys.guestStorefrontLocation,
+              Map<String, dynamic>.from(raw),
+            );
+          }
           // The storefront scope owns the theme/product cache keys.  Set it
           // before exposing a ready guest location so Home cannot request a
-          // theme with the previous (anonymous or another-shop) scope.
-          await AppCacheManager.setShopScope([shopId]);
+          // theme with the previous (anonymous or another-shop) scope. A
+          // device that still holds a signed-in session is NOT a guest: its
+          // scope is its account's primary shop (set by the allocation call),
+          // and the saved guest shop must not claim it in the meantime.
+          if (!await _hasSavedSession()) {
+            await AppCacheManager.setShopScope([shopId]);
+          }
           state = restored;
           return;
         }
@@ -130,6 +148,16 @@ class GuestStorefrontNotifier extends Notifier<GuestStorefrontState> {
         status: GuestStorefrontStatus.failed,
         message: 'Could not restore your delivery location.',
       );
+    }
+  }
+
+  Future<bool> _hasSavedSession() async {
+    try {
+      final String? access =
+          await ref.read(secureStorageProvider).getAccessToken();
+      return access != null && access.isNotEmpty;
+    } catch (_) {
+      return false;
     }
   }
 

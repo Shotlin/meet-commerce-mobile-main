@@ -305,6 +305,7 @@ Future<FetchOutcome<T>> revalidateLayoutResource<T>({
   required CancelToken token,
   required T Function(Map<String, dynamic>) parse,
   required void Function(Held<T> next, {required bool changed}) apply,
+  bool Function(Map<String, dynamic> data)? accept,
 }) async {
   FetchOutcome<T> touch(String? etag) {
     final Held<T> refreshed = Held<T>(
@@ -360,6 +361,17 @@ Future<FetchOutcome<T>> revalidateLayoutResource<T>({
 
     final Map<String, dynamic> dataMap =
         Map<String, dynamic>.from(payload['data'] as Map);
+    if (accept != null && !accept(dataMap)) {
+      // A response built for a different shop than the one this request is
+      // keyed to (typically an anonymous/platform-default one because the
+      // guest token or session was not applied yet). It is never parsed,
+      // stored or shown — whatever is held for the key stays as it is.
+      return FetchOutcome<T>._(
+        FetchStatus.unavailable,
+        held: current,
+        error: StorefrontScopeMismatch(path, dataMap['shop_id']),
+      );
+    }
     final String? etag = response.headers.value('etag');
     final String raw = jsonEncode(dataMap);
     if (current != null && current.raw == raw) {
@@ -399,6 +411,39 @@ Future<FetchOutcome<T>> revalidateLayoutResource<T>({
       error: error,
     );
   }
+}
+
+/// True when a layout payload was built for [shopScope].
+///
+/// The backend echoes the shop it resolved (`shop_id`) on every Theme-Builder
+/// payload. The request itself carries only ambient credentials (the guest's
+/// signed storefront token or the account's bearer token), while the cache key
+/// carries the shop the app believes it is showing; comparing the two is what
+/// stops an anonymous / platform-default / other-shop response from ever being
+/// stored under — and rendered as — a real shop's storefront.
+///
+/// A payload without the field (older backend) is accepted, and so is the
+/// unresolved scope (nothing is requested for it).
+bool payloadMatchesShopScope(Map<String, dynamic> data, String shopScope) {
+  if (shopScope == AppCacheManager.anonShopScope ||
+      !data.containsKey('shop_id')) {
+    return true;
+  }
+  return data['shop_id'] == shopScope;
+}
+
+/// A layout response that belongs to another shop than the key it was
+/// requested for. Not a connectivity failure: it must not raise the "service
+/// unavailable" screen.
+class StorefrontScopeMismatch implements Exception {
+  const StorefrontScopeMismatch(this.path, this.receivedShopId);
+
+  final String path;
+  final Object? receivedShopId;
+
+  @override
+  String toString() =>
+      'StorefrontScopeMismatch: $path answered for shop $receivedShopId';
 }
 
 class LayoutUnavailableException implements Exception {
