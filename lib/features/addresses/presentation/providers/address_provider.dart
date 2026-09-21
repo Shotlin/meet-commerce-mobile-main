@@ -38,7 +38,7 @@ final addressRepositoryProvider = Provider<AddressRepository>((Ref ref) {
     AuthAuthenticated(:final user)
         when user.name != null && user.name!.trim().isNotEmpty =>
       user.name!.trim(),
-    _ => 'Bakaloo Customer',
+    _ => 'FreshCuts Customer',
   };
   final fallbackPhone = switch (authState) {
     AuthAuthenticated(:final user) => user.phone,

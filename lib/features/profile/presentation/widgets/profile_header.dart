@@ -121,10 +121,11 @@ class _ProfileHeaderState extends ConsumerState<ProfileHeader> {
   String get _displayName {
     final trimmed = widget.name?.trim();
     if (trimmed == null || trimmed.isEmpty) {
-      return 'Bakaloo Customer';
+      return 'FreshCuts Customer';
     }
     return trimmed;
   }
+
 }
 
 class _EditProfileButton extends StatelessWidget {

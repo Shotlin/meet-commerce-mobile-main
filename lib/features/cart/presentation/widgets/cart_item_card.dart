@@ -282,7 +282,7 @@ class _CartStepper extends StatelessWidget {
     this.disableIncrease = false,
   });
 
-  static const Color _brandRedSurface = AppColors.brandRedSurface;
+  static const Color _brandRedSurface = Color(0xFFFBEAEA);
 
   final int quantity;
   final VoidCallback onDecrease;
@@ -357,8 +357,8 @@ class _StepButton extends StatefulWidget {
 class _StepButtonState extends State<_StepButton> {
   double _scale = 1;
 
-  static const Color _brandRed = AppColors.brandRed;
-  static const Color _brandRedSurface = AppColors.brandRedSurface;
+  static const Color _brandRed = Color(0xFFD02428);
+  static const Color _brandRedSurface = Color(0xFFFBEAEA);
 
   @override
   Widget build(BuildContext context) {

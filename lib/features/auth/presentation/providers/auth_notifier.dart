@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,7 +10,6 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import 'package:bakaloo_flutter_app/core/constants/api_constants.dart';
 import 'package:bakaloo_flutter_app/core/constants/storage_keys.dart';
-import 'package:bakaloo_flutter_app/core/diagnostics/crash_reporter.dart';
 import 'package:bakaloo_flutter_app/core/di/providers.dart';
 import 'package:bakaloo_flutter_app/core/errors/failure.dart';
 import 'package:bakaloo_flutter_app/core/notifications/fcm_token_helper.dart';
@@ -28,7 +28,10 @@ import 'package:bakaloo_flutter_app/features/auth/domain/usecases/verify_otp_use
 import 'package:bakaloo_flutter_app/features/auth/presentation/providers/auth_state.dart';
 import 'package:bakaloo_flutter_app/features/addresses/presentation/providers/address_provider.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/providers/cart_provider.dart';
+import 'package:bakaloo_flutter_app/features/home/presentation/providers/banner_provider.dart';
+import 'package:bakaloo_flutter_app/features/home/presentation/providers/home_provider.dart';
 import 'package:bakaloo_flutter_app/features/wallet/presentation/providers/wallet_provider.dart';
+import 'package:bakaloo_flutter_app/core/utils/pincode.dart';
 
 part 'auth_notifier.g.dart';
 
@@ -232,21 +235,57 @@ class AuthNotifier extends _$AuthNotifier {
     state = const AuthUnauthenticated();
   }
 
-  /// Invalidate user-scoped Riverpod providers so they refetch fresh data for
-  /// the newly authenticated user instead of serving the previous session's
-  /// in-memory state. Best-effort — a missing provider never blocks login.
+  /// PHASE 6 FIX: Invalidate user-scoped Riverpod providers so they refetch
+  /// fresh data for the newly authenticated user instead of serving the
+  /// previous session's in-memory state. Best-effort — wrapped so a missing
+  /// provider never blocks login.
   ///
-  /// Storefront content (theme, tabs, sections, banners, products) is NOT
-  /// listed here on purpose: it is keyed by `StorefrontScope`, so when the
-  /// customer's shop allocation resolves to a different shop the scope changes
-  /// and every storefront provider rebuilds for it automatically — there is no
-  /// hand-maintained invalidation list to fall out of date.
+  /// FIX: the home-feed/theme providers (homeProvider, homeTrendingProducts,
+  /// homeFeaturedProducts, homeDeals, homeCategoryProducts,
+  /// selectedTabHomeContentProvider) are all keepAlive
+  /// and were missing here entirely — whichever response one of them
+  /// happened to fetch FIRST (e.g. during the brief anonymous window before
+  /// login completes) stuck around for the rest of the app session, so a
+  /// customer could keep seeing the pre-login/pre-allocation product set
+  /// (or the platform-default theme) even after their real shop allocation
+  /// resolved. This call alone plus the recompute-triggered refresh in
+  /// _triggerAllocationAutoAssign below closes that gap.
   void _invalidateUserScopedProviders() {
+    // Imported lazily by name to avoid circular imports; these are the
+    // keepAlive providers that hold per-user state.
     try {
       ref.invalidate(cartProvider);
     } catch (_) {}
     try {
       ref.invalidate(walletProvider);
+    } catch (_) {}
+    unawaited(_invalidateShopScopedHomeProviders());
+  }
+
+  /// Refreshes the home feeds after login / a freshly resolved allocation.
+  ///
+  /// Nothing is wiped and the theme/section/tab-home providers are NOT listed:
+  /// every storefront cache and provider is keyed by `StorefrontScope`, so if
+  /// the allocation moved the customer to another shop they all re-key and
+  /// reload on their own, and if it did not, their content simply stays.
+  Future<void> _invalidateShopScopedHomeProviders() async {
+    try {
+      ref.invalidate(homeProvider);
+    } catch (_) {}
+    try {
+      ref.invalidate(homeFeaturedProductsProvider);
+    } catch (_) {}
+    try {
+      ref.invalidate(homeDealsProvider);
+    } catch (_) {}
+    try {
+      ref.invalidate(homeTrendingProductsProvider);
+    } catch (_) {}
+    try {
+      ref.invalidate(homeNewArrivalsProvider);
+    } catch (_) {}
+    try {
+      ref.invalidate(homeCategoryProductsProvider);
     } catch (_) {}
   }
 
@@ -336,11 +375,16 @@ class AuthNotifier extends _$AuthNotifier {
         ApiConstants.allocationAutoAssign,
         data: <String, dynamic>{},
       );
-      // Committing the resolved shop scope is the whole job: every storefront
-      // provider watches it, so a changed allocation re-keys and reloads the
-      // theme, sections, banners and products together (see
-      // _invalidateUserScopedProviders' doc).
+      // Persist the resolved shop scope BEFORE invalidating providers below,
+      // so the refetch they trigger reads/writes the local cache under the
+      // correct (new) scope key instead of the stale one. See
+      // AppCacheManager.currentShopScope — this is what makes the fix
+      // correct regardless of timing, not just the invalidation below.
       await AppCacheManager.applyAllocationResponse(response.data);
+      // The home/theme providers may already have fetched (anonymously, or
+      // pre-allocation) before this completes — refresh them now that a real
+      // allocation might exist. See _invalidateUserScopedProviders' doc.
+      await _invalidateShopScopedHomeProviders();
     } on DioException catch (e) {
       // 401 means token expired — ignore; the refresh interceptor will handle it.
       // Any other error is non-fatal: the anonymous fallback keeps products visible.
@@ -361,7 +405,7 @@ class AuthNotifier extends _$AuthNotifier {
       final raw =
           HiveService.settingsBox.get(StorageKeys.guestStorefrontLocation);
       if (raw is! Map) return;
-      final pincode = raw['pincode'] as String?;
+      final pincode = normalizePincode(raw['pincode'] as String?);
       final lat = raw['lat'] as num?;
       final lng = raw['lng'] as num?;
       if (pincode == null || pincode.isEmpty || lat == null || lng == null)
@@ -396,10 +440,6 @@ class AuthNotifier extends _$AuthNotifier {
   }
 
   Future<void> _registerFcmToken() async {
-    // Browser push requires Firebase Web credentials, VAPID configuration and
-    // a messaging service worker. Until those are supplied, login must not
-    // attempt the native FCM registration path.
-    if (kIsWeb) return;
     try {
       final token = await getFcmTokenAwaitingApns(FirebaseMessaging.instance);
       if (token == null || token.isEmpty) {
@@ -428,7 +468,7 @@ class AuthNotifier extends _$AuthNotifier {
       // "no notifications at all" bug was invisible until traced through
       // the code). Record it non-fatally instead of swallowing it outright.
       unawaited(
-        reportError(
+        FirebaseCrashlytics.instance.recordError(
           err,
           stack,
           reason: 'FCM token registration failed (network)',
@@ -437,7 +477,7 @@ class AuthNotifier extends _$AuthNotifier {
       );
     } catch (err, stack) {
       unawaited(
-        reportError(
+        FirebaseCrashlytics.instance.recordError(
           err,
           stack,
           reason: 'FCM token registration failed',

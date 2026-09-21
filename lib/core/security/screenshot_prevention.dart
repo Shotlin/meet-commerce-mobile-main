@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
@@ -10,7 +12,7 @@ class ScreenshotPrevention {
     if (kIsWeb) {
       return;
     }
-    if (defaultTargetPlatform == TargetPlatform.android) {
+    if (Platform.isAndroid) {
       try {
         await _channel.invokeMethod<void>('enableSecure');
       } catch (_) {
@@ -23,7 +25,7 @@ class ScreenshotPrevention {
     if (kIsWeb) {
       return;
     }
-    if (defaultTargetPlatform == TargetPlatform.android) {
+    if (Platform.isAndroid) {
       try {
         await _channel.invokeMethod<void>('disableSecure');
       } catch (_) {

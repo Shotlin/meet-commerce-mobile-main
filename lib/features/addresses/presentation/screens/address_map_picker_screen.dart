@@ -667,58 +667,6 @@ class _AddressMapPickerScreenState
   }
 }
 
-class _MapImageError extends StatelessWidget {
-  const _MapImageError({required this.onRetry});
-
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return ColoredBox(
-      color: AppColors.bgInput,
-      child: Center(
-        child: Container(
-          margin: EdgeInsets.symmetric(horizontal: 32.w),
-          padding: EdgeInsets.all(16.w),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-            boxShadow: const <BoxShadow>[AppShadows.cardShadow],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              PhosphorIcon(
-                PhosphorIcons.mapTrifoldLight,
-                size: 34.sp,
-                color: AppColors.textTertiary,
-              ),
-              Gap(8.h),
-              Text(
-                'Map unavailable right now',
-                textAlign: TextAlign.center,
-                style: AppTextStyles.labelLarge.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              Gap(4.h),
-              Text(
-                'Check your connection and try again.',
-                textAlign: TextAlign.center,
-                style: AppTextStyles.bodySmall.copyWith(
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              Gap(10.h),
-              OutlinedButton(onPressed: onRetry, child: const Text('Retry')),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class AddressMapPickerResult {
   const AddressMapPickerResult({
     required this.point,

@@ -23,7 +23,7 @@ class LocationPermissionDeniedDialog {
       builder: (context) => AlertDialog(
         title: const Text('Location permission blocked'),
         content: const Text(
-          'Bakaloo needs your location to autofill your delivery address. '
+          'FreshCuts needs your location to autofill your delivery address. '
           'Please enable it from Settings.',
         ),
         actions: <Widget>[

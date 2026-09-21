@@ -1,5 +1,5 @@
 name: bakaloo_flutter_app
-description: Bakaloo — Customer Mobile App
+description: FreshCuts — Customer Mobile App
 publish_to: none
 version: 1.0.17+2047
 
@@ -9,8 +9,6 @@ environment:
 
 dependencies:
   flutter:
-    sdk: flutter
-  flutter_web_plugins:
     sdk: flutter
   flutter_riverpod: ^3.0.3
   riverpod_annotation: ^3.0.3
@@ -69,6 +67,7 @@ dependencies:
   dartz: ^0.10.1
   equatable: ^2.0.7
   speech_to_text: ^7.0.0
+  flutter_dotenv: ^5.1.0
   wakelock_plus: ^1.2.8
   timeago: ^3.7.0
 
@@ -90,23 +89,13 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    # Keep Web/public assets explicit so retired mobile artwork is not copied
-    # into the browser bundle. The tracked legacy files remain available for
-    # review without being packaged by Flutter.
-    - assets/images/1ST_MINIBOX.png
-    - assets/images/2ND_MINIBOX.png
-    - assets/images/3RD_MINIBOX.png
-    - assets/images/4TH_MINIBOX.png
-    - assets/images/bakaloo-location-unavailable-illustration.png
-    - assets/images/bakaloo-login-hero-illustration.png
-    - assets/images/bakaloo-offline-state-illustration.png
-    - assets/images/bakaloo-otp-background-illustration.png
-    - assets/images/bakaloo-splash-screen.png
-    - assets/images/search_bannder.png
+    - assets/images/
     - assets/animations/
+    - assets/3d_icons/
     - assets/icon/
     - assets/icon/footer_icon/
     - assets/lottie/
+    - .env
   fonts:
     # ── DM Sans — body text, product names, labels, descriptions ──────────
     # Humanist sans-serif, warm and highly legible at small sizes.
@@ -167,9 +156,9 @@ flutter:
 
 flutter_native_splash:
   color: "#FFFFFF"
-  image: assets/images/bakaloo-splash-screen.png
+  image: assets/images/freshcuts-splash-screen.jpg
   color_dark: "#FFFFFF"
-  image_dark: assets/images/bakaloo-splash-screen.png
+  image_dark: assets/images/freshcuts-splash-screen.jpg
   android_12:
     image: assets/icon/app_icon.png
     icon_background_color: "#FFFFFF"

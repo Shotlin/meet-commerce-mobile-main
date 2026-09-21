@@ -23,6 +23,9 @@ class NotificationRouter {
     '/search',
     '/splash',
     '/auth/',
+    '/off_zone',
+    '/super_mall',
+    '/cafe',
     '/location-unavailable',
   ];
 

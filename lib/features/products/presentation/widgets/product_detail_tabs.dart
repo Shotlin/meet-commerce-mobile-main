@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
-import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
 import 'package:bakaloo_flutter_app/features/products/domain/entities/product_entity.dart';
 
 /// Description / Nutrition / Cooking Tips / Reviews tab strip. Each tab
@@ -104,7 +103,7 @@ class _TabButton extends StatelessWidget {
         decoration: BoxDecoration(
           border: Border(
             bottom: BorderSide(
-              color: selected ? AppColors.brandRed : Colors.transparent,
+              color: selected ? const Color(0xFFD02428) : Colors.transparent,
               width: 2.5,
             ),
           ),
@@ -119,7 +118,7 @@ class _TabButton extends StatelessWidget {
             fontFamily: 'Inter',
             fontSize: 12.sp,
             fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-            color: selected ? AppColors.brandRed : const Color(0xFF999999),
+            color: selected ? const Color(0xFFD02428) : const Color(0xFF999999),
           ),
         ),
       ),

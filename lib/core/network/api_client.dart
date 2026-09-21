@@ -82,13 +82,6 @@ abstract class ApiClient {
     @Query('lng') double lng,
   );
 
-  @GET(ApiConstants.olaMapsReverseGeocode)
-  Future<HttpResponse<dynamic>> getOlaMapsReverseGeocodeForStorefront(
-    @Query('lat') double lat,
-    @Query('lng') double lng,
-    @Header('X-Storefront-Token') String storefrontToken,
-  );
-
   @GET(ApiConstants.olaMapsDirections)
   Future<HttpResponse<dynamic>> getOlaMapsDirections(
     @Query('originLat') double originLat,

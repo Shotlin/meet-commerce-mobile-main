@@ -8,8 +8,8 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
 
 import 'package:bakaloo_flutter_app/core/constants/api_constants.dart';
-import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
 import 'package:bakaloo_flutter_app/core/providers/store_provider.dart';
+import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
 import 'package:bakaloo_flutter_app/core/theme/remote_theme_model.dart';
 import 'package:bakaloo_flutter_app/core/theme/remote_theme_provider.dart';
 
@@ -27,23 +27,35 @@ class CategoryTabsRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final selectedId = ref.watch(selectedCategoryIdProvider);
     // PERF: Only watch the categoryTabs sub-field, not the entire RemoteTheme.
     final categoryTabsTheme = ref.watch(
       activeTabThemeProvider.select((t) => t.sections.categoryTabs),
     );
     // The tabs come ONLY from the active storefront's Theme Builder manifest
-    // (scoped to store + shop). They are null until that theme has loaded.
-    final List<TabThemeEntry>? tabs = ref.watch(themeTabsProvider);
-    final String activeTabKey = ref.watch(activeTabKeyProvider);
+    // (scoped to store + shop). PERF: only the tabs list is watched.
+    final List<TabThemeEntry>? asyncTabs =
+        ref.watch(tabThemesProvider.select((a) => a.asData?.value.tabs));
+    final List<TabThemeEntry>? snapshotTabs =
+        ref.watch(tabThemesSnapshotProvider)?.tabs;
+    final List<TabThemeEntry>? remoteTabs =
+        (snapshotTabs != null && snapshotTabs.isNotEmpty)
+            ? snapshotTabs
+            : (asyncTabs != null && asyncTabs.isNotEmpty)
+                ? asyncTabs
+                : null;
+    final String effectiveSelectedId =
+        _resolveSelectedTabId(selectedId, remoteTabs);
     final resolvedPadding =
         (listPadding ?? EdgeInsets.symmetric(horizontal: 12.w))
             .resolve(Directionality.of(context));
     final resolvedHeight = rowHeight ?? (textOnly ? 44.h : 72.h);
 
-    if (tabs == null || tabs.isEmpty) {
+    if (remoteTabs == null) {
       // First load of this storefront: neutral placeholders that hold the
-      // row's height. There is intentionally NO bundled/legacy tab list to
-      // fall back to — that is what used to flash the old grocery tabs.
+      // row's height. There is intentionally NO bundled/legacy tab list to fall
+      // back to — that is what used to flash the old grocery tabs before the
+      // shop's real Theme Builder tabs arrived.
       return SizedBox(
         height: resolvedHeight,
         child: _CategoryTabsSkeleton(
@@ -54,9 +66,9 @@ class CategoryTabsRow extends ConsumerWidget {
     }
 
     final defaultGap = textOnly ? 10.w : 6.w;
-    final itemSpecs = List<_CategoryTabSpec>.generate(tabs.length, (index) {
-      final TabThemeEntry tab = tabs[index];
-      final bool isSelected = tab.tabKey == activeTabKey;
+    final itemSpecs = List<_CategoryTabSpec>.generate(remoteTabs.length, (index) {
+      final TabThemeEntry tab = remoteTabs[index];
+      final bool isSelected = tab.tabKey == effectiveSelectedId;
       final double naturalWidth =
           textOnly ? math.max(52.w, tab.tabLabel.length * 7.2.w) : 72.w;
 
@@ -112,6 +124,21 @@ class CategoryTabsRow extends ConsumerWidget {
         },
       ),
     );
+  }
+
+  String _resolveSelectedTabId(
+    String selectedId,
+    List<TabThemeEntry>? remoteTabs,
+  ) {
+    if (remoteTabs == null || remoteTabs.isEmpty) {
+      return selectedId;
+    }
+
+    if (remoteTabs.any((tab) => tab.tabKey == selectedId)) {
+      return selectedId;
+    }
+
+    return resolveDefaultTab(remoteTabs).tabKey;
   }
 
   Widget _buildRemoteTab({

@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
-
-import 'package:bakaloo_flutter_app/core/config/app_config.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 enum CustomerImageProfile {
   banner,
@@ -48,10 +47,10 @@ class ApiConstants {
       <String, OptimizedMediaAsset>{};
 
   static String get baseUrl => _normalizeLocalhost(
-        AppConfig.baseUrl,
+        dotenv.env['BASE_URL'] ?? '',
       );
   static String get socketUrl => _normalizeLocalhost(
-        AppConfig.socketUrl,
+        dotenv.env['SOCKET_URL'] ?? '',
       );
 
   /// Public-facing marketing/web domain used for user-shareable links
@@ -59,8 +58,8 @@ class ApiConstants {
   /// [baseUrl], which points at the API host (api.bakaloo.in) — that host
   /// should never appear in a link shown to another person.
   static String get webBaseUrl {
-    final configured = AppConfig.webBaseUrl;
-    if (configured.isNotEmpty) {
+    final configured = dotenv.env['WEB_BASE_URL']?.trim();
+    if (configured != null && configured.isNotEmpty) {
       return configured;
     }
     return 'https://bakaloo.in';

@@ -19,9 +19,10 @@ import 'package:bakaloo_flutter_app/features/purchase_limits/presentation/provid
 import 'package:bakaloo_flutter_app/features/wishlist/presentation/providers/wishlist_provider.dart';
 import 'package:bakaloo_flutter_app/shared/widgets/app_image.dart';
 
-// Bakaloo brand system for this card — kept local rather than pulled from
-// AppColors since these are exact tokens from the search-results design spec
-// (a strong CTA red distinct from the softer brandRed used elsewhere).
+// FreshCuts brand system for this card — kept local rather than pulled from
+// AppColors since these are exact tokens from the premium search-grid
+// design spec (a strong CTA red distinct from the softer brandRed used
+// elsewhere, plus dedicated success/soft-surface tokens for badges/chips).
 class _Palette {
   _Palette._();
   static const Color brandRed = Color(0xFFC32D2E);

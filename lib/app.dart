@@ -1,10 +1,8 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
-import 'package:bakaloo_flutter_app/core/notifications/notification_startup.dart';
-import 'package:bakaloo_flutter_app/core/layout/responsive_breakpoints.dart';
+import 'package:bakaloo_flutter_app/core/notifications/fcm_service.dart';
 import 'package:bakaloo_flutter_app/core/theme/app_theme.dart';
 import 'package:bakaloo_flutter_app/routing/app_router.dart';
 import 'package:bakaloo_flutter_app/shared/providers/theme_provider.dart';
@@ -26,7 +24,7 @@ const double _maxTabletScale = 1.3;
 
 Size _resolveDesignSize(BuildContext context) {
   final Size screenSize = MediaQuery.sizeOf(context);
-  if (screenSize.shortestSide < ResponsiveBreakpoints.tablet) {
+  if (screenSize.shortestSide < 600) {
     return _phoneDesignSize;
   }
   return Size(
@@ -40,7 +38,7 @@ class App extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    initializePlatformNotifications(ref);
+    ref.watch(initializeFcmProvider);
     final router = ref.watch(appRouterProvider);
     final themeMode = ref.watch(themeModeProvider);
 
@@ -55,17 +53,14 @@ class App extends ConsumerWidget {
           routerConfig: router,
           debugShowCheckedModeBanner: false,
           builder: (BuildContext context, Widget? child) {
-            final mediaQuery = MediaQuery.of(context);
-            final textScaler = kIsWeb
-                ? mediaQuery.textScaler
-                : TextScaler.linear(
-                    mediaQuery.textScaler.scale(1).clamp(0.8, 1.2).toDouble(),
-                  );
+            final textScaleFactor = MediaQuery.of(context)
+                .textScaler
+                .scale(1)
+                .clamp(0.8, 1.2)
+                .toDouble();
             return MediaQuery(
-              data: mediaQuery.copyWith(
-                // Preserve browser/user accessibility text scaling. Native
-                // remains capped at its established mobile visual range.
-                textScaler: textScaler,
+              data: MediaQuery.of(context).copyWith(
+                textScaler: TextScaler.linear(textScaleFactor),
               ),
               child: AppVersionGate(
                 child: AppAvailabilityGate(

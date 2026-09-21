@@ -12,18 +12,22 @@ class DynamicHomeSections extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Already filtered (visibility / platform policy) by the provider, and the
-    // list identity only changes when the manifest content actually changes.
-    final List<SectionManifestEntry> sections = ref.watch(
-      activeSectionsProvider.select((state) => state.sections),
+    // Use .select() to avoid rebuilding the full list on unrelated theme changes.
+    final int sectionCount = ref.watch(
+      activeSectionManifestProvider.select((m) => m.sections.length),
     );
 
-    if (sections.isEmpty) {
+    if (sectionCount == 0) {
       return const SliverToBoxAdapter(child: SizedBox.shrink());
     }
 
-    // Each slot reads the theme itself via ref so it only rebuilds when its own
-    // section data changes (not when unrelated theme fields change).
+    final List<SectionManifestEntry> sections = ref.watch(
+      activeSectionManifestProvider.select((m) => m.sections),
+    );
+
+    // Pass theme down only when sections actually need it; each slot will
+    // read the theme itself via ref so it only rebuilds when its own section
+    // data changes (not when unrelated theme fields change).
     return SliverList(
       delegate: SliverChildBuilderDelegate(
         (BuildContext context, int index) {
@@ -67,3 +71,4 @@ class _DynamicSectionSlot extends ConsumerWidget {
     );
   }
 }
+

@@ -127,6 +127,10 @@ class _ProductCardState extends State<ProductCard> {
   }
 
   Widget _buildPremiumCard(BuildContext context, bool boxed) {
+    if (boxed) {
+      return _buildHomeFamilyCard(context);
+    }
+
     final product = _selectedFamilyProduct ?? widget.product;
     const ink = Color(0xFF141414);
     const muted = Color(0xFF888888);

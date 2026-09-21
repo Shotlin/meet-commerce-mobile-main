@@ -1,7 +1,8 @@
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:path_provider/path_provider.dart';
+
 import 'package:bakaloo_flutter_app/core/constants/storage_keys.dart';
 import 'package:bakaloo_flutter_app/core/security/encryption_helper.dart';
-import 'package:bakaloo_flutter_app/core/storage/hive_storage_path.dart';
 
 class HiveService {
   const HiveService();
@@ -18,13 +19,12 @@ class HiveService {
   static late Box<dynamic> remoteThemeBox;
 
   /// Persisted section manifests. Opened at startup (not lazily) so the first
-  /// frame can read a cached manifest synchronously instead of showing a
-  /// skeleton while an async box open completes.
+  /// frame can read a cached manifest synchronously.
   static late Box<dynamic> sectionManifestBox;
 
   static Future<void> init() async {
-    final path = await resolveHiveStoragePath();
-    await Hive.initFlutter(path);
+    final directory = await getApplicationDocumentsDirectory();
+    await Hive.initFlutter(directory.path);
     final cipher = await EncryptionHelper().getHiveCipher();
 
     productsBox = await Hive.openBox<dynamic>(StorageKeys.productsBox);

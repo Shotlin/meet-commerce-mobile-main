@@ -49,8 +49,8 @@ class CategoryLocalDataSource {
   bool isFresh(String key, Duration ttl) => HiveService.isFresh(key, ttl);
 
   /// Category products are shop- and price-mode-specific server-side, so the
-  /// offline copy is keyed by both: a category cached for Store A can never be
-  /// served as Store B's, or a retail list as a wholesale one.
+  /// cached copy is keyed by both: a category cached for Store A is never
+  /// served as Store B's, nor a retail list as a wholesale one.
   String productsCacheKey(String categoryId) => AppCacheManager.scopedKey(
         'category_products_$categoryId',
         shopScope: AppCacheManager.currentShopScope,

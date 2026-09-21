@@ -20,12 +20,13 @@ class AppColors {
   static const warmChip = Color(0xFFF2ECE2);
   static const warmTintGreen = Color(0xFFEAF5C6);
 
-  // Compatibility token names retained for existing call sites. The values
-  // are Bakaloo's purple primary palette; no new brand identity is created.
-  static const brandRed = Color(0xFF6A1B9A);
-  static const brandRedDark = Color(0xFF4A148C);
-  static const brandRedSurface = Color(0xFFF3E5F5);
-  static const brandRedBorder = Color(0xFFD1B3E8);
+  // Meet Commerce brand red — matches the footer nav's active-tab color
+  // (app_bottom_nav.dart) and replaces the old Bakaloo purple on the
+  // phone-login / OTP-verify screens.
+  static const brandRed = Color(0xFFD02428);
+  static const brandRedDark = Color(0xFFA81C1F);
+  static const brandRedSurface = Color(0xFFFBEAEA);
+  static const brandRedBorder = Color(0xFFF0C6C7);
 
   static const errorRed = Color(0xFFD32F2F);
   static const outOfStockRed = Color(0xFFE53935);
@@ -62,20 +63,21 @@ class AppColors {
   static const cartPinkPressed = Color(0xFFC2185B);
   static const cartPinkLight = Color(0xFFFCE4EC);
 
-  // Product Detail — shared Bakaloo primary theme (price tag, CTA, rating,
-  // badges), retained under the historical token names for compatibility.
+  // Product Detail — brand red theme (price tag, CTA, rating, badges).
+  // Aliased to the shared brand-red tokens above rather than duplicating
+  // hex literals — was a standalone "Bakaloo Violet" palette.
   static const pdViolet = brandRed;
   static const pdVioletDark = brandRedDark;
   static const pdVioletSurface = brandRedSurface;
   static const pdVioletBorder = brandRedBorder;
-  static const pdVioletGlow = Color(0x4D6A1B9A);
+  static const pdVioletGlow = Color(0x4DD02428);
 
-  // My Orders / Profile — shared Bakaloo primary theme tokens.
+  // My Orders / Profile — brand red theme tokens (was "premium violet").
   static const orderViolet = brandRed;
   static const orderVioletDark = brandRedDark;
   static const orderVioletSurface = brandRedSurface;
   static const orderVioletBorder = brandRedBorder;
-  static const orderVioletGlow = Color(0x336A1B9A);
+  static const orderVioletGlow = Color(0x33D02428);
   static const orderCanvas = Color(0xFFF7F6FB);
   static const orderThumbBg = Color(0xFFF1F0F6);
   static const orderCardBorder = Color(0xFFEDEDF1);

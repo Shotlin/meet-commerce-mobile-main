@@ -38,7 +38,7 @@ class _OtpVerifyScreenState extends ConsumerState<OtpVerifyScreen>
   static const Color _headingColor = Color(0xFF1B1414);
   static const Color _boxBorder = Color(0xFFE9DEDE);
   static const String _bannerAsset =
-      'assets/images/bakaloo-otp-background-illustration.png';
+      'assets/images/freshcuts-splash-screen.jpg';
   static const String _logoAsset = 'assets/icon/brand_logo.png';
 
   final TextEditingController _otpController = TextEditingController();
@@ -187,7 +187,7 @@ class _OtpVerifyScreenState extends ConsumerState<OtpVerifyScreen>
                       ),
                       Gap(8.w),
                       Text(
-                        'Bakaloo',
+                        'FreshCuts',
                         style: TextStyle(
                           fontFamily: 'PlusJakartaSans',
                           fontSize: 21.sp,

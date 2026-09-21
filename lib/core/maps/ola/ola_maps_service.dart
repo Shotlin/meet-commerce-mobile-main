@@ -7,6 +7,7 @@ import 'package:bakaloo_flutter_app/core/maps/geo_point.dart';
 import 'package:bakaloo_flutter_app/core/maps/route_model.dart';
 import 'package:bakaloo_flutter_app/core/network/api_client.dart';
 import 'package:bakaloo_flutter_app/core/utils/haversine.dart';
+import 'package:bakaloo_flutter_app/core/utils/pincode.dart';
 
 part 'ola_maps_service.g.dart';
 
@@ -279,22 +280,16 @@ class OlaMapsService {
     );
   }
 
-  Future<ReverseGeocodeResult?> reverseGeocode(
-    GeoPoint point, {
-    String? storefrontToken,
-  }) async {
+  Future<ReverseGeocodeResult?> reverseGeocode(GeoPoint point) async {
     if (!point.isValid) {
       return null;
     }
 
     try {
-      final response = storefrontToken == null || storefrontToken.isEmpty
-          ? await _apiClient.getOlaMapsReverseGeocode(point.lat, point.lng)
-          : await _apiClient.getOlaMapsReverseGeocodeForStorefront(
-              point.lat,
-              point.lng,
-              storefrontToken,
-            );
+      final response = await _apiClient.getOlaMapsReverseGeocode(
+        point.lat,
+        point.lng,
+      );
       final data = _extractData(response.data);
       final result = _asMap(data['result']);
       final results = _asList(result['results']);
@@ -340,7 +335,9 @@ class OlaMapsService {
         addressLine2: subLocality.isEmpty ? null : subLocality,
         city: city.isEmpty ? null : city,
         state: state.isEmpty ? null : state,
-        pincode: pincode.isEmpty ? null : pincode,
+        // Normalised (whitespace/suffix stripped, 6 digits) so it compares
+        // equal to the PINs configured on shops; null when Ola sent none.
+        pincode: normalizePincode(pincode),
         landmark: landmark.isEmpty ? null : landmark,
       );
     } catch (error, stackTrace) {

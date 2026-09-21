@@ -317,9 +317,6 @@ class NotificationNotifier extends _$NotificationNotifier {
   }
 
   Future<NotificationActionResult> registerCurrentFcmToken() async {
-    if (kIsWeb) {
-      return const NotificationActionResult();
-    }
     final token = await getFcmTokenAwaitingApns(FirebaseMessaging.instance);
     if (token == null || token.trim().isEmpty) {
       return const NotificationActionResult();

@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
-import 'package:bakaloo_flutter_app/core/theme/remote_theme_provider.dart';
+import 'package:bakaloo_flutter_app/core/providers/store_provider.dart';
 import 'package:bakaloo_flutter_app/features/addresses/presentation/providers/address_provider.dart';
 import 'package:bakaloo_flutter_app/features/products/presentation/widgets/show_product_options.dart';
 import 'package:bakaloo_flutter_app/routing/route_names.dart';
@@ -30,22 +29,12 @@ class AddressBottomSheet extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Accent colours come from the active storefront's Theme Builder theme;
-    // until that theme is resolved the sheet uses the neutral app brand colours
-    // (never another store's palette).
-    final bool themeReady = ref.watch(themeReadyProvider);
-    final storeColor = themeReady
-        ? ref.watch(
-            activeTabThemeProvider
-                .select((theme) => theme.sections.storeSelector.activeChipColor),
-          )
-        : AppColors.brandRed;
-    final storeBgColor = themeReady
-        ? ref.watch(
-            activeTabThemeProvider
-                .select((theme) => theme.sections.topBar.backgroundColor),
-          )
-        : AppColors.brandRedSurface;
+    final storeColor = ref.watch(
+      selectedStoreProvider.select((store) => store.chipActiveColor),
+    );
+    final storeBgColor = ref.watch(
+      selectedStoreProvider.select((store) => store.backgroundColor),
+    );
 
     // Resolve the currently selected / default address for display.
     final addresses = ref.watch(addressProvider).asData?.value;

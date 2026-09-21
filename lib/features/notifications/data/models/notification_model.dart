@@ -44,7 +44,7 @@ class NotificationModel {
       title: _readString(
         json,
         const <String>['title'],
-        fallback: 'Bakaloo',
+        fallback: 'FreshCuts',
       ),
       body: _readString(
         json,

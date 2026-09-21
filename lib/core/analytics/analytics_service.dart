@@ -1,5 +1,4 @@
 import 'package:firebase_analytics/firebase_analytics.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:bakaloo_flutter_app/core/analytics/analytics_events.dart';
@@ -186,10 +185,6 @@ class AnalyticsService {
     String name,
     Map<String, Object?> params,
   ) async {
-    // Firebase Web configuration is intentionally absent until legitimate
-    // project credentials are supplied. Commerce flows must remain usable
-    // without analytics rather than logging through an unconfigured SDK.
-    if (kIsWeb) return;
     try {
       final payload = Map<String, Object>.fromEntries(
         params.entries

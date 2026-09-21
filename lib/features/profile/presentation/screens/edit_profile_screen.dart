@@ -55,7 +55,10 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       body: Stack(
         fit: StackFit.expand,
         children: <Widget>[
-          const ColoredBox(color: AppColors.bgPrimary),
+          Image.asset(
+            'assets/images/freshcuts-edit-profile-background.png',
+            fit: BoxFit.cover,
+          ),
           SafeArea(
             child: Form(
               key: _formKey,
@@ -83,14 +86,10 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                           ),
                         ),
                         Expanded(
-                          child: Text(
-                            'Bakaloo',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: AppColors.brandRed,
-                              fontSize: 24.sp,
-                              fontWeight: FontWeight.w800,
-                            ),
+                          child: Image.asset(
+                            'assets/images/freshcuts-logo-wordmark.png',
+                            height: 46.h,
+                            fit: BoxFit.contain,
                           ),
                         ),
                         SizedBox(width: 40.w),

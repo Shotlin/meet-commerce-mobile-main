@@ -1,5 +1,6 @@
+import 'dart:io';
+
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -43,12 +44,6 @@ class AppVersionCheckResult {
 /// network hiccup.
 @riverpod
 Future<AppVersionCheckResult> appVersionCheck(Ref ref) async {
-  // Native store-version enforcement has no browser equivalent. A Web build
-  // must not be trapped behind a Play/App Store URL supplied by this endpoint.
-  if (kIsWeb) {
-    return AppVersionCheckResult.none;
-  }
-
   try {
     final packageInfo = await PackageInfo.fromPlatform();
     final buildNumber = int.tryParse(packageInfo.buildNumber) ?? 0;
@@ -56,9 +51,7 @@ Future<AppVersionCheckResult> appVersionCheck(Ref ref) async {
       return AppVersionCheckResult.none;
     }
 
-    final platform = defaultTargetPlatform == TargetPlatform.iOS
-        ? 'ios'
-        : 'android';
+    final platform = Platform.isIOS ? 'ios' : 'android';
     final dio = Dio(
       BaseOptions(
         baseUrl: ApiConstants.baseUrl,

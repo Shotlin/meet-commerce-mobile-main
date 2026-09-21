@@ -471,8 +471,8 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       queryParameters: null,
     );
     final message = shareUri == null
-        ? 'Check out ${product.name} on Bakaloo.'
-        : 'Check out ${product.name} on Bakaloo.\n$shareUri';
+        ? 'Check out ${product.name} on FreshCuts.'
+        : 'Check out ${product.name} on FreshCuts.\n$shareUri';
     await Share.share(message);
   }
 

@@ -63,4 +63,3 @@ android/*.jks
 
 # FVM Version Cache
 .fvm/
-.vercel

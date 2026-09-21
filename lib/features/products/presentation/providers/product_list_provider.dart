@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import 'package:bakaloo_flutter_app/core/di/providers.dart';
-import 'package:bakaloo_flutter_app/core/refresh/storefront_refresh_provider.dart';
 import 'package:bakaloo_flutter_app/features/categories/presentation/providers/category_provider.dart';
 import 'package:bakaloo_flutter_app/features/products/data/datasources/product_remote_datasource.dart';
 import 'package:bakaloo_flutter_app/features/products/data/local/product_local_datasource.dart';
@@ -135,7 +134,6 @@ class ProductListNotifier extends _$ProductListNotifier {
 
   @override
   Future<ProductListViewState> build(ProductListParams params) async {
-    ref.watch(storefrontRefreshEpochProvider);
     _params = params;
     _items.clear();
     _page = 1;

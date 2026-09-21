@@ -5,6 +5,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lottie/lottie.dart';
+import 'package:open_file/open_file.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
@@ -21,7 +22,6 @@ import 'package:bakaloo_flutter_app/features/orders/domain/entities/order_timeli
 import 'package:bakaloo_flutter_app/features/orders/presentation/providers/active_order_provider.dart';
 import 'package:bakaloo_flutter_app/features/orders/presentation/providers/order_detail_provider.dart';
 import 'package:bakaloo_flutter_app/features/orders/presentation/providers/order_list_provider.dart';
-import 'package:bakaloo_flutter_app/features/orders/presentation/services/invoice_opener.dart';
 import 'package:bakaloo_flutter_app/features/refund_requests/domain/entities/refund_request_status_entity.dart';
 import 'package:bakaloo_flutter_app/features/refund_requests/presentation/providers/refund_request_provider.dart';
 import 'package:bakaloo_flutter_app/features/refund_requests/presentation/screens/refund_request_screen.dart';
@@ -199,13 +199,15 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
         AppToast.show(context, failure.message);
       },
       (file) async {
-        final openResult = await openInvoice(file);
+        final openResult = await OpenFile.open(file.path);
         if (!mounted) {
           return;
         }
-        final message = openResult.message;
+        final message = openResult.type == ResultType.done
+            ? 'Invoice downloaded: ${file.fileName}'
+            : openResult.message;
         AppToast.show(context, message,
-            type: openResult.isSuccess
+            type: message.startsWith('Invoice')
                 ? ToastType.success
                 : ToastType.error);
       },

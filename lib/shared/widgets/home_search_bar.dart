@@ -127,87 +127,79 @@ class _HomeSearchBarState extends State<HomeSearchBar> {
       padding: widget.outerPadding ?? EdgeInsets.fromLTRB(12.w, 7.h, 12.w, 0),
       child: SizedBox(
         height: 50.h,
-        child: Semantics(
-          button: true,
-          label: 'Search Bakaloo products',
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: widget.onSearchTap,
+        child: GestureDetector(
+          onTap: widget.onSearchTap,
+          child: Container(
+            width: double.infinity,
+            height: double.infinity,
+            decoration: BoxDecoration(
+              color: Colors.white,
               borderRadius: borderRadius,
-              child: Container(
-                width: double.infinity,
-                height: double.infinity,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: borderRadius,
-                  border: Border.all(color: _borderColor),
-                  boxShadow: <BoxShadow>[
-                    BoxShadow(
-                      color: const Color(0xFF2A1A47).withValues(alpha: 0.06),
-                      blurRadius: 14,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
+              border: Border.all(color: _borderColor),
+              boxShadow: <BoxShadow>[
+                BoxShadow(
+                  color: const Color(0xFF2A1A47).withValues(alpha: 0.06),
+                  blurRadius: 14,
+                  offset: const Offset(0, 4),
                 ),
-                padding: EdgeInsets.symmetric(horizontal: 14.w),
-                child: Row(
-                  children: <Widget>[
-                    Image.asset(
-                      _searchIconAsset,
-                      width: 22.w,
-                      height: 22.w,
-                      cacheWidth: 176,
-                      cacheHeight: 176,
-                      fit: BoxFit.contain,
-                      filterQuality: FilterQuality.high,
-                    ),
-                    Gap(10.w),
-                    Expanded(
-                      child: widget.animateHints
-                          ? AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 300),
-                              transitionBuilder: (child, animation) =>
-                                  FadeTransition(
-                                opacity: animation,
-                                child: child,
+              ],
+            ),
+            padding: EdgeInsets.symmetric(horizontal: 14.w),
+            child: Row(
+              children: <Widget>[
+                Image.asset(
+                  _searchIconAsset,
+                  width: 22.w,
+                  height: 22.w,
+                  cacheWidth: 176,
+                  cacheHeight: 176,
+                  fit: BoxFit.contain,
+                  filterQuality: FilterQuality.high,
+                ),
+                Gap(10.w),
+                Expanded(
+                  child: widget.animateHints
+                      ? AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 300),
+                          transitionBuilder: (child, animation) =>
+                              FadeTransition(
+                            opacity: animation,
+                            child: child,
+                          ),
+                          layoutBuilder: (
+                            Widget? currentChild,
+                            List<Widget> previousChildren,
+                          ) {
+                            return SizedBox.expand(
+                              child: Stack(
+                                alignment: Alignment.centerLeft,
+                                children: <Widget>[
+                                  ...previousChildren,
+                                  if (currentChild != null) currentChild,
+                                ],
                               ),
-                              layoutBuilder: (
-                                Widget? currentChild,
-                                List<Widget> previousChildren,
-                              ) {
-                                return SizedBox.expand(
-                                  child: Stack(
-                                    alignment: Alignment.centerLeft,
-                                    children: <Widget>[
-                                      ...previousChildren,
-                                      if (currentChild != null) currentChild,
-                                    ],
-                                  ),
-                                );
-                              },
-                              child: hintLabel,
-                            )
-                          : hintLabel,
-                    ),
-                    Gap(10.w),
-                    Container(
-                      width: 1,
-                      height: 22.h,
-                      color: _borderColor,
-                    ),
-                    Gap(10.w),
-                    // Voice search — mirrors the mic already on the full
-                    // search screen (speech_to_text); replaces the old
-                    // QR-style scan icon, which nothing in the app used.
-                    PhosphorIcon(
-                      PhosphorIcons.microphoneBold,
-                      size: 22.sp,
-                      color: AppColors.brandRed,
-                    ),
-                  ],
+                            );
+                          },
+                          child: hintLabel,
+                        )
+                      : hintLabel,
                 ),
-              ),
+                Gap(10.w),
+                Container(
+                  width: 1,
+                  height: 22.h,
+                  color: _borderColor,
+                ),
+                Gap(10.w),
+                // Voice search — mirrors the mic already on the full
+                // search screen (speech_to_text); replaces the old
+                // QR-style scan icon, which nothing in the app used.
+                PhosphorIcon(
+                  PhosphorIcons.microphoneBold,
+                  size: 22.sp,
+                  color: AppColors.brandRed,
+                ),
+              ],
             ),
           ),
         ),

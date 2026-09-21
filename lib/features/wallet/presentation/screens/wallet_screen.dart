@@ -6,11 +6,12 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
 import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
+import 'package:local_auth/local_auth.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:flutter/services.dart';
 
 import 'package:bakaloo_flutter_app/core/constants/app_constants.dart';
 import 'package:bakaloo_flutter_app/core/security/screenshot_prevention.dart';
-import 'package:bakaloo_flutter_app/core/security/device_authentication.dart';
 import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
 import 'package:bakaloo_flutter_app/core/theme/app_dimensions.dart';
 import 'package:bakaloo_flutter_app/core/theme/app_shadows.dart';
@@ -32,7 +33,7 @@ class WalletScreen extends ConsumerStatefulWidget {
 class _WalletScreenState extends ConsumerState<WalletScreen> {
   static const int _pageSize = 20;
 
-  final DeviceAuthentication _deviceAuthentication = DeviceAuthentication();
+  final LocalAuthentication _localAuth = LocalAuthentication();
   late final PagingController<int, TransactionEntity> _pagingController;
 
   WalletTransactionFilter _filter = WalletTransactionFilter.all;
@@ -96,9 +97,27 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
     bool unlocked = false;
     String? failureMessage;
     try {
-      unlocked = await _deviceAuthentication.authenticateIfAvailable(
-        reason: 'Authenticate to view your wallet balance',
-      );
+      final isSupported = await _localAuth.isDeviceSupported();
+      if (!isSupported) {
+        unlocked = true;
+      } else {
+        final canCheckBiometrics = await _localAuth.canCheckBiometrics;
+        final availableBiometrics = await _localAuth.getAvailableBiometrics();
+        final shouldRequireBiometric =
+            canCheckBiometrics && availableBiometrics.isNotEmpty;
+
+        unlocked = await _localAuth.authenticate(
+          localizedReason: 'Authenticate to view your wallet balance',
+          options: AuthenticationOptions(
+            biometricOnly: shouldRequireBiometric,
+            stickyAuth: true,
+            sensitiveTransaction: true,
+          ),
+        );
+      }
+    } on PlatformException catch (error) {
+      failureMessage = _friendlyAuthMessage(error.code);
+      unlocked = false;
     } catch (_) {
       failureMessage = 'Authentication failed. Please try again.';
       unlocked = false;
@@ -156,6 +175,19 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
+  String _friendlyAuthMessage(String code) {
+    return switch (code) {
+      'NotAvailable' => 'Biometric authentication is not available.',
+      'NotEnrolled' => 'No biometric is enrolled on this device.',
+      'LockedOut' => 'Too many attempts. Try again later.',
+      'PermanentlyLockedOut' =>
+        'Biometric is locked. Unlock with device PIN/password.',
+      'auth_in_progress' => 'Authentication is already in progress.',
+      'passcodeNotSet' => 'Set a device lock to use secure authentication.',
+      _ => 'Authentication failed. Please try again.',
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     final walletAsync = ref.watch(walletProvider);
@@ -168,7 +200,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
     return Scaffold(
       backgroundColor: AppColors.bgPrimary,
       appBar: AppBar(
-        title: Text('Bakaloo Wallet', style: AppTextStyles.h2),
+        title: Text('FreshCuts Wallet', style: AppTextStyles.h2),
       ),
       body: walletAsync.when(
         loading: () => wallet == null
@@ -416,7 +448,9 @@ class _HideBalanceButton extends StatelessWidget {
                   ),
                 )
               : PhosphorIcon(
-                  unlocked ? PhosphorIcons.eye : PhosphorIcons.eyeSlash,
+                  unlocked
+                      ? PhosphorIcons.eye
+                      : PhosphorIcons.eyeSlash,
                   size: 16.sp,
                   color: AppColors.orderViolet,
                 ),
@@ -612,7 +646,8 @@ class _TransactionFilterChips extends StatelessWidget {
             selectedColor: AppColors.orderVioletSurface,
             backgroundColor: AppColors.bgCard,
             side: BorderSide(
-              color: isSelected ? AppColors.orderViolet : AppColors.borderLight,
+              color:
+                  isSelected ? AppColors.orderViolet : AppColors.borderLight,
             ),
           ),
         );

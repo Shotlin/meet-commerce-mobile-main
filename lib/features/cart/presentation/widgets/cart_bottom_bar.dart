@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
-import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
-
 class CartBottomBar extends StatelessWidget {
   const CartBottomBar({
     required this.hasAddress,
@@ -81,7 +79,6 @@ class CartBottomBar extends StatelessWidget {
   final bool showWalletToggle;
   final double walletBalance;
   final double walletApplied;
-
   /// The order's real payable total, before any wallet offset — used only
   /// to decide whether the wallet stripe's expanded action is "Pay via
   /// Wallet" (balance covers this in full) or "Add Money" (it doesn't).
@@ -144,8 +141,7 @@ class CartBottomBar extends StatelessWidget {
     );
   }
 
-  Widget _buildPinkCta(
-      {required String label, required VoidCallback? onPressed}) {
+  Widget _buildPinkCta({required String label, required VoidCallback? onPressed}) {
     return SizedBox(
       width: double.infinity,
       height: 52.h,
@@ -242,11 +238,11 @@ class CartBottomBar extends StatelessWidget {
                     ),
                   ),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.brandRed,
+                    foregroundColor: const Color(0xFFD02428),
                     disabledForegroundColor:
-                        AppColors.brandRed.withValues(alpha: 0.4),
+                        const Color(0xFFD02428).withValues(alpha: 0.4),
                     side: BorderSide(
-                      color: AppColors.brandRed
+                      color: const Color(0xFFD02428)
                           .withValues(alpha: onlineEnabled ? 1 : 0.35),
                       width: 1.5,
                     ),
@@ -263,11 +259,12 @@ class CartBottomBar extends StatelessWidget {
               child: SizedBox(
                 height: 52.h,
                 child: ElevatedButton(
-                  onPressed: (codEnabled && !isPlacingOrder) ? onCod : null,
+                  onPressed:
+                      (codEnabled && !isPlacingOrder) ? onCod : null,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.brandRed,
+                    backgroundColor: const Color(0xFFD02428),
                     disabledBackgroundColor:
-                        AppColors.brandRed.withValues(alpha: 0.35),
+                        const Color(0xFFD02428).withValues(alpha: 0.35),
                     foregroundColor: Colors.white,
                     disabledForegroundColor:
                         Colors.white.withValues(alpha: 0.8),
@@ -380,7 +377,7 @@ class CartBottomBar extends StatelessWidget {
         children: <Widget>[
           Icon(
             Icons.info_outline_rounded,
-            color: AppColors.brandRed,
+            color: const Color(0xFFD02428),
             size: 20.sp,
           ),
           SizedBox(width: 10.w),
@@ -439,9 +436,9 @@ class _WalletToggleStripe extends StatelessWidget {
   final VoidCallback? onAddMoney;
   final VoidCallback? onPayFullWallet;
 
-  static const _brandRed = AppColors.brandRed;
-  static const _redBg = AppColors.brandRedSurface;
-  static const _borderColor = AppColors.brandRedBorder;
+  static const _brandRed = Color(0xFFD02428);
+  static const _redBg = Color(0xFFFBEAEA);
+  static const _borderColor = Color(0xFFF0C6C7);
   static const _titleColor = Color(0xFF171717);
   static const _mutedGray = Color(0xFF737684);
 
@@ -491,7 +488,7 @@ class _WalletToggleStripe extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
                 Text(
-                  'Bakaloo Wallet',
+                  'FreshCuts Wallet',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   softWrap: false,
@@ -508,7 +505,8 @@ class _WalletToggleStripe extends StatelessWidget {
                       ? TextSpan(
                           children: <InlineSpan>[
                             TextSpan(
-                              text: '₹${walletBalance.toStringAsFixed(0)} ',
+                              text:
+                                  '₹${walletBalance.toStringAsFixed(0)} ',
                               style: const TextStyle(
                                 color: _brandRed,
                                 fontWeight: FontWeight.w700,
@@ -529,7 +527,8 @@ class _WalletToggleStripe extends StatelessWidget {
                           ? TextSpan(
                               children: <InlineSpan>[
                                 TextSpan(
-                                  text: '₹${walletApplied.toStringAsFixed(0)} ',
+                                  text:
+                                      '₹${walletApplied.toStringAsFixed(0)} ',
                                   style: const TextStyle(
                                     color: _brandRed,
                                     fontWeight: FontWeight.w700,
@@ -537,7 +536,8 @@ class _WalletToggleStripe extends StatelessWidget {
                                 ),
                                 const TextSpan(text: 'applied  |  '),
                                 TextSpan(
-                                  text: '₹${walletBalance.toStringAsFixed(0)} ',
+                                  text:
+                                      '₹${walletBalance.toStringAsFixed(0)} ',
                                   style: const TextStyle(
                                     color: _brandRed,
                                     fontWeight: FontWeight.w700,
@@ -588,7 +588,7 @@ class _WalletToggleStripe extends StatelessWidget {
 /// outlined circle (off) — used instead of a [Switch] specifically because
 /// Switch's minimum track width (~34dp, ~90px on this density) was, next to
 /// the "Add Money" button, squeezing the wallet card's title/subtitle text
-/// column down to where "Bakaloo Wallet" wrapped onto two lines and the
+/// column down to where "FreshCuts Wallet" wrapped onto two lines and the
 /// whole card ballooned past its intended compact height. This toggle is
 /// roughly a third of that width.
 class _CheckmarkToggle extends StatelessWidget {
@@ -602,7 +602,7 @@ class _CheckmarkToggle extends StatelessWidget {
   final bool enabled;
   final ValueChanged<bool> onChanged;
 
-  static const _brandRed = AppColors.brandRed;
+  static const _brandRed = Color(0xFFD02428);
 
   @override
   Widget build(BuildContext context) {
@@ -651,10 +651,10 @@ class _PayWithWalletButton extends StatelessWidget {
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: onPressed != null
-                  ? const <Color>[AppColors.brandRed, AppColors.brandRedDark]
+                  ? const <Color>[Color(0xFFD02428), Color(0xFFA81C1F)]
                   : <Color>[
-                      AppColors.brandRed.withValues(alpha: 0.4),
-                      AppColors.brandRedDark.withValues(alpha: 0.4),
+                      const Color(0xFFD02428).withValues(alpha: 0.4),
+                      const Color(0xFFA81C1F).withValues(alpha: 0.4),
                     ],
             ),
             borderRadius: BorderRadius.circular(13.r),
@@ -693,7 +693,7 @@ class _AddMoneyButton extends StatelessWidget {
 
   final VoidCallback? onPressed;
 
-  static const _brandRed = AppColors.brandRed;
+  static const _brandRed = Color(0xFFD02428);
 
   @override
   Widget build(BuildContext context) {

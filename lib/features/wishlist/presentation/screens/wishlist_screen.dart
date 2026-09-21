@@ -68,14 +68,10 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
                     ),
                   ),
                   Expanded(
-                    child: Text(
-                      'Bakaloo',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: AppColors.brandRed,
-                        fontSize: 22.sp,
-                        fontWeight: FontWeight.w800,
-                      ),
+                    child: Image.asset(
+                      'assets/images/freshcuts-logo-wordmark.png',
+                      height: 32.h,
+                      fit: BoxFit.contain,
                     ),
                   ),
                   GestureDetector(

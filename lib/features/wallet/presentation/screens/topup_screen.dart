@@ -6,6 +6,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:razorpay_flutter/razorpay_flutter.dart';
 
 import 'package:bakaloo_flutter_app/core/security/screenshot_prevention.dart';
 import 'package:bakaloo_flutter_app/core/utils/app_toast.dart';
@@ -68,27 +69,20 @@ class _TopupScreenState extends ConsumerState<TopupScreen> {
       ..onSuccess = (response) {
         unawaited(_verifyTopup(response));
       }
-      ..onFailure = (_) {
+      ..onFailure = (response) {
         if (!mounted) {
           return;
         }
-        AppToast.show(context, 'Payment cancelled or failed.');
+        final message = response.message?.trim();
+        AppToast.show(context, message == null || message.isEmpty ? 'Payment cancelled or failed.' : message);
       }
-      ..onExternalWallet = () {};
+      ..onExternalWallet = (_) {};
   }
 
   Future<void> _startTopup() async {
     final amount = double.tryParse(_amountController.text.trim());
     if (amount == null || amount <= 0) {
       AppToast.show(context, '⚠️ Enter a valid amount', type: ToastType.warning);
-      return;
-    }
-    if (!_razorpayService.isSupported) {
-      AppToast.show(
-        context,
-        'Online payment checkout is not configured for this browser.',
-        type: ToastType.warning,
-      );
       return;
     }
 
@@ -123,7 +117,7 @@ class _TopupScreenState extends ConsumerState<TopupScreen> {
           key: order.key,
           amount: order.amount,
           razorpayOrderId: order.razorpayOrderId,
-          name: 'Bakaloo',
+          name: 'FreshCuts',
           description: 'Wallet Top-up',
           contact: user?.phone,
           email: user?.email,
@@ -139,7 +133,7 @@ class _TopupScreenState extends ConsumerState<TopupScreen> {
     }
   }
 
-  Future<void> _verifyTopup(RazorpayPaymentSuccess response) async {
+  Future<void> _verifyTopup(PaymentSuccessResponse response) async {
     final paymentId = response.paymentId;
     final signature = response.signature;
     final orderId = _activeRazorpayOrderId;

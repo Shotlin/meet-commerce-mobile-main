@@ -8,7 +8,6 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:bakaloo_flutter_app/core/constants/api_constants.dart';
-import 'package:bakaloo_flutter_app/core/layout/responsive_breakpoints.dart';
 import 'package:bakaloo_flutter_app/core/theme/remote_theme_model.dart';
 import 'package:bakaloo_flutter_app/core/theme/app_text_styles.dart';
 import 'package:bakaloo_flutter_app/features/products/domain/entities/product_entity.dart';
@@ -101,24 +100,12 @@ class SeasonalDealMosaic extends StatelessWidget {
         content = Padding(
           padding: EdgeInsets.symmetric(horizontal: 5.w),
           child: AspectRatio(
-            // The phone ratio is intentionally tall for touch-friendly
-            // imagery, but it becomes an oversized billboard on desktop.
-            // A wide storefront gets a dense merchandising band instead.
-            aspectRatio: MediaQuery.sizeOf(context).width >=
-                    ResponsiveBreakpoints.desktop
-                ? 3.55
-                : MediaQuery.sizeOf(context).width >=
-                        ResponsiveBreakpoints.tablet
-                    ? 2.2
-                    : 1.48,
+            aspectRatio: 1.48,
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final isDesktop = MediaQuery.sizeOf(context).width >=
-                    ResponsiveBreakpoints.desktop;
-                final gap = isDesktop ? 12.w : 8.w;
-                final smallGap = gap;
-                final leftWidth =
-                    constraints.maxWidth * (isDesktop ? 0.40 : 0.36);
+                final gap = 8.w;
+                final smallGap = 8.w;
+                final leftWidth = constraints.maxWidth * 0.36;
                 final rightWidth = constraints.maxWidth - leftWidth - gap;
                 final tileHeight = (constraints.maxHeight - smallGap) / 2;
                 final tileWidth = (rightWidth - smallGap) / 2;
@@ -326,8 +313,7 @@ class _HeroSeasonalDealTile extends StatelessWidget {
     // photo treatment. Title/badge only render if the admin actually set
     // them (an admin relying on the banner's own baked-in text leaves both
     // empty, per the "explicit empty means show nothing" rule upstream).
-    if (configuredImageUrl != null &&
-        resolvedHeroTileTheme.imageFit == 'cover') {
+    if (configuredImageUrl != null && resolvedHeroTileTheme.imageFit == 'cover') {
       final bool hasTitle = title.trim().isNotEmpty;
       final bool hasBadge = resolvedHeroTileTheme.badgeText.trim().isNotEmpty;
       return Material(
@@ -494,9 +480,8 @@ class _HeroSeasonalDealTile extends StatelessWidget {
       _firstRenderableImage(product),
       profile: CustomerImageProfile.seasonalHeroArtwork,
     );
-    final String? singleImageUrl = optimizedImage.url?.trim().isNotEmpty == true
-        ? optimizedImage.url
-        : null;
+    final String? singleImageUrl =
+        optimizedImage.url?.trim().isNotEmpty == true ? optimizedImage.url : null;
 
     return Material(
       color: Colors.transparent,
@@ -850,6 +835,12 @@ String? _mosaicTabRoute(String key) {
   switch (key) {
     case 'home':
       return '/home';
+    case 'off_zone':
+      return '/off_zone';
+    case 'super_mall':
+      return '/super_mall';
+    case 'cafe':
+      return '/cafe';
   }
   return null;
 }

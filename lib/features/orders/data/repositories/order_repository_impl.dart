@@ -1,8 +1,9 @@
 import 'dart:async';
-import 'dart:typed_data';
+import 'dart:io';
 
 import 'package:dartz/dartz.dart';
 import 'package:dio/dio.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'package:bakaloo_flutter_app/core/errors/error_handler.dart';
 import 'package:bakaloo_flutter_app/core/errors/failure.dart';
@@ -220,10 +221,13 @@ class OrderRepositoryImpl implements OrderRepository {
   ) async {
     try {
       final invoice = await _remoteDataSource.downloadInvoice(orderId);
+      final tempDir = await getTemporaryDirectory();
       final sanitizedName = _safeInvoiceFileName(invoice.fileName, orderId);
+      final file = File('${tempDir.path}/$sanitizedName');
+      await file.writeAsBytes(invoice.bytes, flush: true);
       return Right(
         InvoiceFileResult(
-          bytes: Uint8List.fromList(invoice.bytes),
+          path: file.path,
           fileName: sanitizedName,
         ),
       );

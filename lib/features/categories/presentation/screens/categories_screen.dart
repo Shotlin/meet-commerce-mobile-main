@@ -6,7 +6,6 @@ import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
-import 'package:bakaloo_flutter_app/core/layout/responsive_breakpoints.dart';
 import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
 import 'package:bakaloo_flutter_app/core/theme/app_dimensions.dart';
 import 'package:bakaloo_flutter_app/core/theme/app_text_styles.dart';
@@ -26,16 +25,11 @@ import 'package:bakaloo_flutter_app/shared/widgets/skeleton_loader.dart';
 const Color _accent = AppColors.orderViolet;
 const Color _accentSurface = AppColors.orderVioletSurface;
 
-int _gridColumns(double width) {
-  if (width >= ResponsiveBreakpoints.desktop) return 4;
-  if (width >= ResponsiveBreakpoints.tablet) return 3;
-  return 2;
-}
-
-/// Returns a real card width after the 14.w gutters and 12.w grid gaps.
-double _gridColumnWidth(double paneWidth, int columns) {
+/// The product grid is 2 columns inside the pane to the right of the
+/// 92.w category rail, with 14.w side padding and a 12.w gap between columns.
+double _gridColumnWidth(double paneWidth) {
   final double gridWidth = paneWidth - 14.w * 2;
-  return (gridWidth - 12.w * (columns - 1)) / columns;
+  return (gridWidth - 12.w) / 2;
 }
 
 /// Mirrors ProductCard's grid-style layout (image = 84% of card width, plus
@@ -163,71 +157,50 @@ class _CategoriesScreenState extends ConsumerState<CategoriesScreen> {
             orElse: () => selectedParent,
           );
 
-    final rail = _CategoryRail(
-      categories: rootCategories,
-      selectedCategoryId: selectedParent.id,
-      onSelect: (category) {
-        setState(() {
-          _selectedParentId = category.id;
-          _selectedFeedId = category.id;
-        });
-      },
-    );
-    final productPane = AnimatedSwitcher(
-      duration: const Duration(milliseconds: 280),
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeInCubic,
-      transitionBuilder: (child, animation) => FadeTransition(
-        opacity: animation,
-        child: SlideTransition(
-          position: Tween<Offset>(
-            begin: const Offset(0.05, 0),
-            end: Offset.zero,
-          ).animate(animation),
-          child: child,
-        ),
-      ),
-      child: _CategoryProductPane(
-        key: ValueKey<String>('${selectedParent.id}-$selectedFeedId'),
-        selectedParent: selectedParent,
-        highlightedCategory: highlightedCategory,
-        childCategories: childCategories,
-        selectedFeedId: selectedFeedId,
-        onSelectChild: (categoryId) {
-          setState(() {
-            _selectedFeedId = categoryId;
-          });
-        },
-      ),
-    );
-
-    // A vertical navigation rail leaves too little room for product cards on
-    // phones. Keep the rail for desktop browsing, but make categories a
-    // reachable horizontal strip on smaller screens.
-    if (ResponsiveBreakpoints.isDesktop(MediaQuery.sizeOf(context).width)) {
-      return Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[rail, Expanded(child: productPane)],
-      );
-    }
-
-    return Column(
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        SizedBox(
-          height: 104.h,
-          child: _CategoryRail(
-            categories: rootCategories,
-            selectedCategoryId: selectedParent.id,
-            onSelect: (category) {
-              setState(() {
-                _selectedParentId = category.id;
-                _selectedFeedId = category.id;
-              });
+        _CategoryRail(
+          categories: rootCategories,
+          selectedCategoryId: selectedParent.id,
+          onSelect: (category) {
+            setState(() {
+              _selectedParentId = category.id;
+              _selectedFeedId = category.id;
+            });
+          },
+        ),
+        Expanded(
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 280),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            transitionBuilder: (child, animation) {
+              return FadeTransition(
+                opacity: animation,
+                child: SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0.05, 0),
+                    end: Offset.zero,
+                  ).animate(animation),
+                  child: child,
+                ),
+              );
             },
-            horizontal: true,
+            child: _CategoryProductPane(
+              key: ValueKey<String>('${selectedParent.id}-$selectedFeedId'),
+              selectedParent: selectedParent,
+              highlightedCategory: highlightedCategory,
+              childCategories: childCategories,
+              selectedFeedId: selectedFeedId,
+              onSelectChild: (categoryId) {
+                setState(() {
+                  _selectedFeedId = categoryId;
+                });
+              },
+            ),
           ),
         ),
-        Expanded(child: productPane),
       ],
     );
   }
@@ -254,14 +227,12 @@ class _CategoriesScreenState extends ConsumerState<CategoriesScreen> {
             padding: EdgeInsets.fromLTRB(14.w, 16.h, 14.w, 24.h),
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final columns = _gridColumns(constraints.maxWidth);
-                final double columnWidth =
-                    _gridColumnWidth(constraints.maxWidth, columns);
+                final double columnWidth = (constraints.maxWidth - 12.w) / 2;
                 return GridView.builder(
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: 6,
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: columns,
+                    crossAxisCount: 2,
                     crossAxisSpacing: 12.w,
                     mainAxisSpacing: 14.h,
                     mainAxisExtent: _gridRowExtent(columnWidth),
@@ -420,35 +391,24 @@ class _CategoryRail extends StatelessWidget {
     required this.categories,
     required this.selectedCategoryId,
     required this.onSelect,
-    this.horizontal = false,
   });
 
   final List<CategoryEntity> categories;
   final String selectedCategoryId;
   final ValueChanged<CategoryEntity> onSelect;
-  final bool horizontal;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: horizontal ? null : 92.w,
-      height: horizontal ? 104.h : null,
-      decoration: BoxDecoration(
+      width: 92.w,
+      decoration: const BoxDecoration(
         color: AppColors.bgPrimary,
         border: Border(
-          right: horizontal
-              ? BorderSide.none
-              : const BorderSide(color: AppColors.divider),
-          bottom: horizontal
-              ? const BorderSide(color: AppColors.divider)
-              : BorderSide.none,
+          right: BorderSide(color: AppColors.divider),
         ),
       ),
       child: ListView.builder(
-        scrollDirection: horizontal ? Axis.horizontal : Axis.vertical,
-        padding: horizontal
-            ? EdgeInsets.symmetric(horizontal: 10.w, vertical: 8.h)
-            : EdgeInsets.symmetric(vertical: 8.h),
+        padding: EdgeInsets.symmetric(vertical: 8.h),
         itemCount: categories.length,
         itemBuilder: (context, index) {
           final category = categories[index];
@@ -456,7 +416,6 @@ class _CategoryRail extends StatelessWidget {
             category: category,
             isSelected: category.id == selectedCategoryId,
             onTap: () => onSelect(category),
-            horizontal: horizontal,
           );
         },
       ),
@@ -469,86 +428,74 @@ class _CategoryRailItem extends StatelessWidget {
     required this.category,
     required this.isSelected,
     required this.onTap,
-    required this.horizontal,
   });
 
   final CategoryEntity category;
   final bool isSelected;
   final VoidCallback onTap;
-  final bool horizontal;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: horizontal ? 82.w : null,
-      child: Padding(
-        padding: horizontal
-            ? EdgeInsets.symmetric(horizontal: 4.w, vertical: 2.h)
-            : EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
-        child: Material(
-          color: isSelected ? Colors.white : Colors.transparent,
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+      child: Material(
+        color: isSelected ? Colors.white : Colors.transparent,
+        borderRadius: BorderRadius.circular(16.r),
+        child: InkWell(
           borderRadius: BorderRadius.circular(16.r),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(16.r),
-            onTap: onTap,
-            child: Stack(
-              children: <Widget>[
-                // Active indicator follows the rail orientation.
-                if (isSelected)
-                  Positioned(
-                    left: horizontal ? 12.w : 0,
-                    right: horizontal ? 12.w : null,
-                    top: horizontal ? null : 14.h,
-                    bottom: horizontal ? 0 : 14.h,
-                    child: Container(
-                      width: horizontal ? null : 3.w,
-                      height: horizontal ? 3.h : null,
-                      decoration: BoxDecoration(
-                        color: _accent,
-                        borderRadius: BorderRadius.circular(100.r),
-                      ),
+          onTap: onTap,
+          child: Stack(
+            children: <Widget>[
+              // Active indicator bar on the left edge.
+              if (isSelected)
+                Positioned(
+                  left: 0,
+                  top: 14.h,
+                  bottom: 14.h,
+                  child: Container(
+                    width: 3.w,
+                    decoration: BoxDecoration(
+                      color: _accent,
+                      borderRadius: BorderRadius.circular(100.r),
                     ),
-                  ),
-                Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16.r),
-                    border: Border.all(
-                      color: isSelected
-                          ? AppColors.orderVioletBorder
-                          : Colors.transparent,
-                    ),
-                  ),
-                  padding: EdgeInsets.symmetric(
-                    vertical: horizontal ? 7.h : 10.h,
-                    horizontal: 4.w,
-                  ),
-                  child: Column(
-                    children: <Widget>[
-                      _CategoryThumb(
-                        imageUrl: category.imageUrl,
-                        name: category.name,
-                        isSelected: isSelected,
-                      ),
-                      Gap(6.h),
-                      Text(
-                        category.name,
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontFamily: 'Inter',
-                          fontSize: 10.5.sp,
-                          color: isSelected ? _accent : AppColors.textSecondary,
-                          fontWeight:
-                              isSelected ? FontWeight.w700 : FontWeight.w500,
-                          height: 1.2,
-                        ),
-                      ),
-                    ],
                   ),
                 ),
-              ],
-            ),
+              Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16.r),
+                  border: Border.all(
+                    color: isSelected
+                        ? AppColors.orderVioletBorder
+                        : Colors.transparent,
+                  ),
+                ),
+                padding: EdgeInsets.symmetric(vertical: 10.h, horizontal: 4.w),
+                child: Column(
+                  children: <Widget>[
+                    _CategoryThumb(
+                      imageUrl: category.imageUrl,
+                      name: category.name,
+                      isSelected: isSelected,
+                    ),
+                    Gap(6.h),
+                    Text(
+                      category.name,
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 10.5.sp,
+                        color: isSelected ? _accent : AppColors.textSecondary,
+                        fontWeight:
+                            isSelected ? FontWeight.w700 : FontWeight.w500,
+                        height: 1.2,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -816,16 +763,15 @@ class _CategoryProductPaneState extends ConsumerState<_CategoryProductPane> {
 
             return SliverLayoutBuilder(
               builder: (context, sliverConstraints) {
-                final columns = _gridColumns(sliverConstraints.crossAxisExtent);
-                final double columnWidth = _gridColumnWidth(
-                    sliverConstraints.crossAxisExtent, columns);
+                final double columnWidth =
+                    _gridColumnWidth(sliverConstraints.crossAxisExtent);
 
                 return SliverPadding(
                   padding: EdgeInsets.fromLTRB(14.w, 0, 14.w, 4.h),
                   sliver: SliverGrid.builder(
                     itemCount: viewState.items.length,
                     gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: columns,
+                      crossAxisCount: 2,
                       crossAxisSpacing: 12.w,
                       mainAxisSpacing: 14.h,
                       mainAxisExtent: _gridRowExtent(columnWidth),
@@ -919,16 +865,15 @@ class _CategoryProductPaneState extends ConsumerState<_CategoryProductPane> {
   Widget _buildLoadingSliver() {
     return SliverLayoutBuilder(
       builder: (context, sliverConstraints) {
-        final columns = _gridColumns(sliverConstraints.crossAxisExtent);
         final double columnWidth =
-            _gridColumnWidth(sliverConstraints.crossAxisExtent, columns);
+            _gridColumnWidth(sliverConstraints.crossAxisExtent);
 
         return SliverPadding(
           padding: EdgeInsets.fromLTRB(14.w, 0, 14.w, 20.h),
           sliver: SliverGrid.builder(
             itemCount: 6,
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: columns,
+              crossAxisCount: 2,
               crossAxisSpacing: 12.w,
               mainAxisSpacing: 14.h,
               mainAxisExtent: _gridRowExtent(columnWidth),

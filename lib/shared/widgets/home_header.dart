@@ -6,8 +6,8 @@ import 'package:go_router/go_router.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import 'package:bakaloo_flutter_app/core/providers/price_mode_provider.dart';
+import 'package:bakaloo_flutter_app/core/providers/store_provider.dart';
 import 'package:bakaloo_flutter_app/core/theme/remote_theme_model.dart';
-import 'package:bakaloo_flutter_app/features/notifications/presentation/providers/unread_count_provider.dart';
 import 'package:bakaloo_flutter_app/routing/route_names.dart';
 import 'package:bakaloo_flutter_app/shared/widgets/b2b_segment_toggle.dart';
 
@@ -32,7 +32,8 @@ class HomeHeader extends ConsumerWidget {
   final Color? searchZoneColor;
 
   /// Admin-set delivery-time badge (e.g. 45 → "⚡ 45 mins delivery"), shown
-  /// when the dashboard has configured one; nothing is shown otherwise.
+  /// only on the main Zepto store front in place of its static "6 mins"
+  /// tagline. Other store fronts keep their own static taglines.
   final int? deliveryEtaMinutes;
 
   /// When something is already occupying the status-bar area above this
@@ -48,6 +49,7 @@ class HomeHeader extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final topInset = topPaddingOverride ?? MediaQuery.paddingOf(context).top;
+    final store = ref.watch(selectedStoreProvider);
 
     // Use the dashboard-configured top bar color when available.
     // Fall back to the default lavender gradient only when no theme is provided.
@@ -96,64 +98,54 @@ class HomeHeader extends ConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: <Widget>[
-                          // Only the dashboard-configured ETA is shown. There
-                          // is no bundled fallback claim (this used to print a
-                          // hard-coded "6 mins" when no ETA was configured).
-                          if (deliveryEtaMinutes != null) ...<Widget>[
-                            Text(
-                              '⚡ $deliveryEtaMinutes mins delivery',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontFamily: 'Poppins',
-                                fontSize: 17.sp,
-                                fontWeight: FontWeight.w700,
-                                height: 1.05,
-                                letterSpacing: -0.5,
-                                color: topTextColor,
-                              ),
+                          Text(
+                            (deliveryEtaMinutes != null && store.id == 'zepto')
+                                ? '⚡ $deliveryEtaMinutes mins delivery'
+                                : store.subtitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 17.sp,
+                              fontWeight: FontWeight.w700,
+                              height: 1.05,
+                              letterSpacing: -0.5,
+                              color: topTextColor,
                             ),
-                            Gap(4.h),
-                          ],
-                          Semantics(
-                            button: true,
-                            label: 'Delivery address: $addressText',
-                            child: Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                onTap: onAddressTap,
-                                borderRadius: BorderRadius.circular(8),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: <Widget>[
-                                    Icon(
-                                      Icons.location_on_outlined,
-                                      color: topTextColor,
-                                      size: 17.sp,
-                                    ),
-                                    Gap(4.w),
-                                    Flexible(
-                                      child: Text(
-                                        addressText,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          fontFamily: 'Inter',
-                                          fontSize: 13.sp,
-                                          fontWeight: FontWeight.w500,
-                                          color: topTextColor,
-                                        ),
-                                      ),
-                                    ),
-                                    Gap(2.w),
-                                    Icon(
-                                      Icons.keyboard_arrow_down_rounded,
-                                      color: topTextColor,
-                                      size: 18.sp,
-                                    ),
-                                  ],
+                          ),
+                          Gap(4.h),
+                          GestureDetector(
+                            onTap: onAddressTap,
+                            behavior: HitTestBehavior.opaque,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: <Widget>[
+                                Icon(
+                                  Icons.location_on_outlined,
+                                  color: topTextColor,
+                                  size: 17.sp,
                                 ),
-                              ),
+                                Gap(4.w),
+                                Flexible(
+                                  child: Text(
+                                    addressText,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontFamily: 'Inter',
+                                      fontSize: 13.sp,
+                                      fontWeight: FontWeight.w500,
+                                      color: topTextColor,
+                                    ),
+                                  ),
+                                ),
+                                Gap(2.w),
+                                Icon(
+                                  Icons.keyboard_arrow_down_rounded,
+                                  color: topTextColor,
+                                  size: 18.sp,
+                                ),
+                              ],
                             ),
                           ),
                         ],
@@ -205,24 +197,22 @@ class _HeaderBottomCurveClipper extends CustomClipper<Path> {
   bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
 }
 
-/// B2B/B2C browsing toggle plus a directly accessible notification centre.
-/// Profile remains available in the persistent navigation, which avoids
-/// cramming three action buttons into the narrow phone header.
-class _HeaderActions extends ConsumerWidget {
+/// B2B/B2C browsing toggle + profile shortcut — replaces the previous
+/// wallet/notification icons, which now live inside the Profile tab
+/// instead of the home header.
+class _HeaderActions extends StatelessWidget {
   const _HeaderActions();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final unreadCount = ref.watch(unreadCountProvider);
+  Widget build(BuildContext context) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
         const _PriceModeToggle(),
         Gap(10.w),
-        _NotificationsButton(
+        _ProfileButton(
           size: 42.w,
-          unreadCount: unreadCount,
-          onTap: () => context.go(RouteNames.notifications),
+          onTap: () => context.go(RouteNames.profile),
         ),
       ],
     );
@@ -255,82 +245,39 @@ class _PriceModeToggle extends ConsumerWidget {
   }
 }
 
-class _NotificationsButton extends StatelessWidget {
-  const _NotificationsButton({
-    required this.size,
-    required this.unreadCount,
-    required this.onTap,
-  });
+class _ProfileButton extends StatelessWidget {
+  const _ProfileButton({required this.size, required this.onTap});
 
   final double size;
-  final int unreadCount;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: unreadCount > 0
-          ? 'Notifications, $unreadCount unread'
-          : 'Notifications',
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          customBorder: const CircleBorder(),
-          child: Container(
-            width: size,
-            height: size,
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-              boxShadow: <BoxShadow>[
-                BoxShadow(
-                  color: Color(0x242A1A47),
-                  blurRadius: 12,
-                  offset: Offset(0, 4),
-                ),
-              ],
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        width: size,
+        height: size,
+        decoration: const BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: <BoxShadow>[
+            BoxShadow(
+              color: Color(0x242A1A47),
+              blurRadius: 12,
+              offset: Offset(0, 4),
             ),
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: <Widget>[
-                ClipOval(
-                  child: ColoredBox(
-                    color: Colors.white,
-                    child: Center(
-                      child: PhosphorIcon(
-                        PhosphorIcons.bell,
-                        size: 24.sp,
-                        color: const Color(0xFF2A1A47),
-                      ),
-                    ),
-                  ),
-                ),
-                if (unreadCount > 0)
-                  Positioned(
-                    top: -2.h,
-                    right: -2.w,
-                    child: Container(
-                      constraints:
-                          BoxConstraints(minWidth: 16.w, minHeight: 16.h),
-                      padding: EdgeInsets.symmetric(horizontal: 4.w),
-                      alignment: Alignment.center,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFD9202A),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Text(
-                        unreadCount > 99 ? '99+' : '$unreadCount',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontFamily: 'Inter',
-                          fontSize: 9.sp,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
+          ],
+        ),
+        child: ClipOval(
+          child: ColoredBox(
+            color: Colors.white,
+            child: Center(
+              child: PhosphorIcon(
+                PhosphorIcons.userCircle,
+                size: 26.sp,
+                color: const Color(0xFF2A1A47),
+              ),
             ),
           ),
         ),

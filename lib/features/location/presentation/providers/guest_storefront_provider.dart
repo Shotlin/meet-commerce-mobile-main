@@ -9,12 +9,13 @@ import 'package:geolocator/geolocator.dart';
 import 'package:bakaloo_flutter_app/core/constants/api_constants.dart';
 import 'package:bakaloo_flutter_app/core/constants/storage_keys.dart';
 import 'package:bakaloo_flutter_app/core/di/providers.dart';
+import 'package:bakaloo_flutter_app/core/maps/device_pincodes.dart';
 import 'package:bakaloo_flutter_app/core/maps/geo_point.dart';
-import 'package:bakaloo_flutter_app/core/maps/device_reverse_geocoder.dart';
-import 'package:bakaloo_flutter_app/core/maps/storefront_location_payload.dart';
 import 'package:bakaloo_flutter_app/core/maps/ola/ola_maps_service.dart';
+import 'package:bakaloo_flutter_app/core/maps/storefront_resolver.dart';
 import 'package:bakaloo_flutter_app/core/storage/app_cache_manager.dart';
 import 'package:bakaloo_flutter_app/core/storage/hive_service.dart';
+import 'package:bakaloo_flutter_app/core/utils/pincode.dart';
 import 'package:bakaloo_flutter_app/core/utils/resilient_location.dart';
 import 'package:bakaloo_flutter_app/features/auth/presentation/providers/auth_notifier.dart';
 import 'package:bakaloo_flutter_app/features/auth/presentation/providers/auth_state.dart';
@@ -112,10 +113,28 @@ class GuestStorefrontNotifier extends Notifier<GuestStorefrontState> {
             lat: (raw['lat'] as num?)?.toDouble(),
             lng: (raw['lng'] as num?)?.toDouble(),
           );
+          // The request interceptor sends the storefront token from Hive ONLY.
+          // A record restored from the encrypted backup (Hive box rotated, or
+          // an iOS reinstall where the Keychain survives) must be put back,
+          // otherwise every storefront request would go out anonymously while
+          // the scope below claims a real shop.
+          final dynamic inHive =
+              HiveService.settingsBox.get(StorageKeys.guestStorefrontLocation);
+          if (inHive is! Map || inHive['token'] != token) {
+            await HiveService.settingsBox.put(
+              StorageKeys.guestStorefrontLocation,
+              Map<String, dynamic>.from(raw),
+            );
+          }
           // The storefront scope owns the theme/product cache keys.  Set it
           // before exposing a ready guest location so Home cannot request a
-          // theme with the previous (anonymous or another-shop) scope.
-          await AppCacheManager.setShopScope([shopId]);
+          // theme with the previous (anonymous or another-shop) scope. A
+          // device that still holds a signed-in session is NOT a guest: its
+          // scope is its account's primary shop (set by the allocation call),
+          // and the saved guest shop must not claim it in the meantime.
+          if (!await _hasSavedSession()) {
+            await AppCacheManager.setShopScope([shopId]);
+          }
           state = restored;
           return;
         }
@@ -129,6 +148,16 @@ class GuestStorefrontNotifier extends Notifier<GuestStorefrontState> {
         status: GuestStorefrontStatus.failed,
         message: 'Could not restore your delivery location.',
       );
+    }
+  }
+
+  Future<bool> _hasSavedSession() async {
+    try {
+      final String? access =
+          await ref.read(secureStorageProvider).getAccessToken();
+      return access != null && access.isNotEmpty;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -177,57 +206,57 @@ class GuestStorefrontNotifier extends Notifier<GuestStorefrontState> {
         return;
       }
       final position = await getResilientCurrentPosition();
-      await resolvePoint(
-          GeoPoint(lat: position.latitude, lng: position.longitude));
-    } catch (_) {
-      state = const GuestStorefrontState(
-        status: GuestStorefrontStatus.failed,
-        message:
-            'Could not detect your location. Search for your address instead.',
+      // Ask BOTH geocoders in parallel. Ola (signed-in users only — a guest has
+      // no token yet, so it just yields null) and the phone's own geocoder can
+      // report different PINs for the same spot, and a shop set to "match by
+      // PIN only" is served by an exact PIN match at any distance. Every
+      // distinct, normalised PIN is tried, best source first, until one is
+      // served (see resolveStorefront).
+      final geoPoint = GeoPoint(lat: position.latitude, lng: position.longitude);
+      final geocoded = await Future.wait<Object?>(<Future<Object?>>[
+        ref.read(olaMapsServiceProvider).reverseGeocode(geoPoint),
+        reverseGeocodeOnDevice(position.latitude, position.longitude),
+      ]);
+      final reverse = geocoded[0] as ReverseGeocodeResult?;
+      final devicePlacemarks = geocoded[1] as List<DevicePlacemarkInfo>;
+      final nativePlacemark =
+          devicePlacemarks.isEmpty ? null : devicePlacemarks.first;
+      final resolvedCity = reverse?.city?.trim().isNotEmpty == true
+          ? reverse!.city!.trim()
+          : nativePlacemark?.locality;
+      final candidatePins = dedupePincodes(<String?>[
+        reverse?.pincode,
+        ...pincodesOf(devicePlacemarks),
+      ]);
+
+      final resolution = await resolveStorefront(
+        lat: position.latitude,
+        lng: position.longitude,
+        candidates: candidatePins,
+        call: (payload) async {
+          final response = await ref
+              .read(dioClientProvider)
+              .post<dynamic>(ApiConstants.storefrontResolveLocation,
+                  data: payload);
+          final body = response.data is Map
+              ? Map<String, dynamic>.from(response.data as Map)
+              : const <String, dynamic>{};
+          return body['data'] is Map
+              ? Map<String, dynamic>.from(body['data'] as Map)
+              : const <String, dynamic>{};
+        },
       );
-    }
-  }
-
-  /// Manual search and GPS share the same backend serviceability contract.
-  Future<void> resolvePoint(GeoPoint position) async {
-    if (!position.isValid) return;
-    state = const GuestStorefrontState(status: GuestStorefrontStatus.resolving);
-    try {
-      // Extract the customer's PIN BEFORE asking the backend whether the point
-      // is serviceable. A store set to "match by pincode list only" is matched
-      // by the PIN alone (never by distance), so a lat/lng-only request can
-      // never resolve it — e.g. a Kolkata store serving PIN 201301 was
-      // reported "not available" to a customer standing inside 201301.
-      //
-      // The PIN has to come from the device geocoder here: the Ola
-      // reverse-geocode proxy needs a signed-in user or a storefront token,
-      // and the token is only issued by the call below. If the device cannot
-      // supply a PIN (unsupported/failed geocoder, Web), it is omitted and the
-      // backend falls back to coordinate-only (radius) matching.
-      final DevicePlacemark? devicePlacemark = await _nativePlacemark(position);
-      final String? devicePincode =
-          normalizePincode(devicePlacemark?.postalCode);
-
-      // Serviceability is resolved before requesting Ola details. The backend
-      // issues a short-lived storefront token only for a serviceable point;
-      // that token scopes the follow-up map request without exposing an Ola
-      // key or granting anonymous map access to every browser visitor.
-      final response = await ref.read(dioClientProvider).post<dynamic>(
-            ApiConstants.storefrontResolveLocation,
-            data: buildResolveLocationPayload(
-              position,
-              pincode: devicePincode,
-            ),
-          );
-      final payload = response.data is Map
-          ? Map<String, dynamic>.from(response.data as Map)
-          : const <String, dynamic>{};
-      final data = payload['data'] is Map
-          ? Map<String, dynamic>.from(payload['data'] as Map)
-          : const <String, dynamic>{};
+      // The PIN that actually matched a shop (else the first one tried), so
+      // the address prefilled after sign-in agrees with the serviceability
+      // decision.
+      final pincode = resolution.pincode ?? '';
+      final data = resolution.data;
       if (data['serviceable'] != true) {
-        state = const GuestStorefrontState(
+        state = GuestStorefrontState(
           status: GuestStorefrontStatus.unavailable,
+          pincode: pincode.isEmpty ? null : pincode,
+          city: resolvedCity?.isNotEmpty == true ? resolvedCity : null,
+          addressLine1: reverse?.addressLine1 ?? reverse?.displayName,
           message: 'Delivery is not available at this location yet.',
         );
         return;
@@ -239,38 +268,26 @@ class GuestStorefrontNotifier extends Notifier<GuestStorefrontState> {
       final shopId = shop['id'] as String?;
       if (token == null || token.isEmpty || shopId == null || shopId.isEmpty)
         throw StateError('Invalid storefront response');
-
-      final reverse = await ref
-          .read(olaMapsServiceProvider)
-          .reverseGeocode(position, storefrontToken: token);
-      // Keep the PIN that actually matched the store so the address prefilled
-      // after sign-in stays consistent with the serviceability decision; fall
-      // back to Ola's only when the device supplied none.
-      final String pincode =
-          devicePincode ?? normalizePincode(reverse?.pincode) ?? '';
-      final resolvedCity = reverse?.city?.trim().isNotEmpty == true
-          ? reverse!.city!.trim()
-          : devicePlacemark?.locality?.trim();
       final next = GuestStorefrontState(
         status: GuestStorefrontStatus.serviceable,
         token: token,
         shopId: shopId,
         shopName: shop['name'] as String?,
         pincode: pincode,
-        lat: position.lat,
-        lng: position.lng,
+        lat: position.latitude,
+        lng: position.longitude,
         addressLine1:
             reverse?.addressLine1 ?? reverse?.displayName ?? 'My Location',
         city: resolvedCity?.isNotEmpty == true ? resolvedCity : 'Local Area',
-        stateName: reverse?.state ?? devicePlacemark?.administrativeArea ?? '',
+        stateName: reverse?.state ?? nativePlacemark?.administrativeArea ?? '',
       );
       final cacheRecord = <String, dynamic>{
         'token': token,
         'shopId': shopId,
         'shopName': next.shopName,
         'pincode': pincode,
-        'lat': position.lat,
-        'lng': position.lng,
+        'lat': position.latitude,
+        'lng': position.longitude,
         'addressLine1': next.addressLine1,
         'city': next.city,
         'state': next.stateName,
@@ -301,13 +318,6 @@ class GuestStorefrontNotifier extends Notifier<GuestStorefrontState> {
           message:
               'Could not verify your delivery location. Please try again.');
     }
-  }
-
-  Future<DevicePlacemark?> _nativePlacemark(GeoPoint position) {
-    return reverseGeocodeDeviceLocation(
-      position.lat,
-      position.lng,
-    ).timeout(const Duration(seconds: 8), onTimeout: () => null);
   }
 
   Future<void> _saveLocationToAuthenticatedAccount(
@@ -352,9 +362,12 @@ final storefrontAccessProvider = FutureProvider<bool>((ref) async {
 });
 
 final storefrontReadyProvider = Provider<bool>((ref) {
-  // Browsing the public catalogue must not depend on browser location
-  // permission or a saved delivery address. Delivery availability is
-  // resolved when a customer explicitly chooses a location and again by
-  // protected cart/checkout flows.
-  return true;
+  // A guest storefront is already completely resolved by the signed location
+  // token.  Do not put that synchronous state behind an AsyncValue: Home's
+  // product providers can otherwise run once while that FutureProvider is
+  // loading, cache an empty list, and leave the product rails blank.
+  if (ref.watch(authStateProvider) is! AuthAuthenticated) {
+    return ref.watch(guestStorefrontProvider).isReady;
+  }
+  return ref.watch(storefrontAccessProvider).value == true;
 });

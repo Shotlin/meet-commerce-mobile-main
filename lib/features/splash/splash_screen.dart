@@ -7,7 +7,7 @@ import 'package:bakaloo_flutter_app/core/branding/branding_provider.dart';
 import 'package:bakaloo_flutter_app/features/splash/splash_provider.dart';
 import 'package:bakaloo_flutter_app/shared/widgets/app_image.dart';
 
-const String _defaultSplashAsset = 'assets/images/bakaloo-splash-screen.png';
+const String _defaultSplashAsset = 'assets/images/freshcuts-splash-screen.jpg';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});

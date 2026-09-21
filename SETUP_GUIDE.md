@@ -222,27 +222,9 @@ Already configured in `gradle.properties`:
 
 ---
 
-## Web / PWA
-
-Use the repository-managed FVM SDK and pass only public browser configuration:
-
-```powershell
-.\.fvm\flutter_sdk\bin\flutter.bat run -d chrome --dart-define=BASE_URL=https://api.bakaloo.in/api/v1 --dart-define=SOCKET_URL=https://api.bakaloo.in --dart-define=WEB_BASE_URL=https://YOUR_WEB_ORIGIN
-.\.fvm\flutter_sdk\bin\flutter.bat build web --release --dart-define=BASE_URL=https://api.bakaloo.in/api/v1 --dart-define=SOCKET_URL=https://api.bakaloo.in --dart-define=WEB_BASE_URL=https://YOUR_WEB_ORIGIN
-
-Dashboard campaign artwork is disabled by default on Web until it has passed the Bakaloo brand review. Enable it explicitly only after approval with `--dart-define=ALLOW_REMOTE_MARKETING_ASSETS=true`.
-```
-
-Deploy the contents of `build/web` behind HTTPS with an SPA fallback to
-`index.html`. The final Web origin must be allowed by both HTTP CORS and
-Socket.IO configuration before authenticated flows or realtime behavior can be
-declared verified. The app-shell service worker requires HTTPS or localhost.
-
----
-
 ## Project-Specific Notes
 
-- Web builds do not bundle `.env`. Supply only public API/origin values with `--dart-define=BASE_URL=...`, `--dart-define=SOCKET_URL=...`, and `--dart-define=WEB_BASE_URL=...`; never place backend, Firebase Admin, Razorpay secret, JWT, database, or SMTP credentials in browser defines or assets.
+- `.env` file is bundled as an asset — update it before building for different environments
 - Firebase config: `google-services.json` (Android) and `GoogleService-Info.plist` (iOS) are already in place
 - Release keystore: `android/app/bakaloo-release.jks` — **never commit this to git**
 - iOS signing: requires Apple Developer account ($99/year) for App Store distribution

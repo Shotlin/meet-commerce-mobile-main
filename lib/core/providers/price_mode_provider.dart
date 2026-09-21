@@ -33,9 +33,9 @@ class PriceModeNotifier extends _$PriceModeNotifier {
 
     // Price mode is part of every storefront cache key
     // (`StorefrontScope.priceMode`): retail and wholesale content live side by
-    // side, and every provider that serves product data watches the scope, so
-    // it rebuilds for the new mode on its own. Nothing is wiped and nothing is
-    // invalidated by hand — the theme (mode-independent) is not touched at all.
+    // side and every provider that serves product data watches the scope, so it
+    // rebuilds for the new mode on its own. Nothing is wiped and nothing is
+    // invalidated by hand — the theme (mode-independent) is not touched.
     //
     // Each mode owns a separate cart, so that is the one thing that must be
     // re-read explicitly (badge, cart screen, checkout).
