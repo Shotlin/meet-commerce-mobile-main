@@ -11,6 +11,7 @@ import 'package:bakaloo_flutter_app/core/constants/storage_keys.dart';
 import 'package:bakaloo_flutter_app/core/di/providers.dart';
 import 'package:bakaloo_flutter_app/core/maps/geo_point.dart';
 import 'package:bakaloo_flutter_app/core/maps/device_reverse_geocoder.dart';
+import 'package:bakaloo_flutter_app/core/maps/storefront_location_payload.dart';
 import 'package:bakaloo_flutter_app/core/maps/ola/ola_maps_service.dart';
 import 'package:bakaloo_flutter_app/core/storage/app_cache_manager.dart';
 import 'package:bakaloo_flutter_app/core/storage/hive_service.dart';
@@ -192,17 +193,32 @@ class GuestStorefrontNotifier extends Notifier<GuestStorefrontState> {
     if (!position.isValid) return;
     state = const GuestStorefrontState(status: GuestStorefrontStatus.resolving);
     try {
-      // Resolve serviceability before requesting Ola details. The backend
+      // Extract the customer's PIN BEFORE asking the backend whether the point
+      // is serviceable. A store set to "match by pincode list only" is matched
+      // by the PIN alone (never by distance), so a lat/lng-only request can
+      // never resolve it — e.g. a Kolkata store serving PIN 201301 was
+      // reported "not available" to a customer standing inside 201301.
+      //
+      // The PIN has to come from the device geocoder here: the Ola
+      // reverse-geocode proxy needs a signed-in user or a storefront token,
+      // and the token is only issued by the call below. If the device cannot
+      // supply a PIN (unsupported/failed geocoder, Web), it is omitted and the
+      // backend falls back to coordinate-only (radius) matching.
+      final DevicePlacemark? devicePlacemark = await _nativePlacemark(position);
+      final String? devicePincode =
+          normalizePincode(devicePlacemark?.postalCode);
+
+      // Serviceability is resolved before requesting Ola details. The backend
       // issues a short-lived storefront token only for a serviceable point;
       // that token scopes the follow-up map request without exposing an Ola
       // key or granting anonymous map access to every browser visitor.
       final response = await ref.read(dioClientProvider).post<dynamic>(
-        ApiConstants.storefrontResolveLocation,
-        data: {
-          'lat': position.lat,
-          'lng': position.lng,
-        },
-      );
+            ApiConstants.storefrontResolveLocation,
+            data: buildResolveLocationPayload(
+              position,
+              pincode: devicePincode,
+            ),
+          );
       final payload = response.data is Map
           ? Map<String, dynamic>.from(response.data as Map)
           : const <String, dynamic>{};
@@ -227,15 +243,14 @@ class GuestStorefrontNotifier extends Notifier<GuestStorefrontState> {
       final reverse = await ref
           .read(olaMapsServiceProvider)
           .reverseGeocode(position, storefrontToken: token);
-      final nativePlacemark = (reverse?.pincode?.trim().isNotEmpty ?? false)
-          ? null
-          : await _nativePlacemark(position);
-      final pincode = reverse?.pincode?.trim().isNotEmpty == true
-          ? reverse!.pincode!.trim()
-          : nativePlacemark?.postalCode?.trim() ?? '';
+      // Keep the PIN that actually matched the store so the address prefilled
+      // after sign-in stays consistent with the serviceability decision; fall
+      // back to Ola's only when the device supplied none.
+      final String pincode =
+          devicePincode ?? normalizePincode(reverse?.pincode) ?? '';
       final resolvedCity = reverse?.city?.trim().isNotEmpty == true
           ? reverse!.city!.trim()
-          : nativePlacemark?.locality?.trim();
+          : devicePlacemark?.locality?.trim();
       final next = GuestStorefrontState(
         status: GuestStorefrontStatus.serviceable,
         token: token,
@@ -247,7 +262,7 @@ class GuestStorefrontNotifier extends Notifier<GuestStorefrontState> {
         addressLine1:
             reverse?.addressLine1 ?? reverse?.displayName ?? 'My Location',
         city: resolvedCity?.isNotEmpty == true ? resolvedCity : 'Local Area',
-        stateName: reverse?.state ?? nativePlacemark?.administrativeArea ?? '',
+        stateName: reverse?.state ?? devicePlacemark?.administrativeArea ?? '',
       );
       final cacheRecord = <String, dynamic>{
         'token': token,
