@@ -4,6 +4,7 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 
+import 'package:bakaloo_flutter_app/core/maps/device_pincodes.dart';
 import 'package:bakaloo_flutter_app/core/maps/geo_point.dart';
 import 'package:bakaloo_flutter_app/core/maps/ola/ola_maps_service.dart';
 import 'package:bakaloo_flutter_app/core/utils/resilient_location.dart';
@@ -148,7 +149,7 @@ Future<LocationAutoDetectResult> _geocodeAndSave(
 
   final city = reverse?.city ?? '';
   final state = reverse?.state ?? '';
-  final pincode = reverse?.pincode ?? '';
+  var pincode = reverse?.pincode ?? '';
   final road = reverse?.addressLine1 ?? '';
   final displayName = reverse?.displayName ?? '';
 
@@ -204,20 +205,46 @@ Future<LocationAutoDetectResult> _geocodeAndSave(
   // failure (e.g. flaky network) also falls through rather than blocking —
   // the create/update call below still enforces serviceability server-side
   // regardless, via the _kNotServiceableMessage check.
+  //
+  // Ola and the phone's own geocoder can report different PINs for the same
+  // spot (or Ola can omit it). Using only Ola's meant a customer standing in a
+  // served PIN could be rejected — or saved with no PIN at all, which a shop
+  // set to "match by PIN only" can then never serve. So: check Ola's PIN
+  // first (no extra cost in the common case) and only if it is missing or not
+  // served consult the device geocoder's PINs, keeping the first one that is.
+  Future<bool?> pinServed(String pin) async {
+    final validation = await ref.read(validatePincodeUseCaseProvider).call(pin);
+    // A failed validation call is "unknown" (null) and never blocks — the
+    // create/update call still enforces serviceability server-side.
+    return validation.fold((_) => null, (r) => r.available);
+  }
+
+  var serviceable = true;
   if (pincode.isNotEmpty) {
-    final validation =
-        await ref.read(validatePincodeUseCaseProvider).call(pincode);
-    final isServiceable = validation.fold((_) => true, (r) => r.available);
-    if (!isServiceable) {
-      // Nothing gets saved (the backend would reject it anyway — see
-      // ADDRESS_NOT_SERVICEABLE) so this flag is the only trace that
-      // detection happened, for the cart's benefit later — see
-      // non_serviceable_location_provider.dart.
-      unawaited(
-        ref.read(nonServiceableLocationProvider.notifier).markDetected(),
-      );
-      return LocationAutoDetectResult.notServiceable;
+    serviceable = await pinServed(pincode) != false;
+  }
+  if (pincode.isEmpty || !serviceable) {
+    final devicePins = pincodesOf(
+      await reverseGeocodeOnDevice(position.latitude, position.longitude),
+    ).where((pin) => pin != pincode);
+    for (final pin in devicePins) {
+      if (await pinServed(pin) != false) {
+        pincode = pin;
+        serviceable = true;
+        break;
+      }
+      serviceable = false;
     }
+  }
+  if (!serviceable) {
+    // Nothing gets saved (the backend would reject it anyway — see
+    // ADDRESS_NOT_SERVICEABLE) so this flag is the only trace that
+    // detection happened, for the cart's benefit later — see
+    // non_serviceable_location_provider.dart.
+    unawaited(
+      ref.read(nonServiceableLocationProvider.notifier).markDetected(),
+    );
+    return LocationAutoDetectResult.notServiceable;
   }
 
   // Save as default address

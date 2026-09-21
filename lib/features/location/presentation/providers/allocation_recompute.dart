@@ -7,6 +7,7 @@ import 'package:bakaloo_flutter_app/core/storage/app_cache_manager.dart';
 import 'package:bakaloo_flutter_app/core/theme/remote_theme_provider.dart';
 import 'package:bakaloo_flutter_app/features/home/presentation/providers/banner_provider.dart';
 import 'package:bakaloo_flutter_app/features/home/presentation/providers/home_provider.dart';
+import 'package:bakaloo_flutter_app/core/utils/pincode.dart';
 
 /// Refreshes the customer's shop allocation for a specific address, right
 /// after that address is saved as (or updated while being) the default.
@@ -27,7 +28,8 @@ Future<void> triggerAllocationRecompute(
   required double lng,
   required String pincode,
 }) async {
-  if (pincode.isEmpty) return;
+  final normalizedPincode = normalizePincode(pincode);
+  if (normalizedPincode == null) return;
   try {
     final response = await ref.read(dioClientProvider).post<dynamic>(
       ApiConstants.allocationRecompute,
@@ -35,7 +37,7 @@ Future<void> triggerAllocationRecompute(
         'address': {
           'lat': lat,
           'lng': lng,
-          'pincode': pincode,
+          'pincode': normalizedPincode,
         },
       },
     );

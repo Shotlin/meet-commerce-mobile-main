@@ -32,6 +32,7 @@ import 'package:bakaloo_flutter_app/features/cart/presentation/providers/cart_pr
 import 'package:bakaloo_flutter_app/features/home/presentation/providers/banner_provider.dart';
 import 'package:bakaloo_flutter_app/features/home/presentation/providers/home_provider.dart';
 import 'package:bakaloo_flutter_app/features/wallet/presentation/providers/wallet_provider.dart';
+import 'package:bakaloo_flutter_app/core/utils/pincode.dart';
 
 part 'auth_notifier.g.dart';
 
@@ -415,7 +416,7 @@ class AuthNotifier extends _$AuthNotifier {
       final raw =
           HiveService.settingsBox.get(StorageKeys.guestStorefrontLocation);
       if (raw is! Map) return;
-      final pincode = raw['pincode'] as String?;
+      final pincode = normalizePincode(raw['pincode'] as String?);
       final lat = raw['lat'] as num?;
       final lng = raw['lng'] as num?;
       if (pincode == null || pincode.isEmpty || lat == null || lng == null)

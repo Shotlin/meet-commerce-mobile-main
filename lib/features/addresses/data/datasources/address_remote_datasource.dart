@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:bakaloo_flutter_app/core/constants/api_constants.dart';
 import 'package:bakaloo_flutter_app/core/network/api_client.dart';
 import 'package:bakaloo_flutter_app/features/addresses/data/models/address_model.dart';
+import 'package:bakaloo_flutter_app/core/utils/pincode.dart';
 
 class PincodeValidationModel {
   const PincodeValidationModel({
@@ -72,7 +73,7 @@ class AddressRemoteDataSource {
 
   Future<PincodeValidationModel> validatePincode(String pincode) async {
     final response = await _apiClient.validatePincode(
-      <String, dynamic>{'pincode': pincode},
+      <String, dynamic>{'pincode': normalizePincode(pincode) ?? pincode.trim()},
     );
     final payload = _parsePayload(response.data, ApiConstants.validatePincode);
     final data = payload['data'];

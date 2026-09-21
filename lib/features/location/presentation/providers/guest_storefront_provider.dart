@@ -4,16 +4,18 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 
 import 'package:bakaloo_flutter_app/core/constants/api_constants.dart';
 import 'package:bakaloo_flutter_app/core/constants/storage_keys.dart';
 import 'package:bakaloo_flutter_app/core/di/providers.dart';
+import 'package:bakaloo_flutter_app/core/maps/device_pincodes.dart';
 import 'package:bakaloo_flutter_app/core/maps/geo_point.dart';
 import 'package:bakaloo_flutter_app/core/maps/ola/ola_maps_service.dart';
+import 'package:bakaloo_flutter_app/core/maps/storefront_resolver.dart';
 import 'package:bakaloo_flutter_app/core/storage/app_cache_manager.dart';
 import 'package:bakaloo_flutter_app/core/storage/hive_service.dart';
+import 'package:bakaloo_flutter_app/core/utils/pincode.dart';
 import 'package:bakaloo_flutter_app/core/utils/resilient_location.dart';
 import 'package:bakaloo_flutter_app/features/auth/presentation/providers/auth_notifier.dart';
 import 'package:bakaloo_flutter_app/features/auth/presentation/providers/auth_state.dart';
@@ -176,32 +178,51 @@ class GuestStorefrontNotifier extends Notifier<GuestStorefrontState> {
         return;
       }
       final position = await getResilientCurrentPosition();
-      final reverse = await ref.read(olaMapsServiceProvider).reverseGeocode(
-            GeoPoint(lat: position.latitude, lng: position.longitude),
-          );
-      final nativePlacemark = (reverse?.pincode?.trim().isNotEmpty ?? false)
-          ? null
-          : await _nativePlacemark(position);
-      final pincode = reverse?.pincode?.trim().isNotEmpty == true
-          ? reverse!.pincode!.trim()
-          : nativePlacemark?.postalCode?.trim() ?? '';
+      // Ask BOTH geocoders in parallel. Ola (signed-in users only — a guest has
+      // no token yet, so it just yields null) and the phone's own geocoder can
+      // report different PINs for the same spot, and a shop set to "match by
+      // PIN only" is served by an exact PIN match at any distance. Every
+      // distinct, normalised PIN is tried, best source first, until one is
+      // served (see resolveStorefront).
+      final geoPoint = GeoPoint(lat: position.latitude, lng: position.longitude);
+      final geocoded = await Future.wait<Object?>(<Future<Object?>>[
+        ref.read(olaMapsServiceProvider).reverseGeocode(geoPoint),
+        reverseGeocodeOnDevice(position.latitude, position.longitude),
+      ]);
+      final reverse = geocoded[0] as ReverseGeocodeResult?;
+      final devicePlacemarks = geocoded[1] as List<DevicePlacemarkInfo>;
+      final nativePlacemark =
+          devicePlacemarks.isEmpty ? null : devicePlacemarks.first;
       final resolvedCity = reverse?.city?.trim().isNotEmpty == true
           ? reverse!.city!.trim()
-          : nativePlacemark?.locality?.trim();
-      final response = await ref.read(dioClientProvider).post<dynamic>(
-        ApiConstants.storefrontResolveLocation,
-        data: {
-          'lat': position.latitude,
-          'lng': position.longitude,
-          if (pincode.isNotEmpty) 'pincode': pincode,
+          : nativePlacemark?.locality;
+      final candidatePins = dedupePincodes(<String?>[
+        reverse?.pincode,
+        ...pincodesOf(devicePlacemarks),
+      ]);
+
+      final resolution = await resolveStorefront(
+        lat: position.latitude,
+        lng: position.longitude,
+        candidates: candidatePins,
+        call: (payload) async {
+          final response = await ref
+              .read(dioClientProvider)
+              .post<dynamic>(ApiConstants.storefrontResolveLocation,
+                  data: payload);
+          final body = response.data is Map
+              ? Map<String, dynamic>.from(response.data as Map)
+              : const <String, dynamic>{};
+          return body['data'] is Map
+              ? Map<String, dynamic>.from(body['data'] as Map)
+              : const <String, dynamic>{};
         },
       );
-      final payload = response.data is Map
-          ? Map<String, dynamic>.from(response.data as Map)
-          : const <String, dynamic>{};
-      final data = payload['data'] is Map
-          ? Map<String, dynamic>.from(payload['data'] as Map)
-          : const <String, dynamic>{};
+      // The PIN that actually matched a shop (else the first one tried), so
+      // the address prefilled after sign-in agrees with the serviceability
+      // decision.
+      final pincode = resolution.pincode ?? '';
+      final data = resolution.data;
       if (data['serviceable'] != true) {
         state = GuestStorefrontState(
           status: GuestStorefrontStatus.unavailable,
@@ -268,18 +289,6 @@ class GuestStorefrontNotifier extends Notifier<GuestStorefrontState> {
           status: GuestStorefrontStatus.failed,
           message:
               'Could not verify your delivery location. Please try again.');
-    }
-  }
-
-  Future<Placemark?> _nativePlacemark(Position position) async {
-    try {
-      final placemarks = await placemarkFromCoordinates(
-        position.latitude,
-        position.longitude,
-      ).timeout(const Duration(seconds: 8));
-      return placemarks.isEmpty ? null : placemarks.first;
-    } catch (_) {
-      return null;
     }
   }
 

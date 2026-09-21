@@ -2,6 +2,7 @@ import 'package:dartz/dartz.dart';
 
 import 'package:bakaloo_flutter_app/core/errors/failure.dart';
 import 'package:bakaloo_flutter_app/features/addresses/domain/entities/address_entity.dart';
+import 'package:bakaloo_flutter_app/core/utils/pincode.dart';
 
 class AddressUpsertParams {
   const AddressUpsertParams({
@@ -39,7 +40,7 @@ class AddressUpsertParams {
       'receiverPhone': receiverPhone,
       'city': city,
       'state': state,
-      'pincode': pincode,
+      'pincode': normalizePincode(pincode) ?? pincode.trim(),
       'lat': latitude,
       'lng': longitude,
       'isDefault': isDefault,
