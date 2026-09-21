@@ -34,9 +34,7 @@ import 'package:bakaloo_flutter_app/features/purchase_limits/presentation/provid
 import 'package:bakaloo_flutter_app/features/wallet/presentation/providers/wallet_provider.dart';
 import 'package:bakaloo_flutter_app/routing/app_router.dart';
 import 'package:bakaloo_flutter_app/routing/route_names.dart';
-import 'package:bakaloo_flutter_app/core/providers/store_provider.dart';
 import 'package:bakaloo_flutter_app/shared/widgets/category_tabs_row.dart';
-import 'package:bakaloo_flutter_app/shared/widgets/error_state.dart';
 import 'package:bakaloo_flutter_app/shared/widgets/home_header.dart';
 import 'package:bakaloo_flutter_app/shared/widgets/home_search_bar.dart';
 import 'package:bakaloo_flutter_app/shared/widgets/store_closed_banner.dart';
@@ -96,6 +94,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   late final ProviderSubscription<AsyncValue<Map<String, dynamic>>>
       _brandingSocketSub;
   late final ProviderSubscription<Timer> _themeRefreshTimerSub;
+  late final ProviderSubscription<void> _storefrontPrefetchSub;
   late final ProviderSubscription<AuthState> _authStateSub;
   late final ProviderSubscription<AsyncValue<HomeScreenData>> _homeDataSub;
   // PHASE 4: Track active tab key so we can reset scroll/stage state on switch.
@@ -199,6 +198,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       themeRefreshTimerProvider,
       (_, __) {},
     );
+    // Warms the neighbouring tabs once the visible tab has been stable for a
+    // moment; torn down (aborting anything in flight) on any tab/shop change.
+    _storefrontPrefetchSub =
+        ref.listenManual(storefrontPrefetchProvider, (_, __) {});
     // HomeScreen (part of AppShell, the always-mounted root) can be built
     // before login completes — e.g. a guest view of Home. initState's own
     // one-shot _maybeShowLocationPrompt call below then runs while still
@@ -222,8 +225,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     // PHASE 4: Listen for tab changes and immediately reset scroll position
     // and deferred-section state so stale previous-tab content never bleeds
     // into the newly selected tab.
+    // Listens to the RESOLVED tab (not the raw selection), so resolving the
+    // default tab of a freshly loaded shop doesn't count as a user switch.
     _tabKeySub = ref.listenManual(
-      selectedCategoryIdProvider,
+      activeTabKeyProvider,
       (previous, next) {
         if (previous == next || next == _activeTabKey) return;
         _activeTabKey = next;
@@ -523,6 +528,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     _sectionSocketSub.close();
     _brandingSocketSub.close();
     _themeRefreshTimerSub.close();
+    _storefrontPrefetchSub.close();
     _authStateSub.close();
     _homeDataSub.close();
     _tabKeySub.close();
@@ -581,41 +587,39 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     }
   }
 
-  Future<void> _refreshThemeDrivenLayout() async {
+  /// Revalidates the visible theme + tab in place. The current content stays
+  /// on screen throughout and everything that changed lands in ONE frame.
+  /// Without [force], content younger than the freshness window is left alone
+  /// (no request at all), so resuming the app never re-downloads the home.
+  Future<void> _refreshThemeDrivenLayout({bool force = false}) async {
     if (!mounted || _isThemeLayoutRefreshInFlight) {
       return;
     }
 
     _isThemeLayoutRefreshInFlight = true;
     try {
-      final activeTabKey = ref.read(activeTabKeyProvider);
-      await Future.wait<void>(<Future<void>>[
-        refreshCurrentStoreThemes(ref),
-        refreshSectionManifest(ref, activeTabKey),
-      ]);
+      await ref.read(storefrontSyncProvider).revalidateActive(force: force);
     } finally {
       _isThemeLayoutRefreshInFlight = false;
     }
   }
 
   Future<void> _refresh() async {
-    final activeTabKey = ref.read(activeTabKeyProvider);
+    // Live feeds (banners, categories, featured…) are re-read; the Theme
+    // Builder layout is REVALIDATED, never invalidated — invalidating it is
+    // what used to blank the whole screen behind a skeleton on every refresh.
     ref
       ..invalidate(homeProvider)
       ..invalidate(bannerProvider)
       ..invalidate(categoryCollectionProvider)
       ..invalidate(homeFeaturedProductsProvider)
       ..invalidate(homeDealsProvider)
-      ..invalidate(homeTrendingProductsProvider)
-      ..invalidate(tabThemesProvider)
-      ..invalidate(selectedTabHomeContentProvider)
-      ..invalidate(sectionManifestProvider(activeTabKey))
-      ..invalidate(activeSectionManifestProvider);
+      ..invalidate(homeTrendingProductsProvider);
     _stickyHeaderTriggerOffset = null;
     _stickyHeaderProgress.value = 0;
     await Future.wait<void>(<Future<void>>[
       ref.read(homeProvider.future).then((_) {}),
-      _refreshThemeDrivenLayout(),
+      _refreshThemeDrivenLayout(force: true),
     ]);
   }
 
@@ -862,20 +866,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       ),
     );
     final activeTabKey = ref.watch(activeTabKeyProvider);
-    final manifestIsLoading = ref.watch(
-      sectionManifestProvider(activeTabKey).select(
-        (manifestAsync) => manifestAsync.isLoading,
-      ),
-    );
-    final manifestIsEmpty = ref.watch(
-      activeSectionManifestProvider.select(
-        (manifest) => manifest.sections.isEmpty,
-      ),
-    );
-    // Show skeleton sections ONLY while the manifest is actively loading and
-    // we have no cached content yet.  Never render old summer/campaign
-    // hardcoded widgets as a loading fallback.
-    final showSkeletonSections = manifestIsEmpty && manifestIsLoading;
+    final sectionsStatus = ref.watch(activeSectionsStatusProvider);
+    // Skeleton ONLY for a genuine first load of this (store, shop, mode, tab).
+    // Once content is held it stays on screen while a revalidation runs, and a
+    // switch to an already-loaded tab renders immediately. Never a bundled
+    // campaign widget as a loading fallback.
+    final showSkeletonSections = sectionsStatus == SectionsStatus.loading;
+    final showSectionsUnavailable = sectionsStatus == SectionsStatus.failed;
     final showCategoryTabs = ref.watch(
       activeTabThemeProvider.select(
         (theme) => theme.sections.categoryTabs.visible,
@@ -894,7 +891,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       activeTabThemeProvider
           .select((theme) => theme.sections.categoryTabs.colorEnabled),
     );
-    final homeAsync = ref.watch(homeProvider);
     final deliveryEtaMinutes = ref.watch(
       tabThemesProvider.select(
         (tabThemesAsync) => tabThemesAsync.asData?.value.deliveryEtaMinutes,
@@ -922,10 +918,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       },
       child: Scaffold(
         backgroundColor: Colors.white,
-        body: homeAsync.when(
-          loading: () => const _HomeLoadingView(),
-          error: (error, stackTrace) => _HomeErrorView(onRetry: _refresh),
-          data: (_) {
+        // NOT gated on the banners/categories/featured aggregate any more: that
+        // put the whole screen behind a skeleton (up to the network timeout)
+        // even when the theme and sections were already cached, and blanked it
+        // again on every refresh. The header renders at once from the cached
+        // theme; each section area has its own first-load skeleton.
+        body: Builder(
+          builder: (context) {
             if (_stickyHeaderTriggerOffset == null) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (mounted) {
@@ -1180,6 +1179,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                           if (showSkeletonSections)
                             const SliverToBoxAdapter(
                               child: _HomeSectionsSkeleton(),
+                            )
+                          else if (showSectionsUnavailable)
+                            SliverToBoxAdapter(
+                              child: _HomeSectionsUnavailable(
+                                onRetry: _refresh,
+                              ),
                             )
                           else
                             DynamicHomeSections(
@@ -1957,140 +1962,46 @@ class _AddressBottomSheet extends ConsumerWidget {
   }
 }
 
-class _HomeLoadingView extends StatelessWidget {
-  const _HomeLoadingView();
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      bottom: false,
-      // PERF: Single Shimmer animation controller for all skeleton boxes.
-      child: SkeletonShimmerGroup(
-        child: ListView(
-          physics: const NeverScrollableScrollPhysics(),
-          padding: EdgeInsets.fromLTRB(22.w, 12.h, 22.w, 124.h),
-          children: <Widget>[
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      SkeletonLoader(
-                          width: 190.w,
-                          height: 24.h,
-                          radius: 12,
-                          useOwnShimmer: false),
-                      Gap(8.h),
-                      SkeletonLoader(
-                          width: 168.w,
-                          height: 24.h,
-                          radius: 12,
-                          useOwnShimmer: false),
-                      Gap(12.h),
-                      SkeletonLoader(
-                          width: 220.w,
-                          height: 14.h,
-                          radius: 10,
-                          useOwnShimmer: false),
-                    ],
-                  ),
-                ),
-                Gap(14.w),
-                const SkeletonLoader.circular(size: 56, useOwnShimmer: false),
-                Gap(10.w),
-                const SkeletonLoader.circular(size: 56, useOwnShimmer: false),
-              ],
-            ),
-            Gap(24.h),
-            SkeletonLoader(
-                width: double.infinity,
-                height: 192.h,
-                radius: 30,
-                useOwnShimmer: false),
-            Gap(12.h),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                SkeletonLoader(
-                    width: 24.w, height: 8.h, radius: 99, useOwnShimmer: false),
-                Gap(6.w),
-                SkeletonLoader(
-                    width: 8.w, height: 8.h, radius: 99, useOwnShimmer: false),
-                Gap(6.w),
-                SkeletonLoader(
-                    width: 8.w, height: 8.h, radius: 99, useOwnShimmer: false),
-              ],
-            ),
-            Gap(18.h),
-            SizedBox(
-              height: 56.h,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: 4,
-                itemExtentBuilder: (index, _) => _horizontalRailExtent(
-                  index,
-                  4,
-                  124.w,
-                  12.w,
-                ),
-                itemBuilder: (_, __) => SkeletonLoader(
-                  width: 124.w,
-                  height: 56.h,
-                  radius: 18,
-                  useOwnShimmer: false,
-                ),
-              ),
-            ),
-            Gap(28.h),
-            SkeletonLoader(
-                width: 180.w, height: 18.h, radius: 12, useOwnShimmer: false),
-            Gap(14.h),
-            SizedBox(
-              height: 306.h,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: 2,
-                itemExtentBuilder: (index, _) => _horizontalRailExtent(
-                  index,
-                  2,
-                  248.w,
-                  16.w,
-                ),
-                itemBuilder: (_, __) => SkeletonLoader(
-                  width: 248.w,
-                  height: 306.h,
-                  radius: 30,
-                  useOwnShimmer: false,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _HomeErrorView extends StatelessWidget {
-  const _HomeErrorView({required this.onRetry});
+/// Shown when the Theme Builder sections for this shop could not be loaded and
+/// nothing is cached. The header/search/tabs stay usable; retry re-fetches.
+class _HomeSectionsUnavailable extends StatelessWidget {
+  const _HomeSectionsUnavailable({required this.onRetry});
 
   final Future<void> Function() onRetry;
 
   @override
   Widget build(BuildContext context) {
-    return ErrorState(
-      title: 'Home feed unavailable',
-      message: 'We could not load the storefront right now. Try again.',
-      onRetry: () => unawaited(onRetry()),
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 48.h),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Text(
+            "Couldn't load this page",
+            style: AppTextStyles.bodyMedium.copyWith(
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          Gap(6.h),
+          Text(
+            'Check your connection and try again.',
+            textAlign: TextAlign.center,
+            style: AppTextStyles.bodySmall.copyWith(
+              color: AppColors.textSecondary,
+            ),
+          ),
+          Gap(14.h),
+          OutlinedButton(
+            onPressed: () => unawaited(onRetry()),
+            child: const Text('Retry'),
+          ),
+        ],
+      ),
     );
   }
 }
 
-/// Skeleton shown inside the scroll view while the section manifest is loading.
-/// Replaces old hardcoded summer/campaign fallback widgets so nothing from a
-/// previous deployment ever flashes on startup.
 class _HomeSectionsSkeleton extends StatelessWidget {
   const _HomeSectionsSkeleton();
 

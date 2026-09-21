@@ -113,23 +113,16 @@ class _StoreScreenShellState extends ConsumerState<StoreScreenShell>
 
     _isThemeLayoutRefreshInFlight = true;
     try {
-      final activeTabKey = ref.read(activeTabKeyProvider);
-      await Future.wait<void>(<Future<void>>[
-        refreshCurrentStoreThemes(ref),
-        refreshSectionManifest(ref, activeTabKey),
-      ]);
+      await ref.read(storefrontSyncProvider).revalidateActive();
     } finally {
       _isThemeLayoutRefreshInFlight = false;
     }
   }
 
   Future<void> _refresh() async {
-    final activeTabKey = ref.read(activeTabKeyProvider);
-    ref
-      ..invalidate(homeProvider)
-      ..invalidate(tabThemesProvider)
-      ..invalidate(sectionManifestProvider(activeTabKey))
-      ..invalidate(activeSectionManifestProvider);
+    // Live feeds are re-read; the Theme Builder layout is revalidated in place
+    // (never invalidated), so the screen doesn't blank while refreshing.
+    ref.invalidate(homeProvider);
     await _refreshThemeDrivenLayout();
   }
 

@@ -1,314 +1,450 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:dio/dio.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:bakaloo_flutter_app/core/constants/api_constants.dart';
-import 'package:bakaloo_flutter_app/core/constants/storage_keys.dart';
 import 'package:bakaloo_flutter_app/core/network/api_interceptor.dart';
 import 'package:bakaloo_flutter_app/core/network/app_availability_provider.dart';
+import 'package:bakaloo_flutter_app/core/providers/storefront_scope_provider.dart';
 import 'package:bakaloo_flutter_app/core/providers/store_provider.dart';
 import 'package:bakaloo_flutter_app/core/socket/socket_service.dart';
-import 'package:bakaloo_flutter_app/core/storage/hive_service.dart';
 import 'package:bakaloo_flutter_app/core/storage/app_cache_manager.dart';
+import 'package:bakaloo_flutter_app/core/storage/hive_service.dart';
 import 'package:bakaloo_flutter_app/core/storage/secure_storage_service.dart';
+import 'package:bakaloo_flutter_app/core/theme/layout_flight.dart';
 import 'package:bakaloo_flutter_app/core/theme/remote_theme_model.dart';
 import 'package:bakaloo_flutter_app/core/theme/section_manifest_provider.dart';
 import 'package:bakaloo_flutter_app/core/theme/tab_home_content_model.dart';
 import 'package:bakaloo_flutter_app/core/theme/theme_asset_warmer.dart';
 
-final Map<String, TabThemesResponse> _themeMemoryCache =
-    <String, TabThemesResponse>{};
-final Map<String, TabHomeContentResponse> _tabHomeMemoryCache =
-    <String, TabHomeContentResponse>{};
-final Map<String, Future<void>> _tabThemesFetchInFlight =
-    <String, Future<void>>{};
-final Map<String, Future<TabHomeContentResponse?>> _tabHomeFetchInFlight =
-    <String, Future<TabHomeContentResponse?>>{};
-final Set<String> _tabHomePrefetchInFlight = <String>{};
-final Set<String> _sectionManifestPrefetchInFlight = <String>{};
-
-const int _tabHomePrefetchLimit = 3;
+// The Theme Builder (backend `/theme/tabs`) is the ONLY source of storefront
+// chrome. There is no bundled fallback theme: while a shop's theme is
+// unresolved the UI shows [RemoteTheme.neutral] placeholders — never another
+// shop's theme and never a legacy one.
+//
+// Every cache below is addressed by an immutable key captured when the request
+// STARTS (`ThemeScopeKey` / `SectionScopeKey`). Providers watch the storefront
+// scope, so a change of shop / price mode re-keys them and nothing cached for
+// the previous scope can be read again.
 
 // PHASE 4A: Scroll-idle signalling.
 // Updated by _HomeScreenState on every scroll event. Module-level so the
-// themeRefreshTimerProvider closure can read it without coupling to the widget.
+// refresh timer can read it without coupling to the widget.
 // Epoch milliseconds of the last scroll event; 0 = no scroll yet.
 int homeScrollLastEventMs = 0;
-// A scroll is considered "active" for 800ms after the last event.
-const int _scrollIdleThresholdMs = 800;
 
-class _TabThemesEpochNotifier extends Notifier<int> {
-  @override
-  int build() => 0;
+/// Test seams: a fake HTTP client / health sink, and a reset of the static
+/// memory caches between tests. Production never touches these.
+@visibleForTesting
+Dio Function()? layoutDioFactory;
 
-  void bump() => state++;
+@visibleForTesting
+void Function({required bool healthy})? layoutHealthHook;
+
+Dio? _sharedDio;
+
+Dio buildLayoutDio() {
+  final Dio Function()? factory = layoutDioFactory;
+  if (factory != null) {
+    return factory();
+  }
+  return _sharedDio ??= _buildDio();
 }
 
-class _TabHomeEpochNotifier extends Notifier<int> {
-  @override
-  int build() => 0;
-
-  void bump() => state++;
+Dio _buildDio() {
+  final dio = Dio(
+    BaseOptions(
+      baseUrl: ApiConstants.baseUrl,
+      // Layout requests are cheap cacheable GETs and the last good content
+      // stays on screen while we retry, so fail fast rather than spin.
+      connectTimeout: const Duration(seconds: 15),
+      receiveTimeout: const Duration(seconds: 25),
+    ),
+  );
+  dio.interceptors.add(ApiInterceptor(SecureStorageService()));
+  return dio;
 }
 
-final _tabThemesEpochProvider = NotifierProvider<_TabThemesEpochNotifier, int>(
-  _TabThemesEpochNotifier.new,
-);
-final _tabHomeEpochProvider = NotifierProvider<_TabHomeEpochNotifier, int>(
-  _TabHomeEpochNotifier.new,
-);
+void reportLayoutHealth(Ref ref, {required bool healthy}) {
+  final hook = layoutHealthHook;
+  if (hook != null) {
+    hook(healthy: healthy);
+    return;
+  }
+  try {
+    final notifier = ref.read(appAvailabilityProvider.notifier);
+    healthy ? notifier.reportHealthy() : notifier.reportServiceUnavailable();
+  } catch (_) {
+    // Provider may not be available in all contexts (e.g. during prefetch).
+  }
+}
+
+// ─── Theme manifest ──────────────────────────────────────────────────────────
+
+final LayoutMemory<TabThemesResponse> _themeMemory =
+    LayoutMemory<TabThemesResponse>(8);
+final FlightBoard<TabThemesResponse> _themeBoard =
+    FlightBoard<TabThemesResponse>();
+final LayoutMemory<TabHomeContentResponse> _tabHomeMemory =
+    LayoutMemory<TabHomeContentResponse>(48);
+final FlightBoard<TabHomeContentResponse> _tabHomeBoard =
+    FlightBoard<TabHomeContentResponse>();
+
+String themeChangeId(ThemeScopeKey key) => 'theme:${key.id}';
+String tabHomeChangeId(SectionScopeKey key) => 'tabhome:${key.id}';
+
+String _themeStorageKey(ThemeScopeKey key) => AppCacheManager.scopedKey(
+      'layout_theme_v3',
+      shopScope: key.shopScope,
+      extra: key.storeKey,
+    );
+
+String _tabHomeStorageKey(SectionScopeKey key) => AppCacheManager.scopedKey(
+      'layout_tabhome_v3',
+      shopScope: key.shopScope,
+      extra: '${key.storeKey}|${key.priceMode}|${key.tabKey}',
+    );
+
+/// Memory, then disk. Content restored from disk is stale (revalidated on
+/// first use in this process) but renders immediately.
+Held<TabThemesResponse>? peekTheme(ThemeScopeKey key) {
+  final Held<TabThemesResponse>? cached = _themeMemory.get(key.id);
+  if (cached != null) {
+    return cached;
+  }
+  final stored = decodeLayoutEnvelope(
+    layoutPersistence.read(LayoutBox.theme, _themeStorageKey(key)),
+  );
+  if (stored == null) {
+    return null;
+  }
+  try {
+    final Held<TabThemesResponse> held = Held<TabThemesResponse>(
+      data: TabThemesResponse.fromJson(
+        withEtag(decodeLayoutMap(stored.raw), stored.etag),
+      ),
+      raw: stored.raw,
+      fetchedAt: kLayoutEpoch,
+      etag: stored.etag,
+    );
+    _themeMemory.put(key.id, held);
+    return held;
+  } catch (error) {
+    debugPrint('[TabThemes][${key.id}] unreadable cache dropped: $error');
+    return null;
+  }
+}
+
+/// Fetches (or joins an in-flight fetch of) the theme manifest for [key].
+/// With [deferCommit] the result is applied only when `outcome.commit()` is
+/// called, so it can land in the same frame as other resources.
+LayoutClaim<TabThemesResponse> claimTheme(
+  ThemeScopeKey key, {
+  bool deferCommit = false,
+}) {
+  return _themeBoard.claim(
+    key.id,
+    (CancelToken token) => revalidateLayoutResource<TabThemesResponse>(
+      dio: buildLayoutDio(),
+      path: ApiConstants.tabThemes,
+      query: <String, dynamic>{'store_key': key.storeKey},
+      current: _themeMemory.get(key.id) ?? peekTheme(key),
+      token: token,
+      parse: TabThemesResponse.fromJson,
+      apply: (Held<TabThemesResponse> next, {required bool changed}) {
+        _themeMemory.put(key.id, next);
+        unawaited(
+          layoutPersistence.write(
+            LayoutBox.theme,
+            _themeStorageKey(key),
+            encodeLayoutEnvelope(
+              raw: next.raw,
+              savedAt: next.fetchedAt,
+              etag: next.etag,
+            ),
+          ),
+        );
+        if (changed) {
+          layoutChanges.add(themeChangeId(key));
+        }
+      },
+    ),
+    deferCommit: deferCommit,
+  );
+}
+
+void markThemeStale({String? storeKey}) => _themeMemory.markStale(
+      (String id) => storeKey == null || id.split('|').first == storeKey,
+    );
+
+// ─── Tab-home content (products for sections that carry none) ────────────────
+
+Held<TabHomeContentResponse>? peekTabHome(SectionScopeKey key) {
+  final Held<TabHomeContentResponse>? cached = _tabHomeMemory.get(key.id);
+  if (cached != null) {
+    return cached;
+  }
+  final stored = decodeLayoutEnvelope(
+    layoutPersistence.read(LayoutBox.tabHome, _tabHomeStorageKey(key)),
+  );
+  if (stored == null) {
+    return null;
+  }
+  try {
+    final Held<TabHomeContentResponse> held = Held<TabHomeContentResponse>(
+      data: TabHomeContentResponse.fromJson(decodeLayoutMap(stored.raw)),
+      raw: stored.raw,
+      fetchedAt: kLayoutEpoch,
+      etag: stored.etag,
+    );
+    _tabHomeMemory.put(key.id, held);
+    return held;
+  } catch (error) {
+    debugPrint('[TabHome][${key.id}] unreadable cache dropped: $error');
+    return null;
+  }
+}
+
+LayoutClaim<TabHomeContentResponse> claimTabHome(
+  SectionScopeKey key, {
+  bool deferCommit = false,
+}) {
+  return _tabHomeBoard.claim(
+    key.id,
+    (CancelToken token) => revalidateLayoutResource<TabHomeContentResponse>(
+      dio: buildLayoutDio(),
+      path: '${ApiConstants.tabThemes}/${key.tabKey}/home',
+      // Sent explicitly so the request always matches the key it is stored
+      // under, even if the customer flips B2C/B2B while it is in flight.
+      query: <String, dynamic>{
+        'store_key': key.storeKey,
+        'priceMode': key.priceMode,
+      },
+      current: _tabHomeMemory.get(key.id) ?? peekTabHome(key),
+      token: token,
+      parse: TabHomeContentResponse.fromJson,
+      apply: (Held<TabHomeContentResponse> next, {required bool changed}) {
+        _tabHomeMemory.put(key.id, next);
+        unawaited(
+          layoutPersistence.write(
+            LayoutBox.tabHome,
+            _tabHomeStorageKey(key),
+            encodeLayoutEnvelope(
+              raw: next.raw,
+              savedAt: next.fetchedAt,
+              etag: next.etag,
+            ),
+          ),
+        );
+        if (changed) {
+          layoutChanges.add(tabHomeChangeId(key));
+        }
+      },
+    ),
+    deferCommit: deferCommit,
+  );
+}
+
+void markTabHomeStale({String? storeKey, String? tabKey}) =>
+    _tabHomeMemory.markStale((String id) {
+      final List<String> parts = id.split('|');
+      return (storeKey == null || parts.first == storeKey) &&
+          (tabKey == null || parts.last == tabKey);
+    });
+
+void resetLayoutMemoryForTests() {
+  _themeMemory.clear();
+  _tabHomeMemory.clear();
+  _themeBoard.cancelAll();
+  _tabHomeBoard.cancelAll();
+  _themeRetries.clear();
+  _sharedDio = null;
+  resetSectionLayoutForTests();
+}
+
+// ─── Providers ───────────────────────────────────────────────────────────────
+
+/// Theme key of the active storefront (store + shop scope).
+final activeThemeKeyProvider = Provider<ThemeScopeKey>((Ref ref) {
+  return ref.watch(
+    storefrontScopeProvider.select((StorefrontScope s) => s.themeKey),
+  );
+});
+
+/// Re-runs the owning provider when its resource changes. Only the provider of
+/// the CHANGED key rebuilds — there is no global epoch that rebuilds (and
+/// re-fetches) every family member.
+void _rebuildOnChange(Ref ref, String changeId) {
+  final StreamSubscription<String> sub = layoutChanges.stream
+      .where((String id) => id == changeId)
+      .listen((_) {
+    if (ref.mounted) {
+      ref.invalidateSelf();
+    }
+  });
+  ref.onDispose(sub.cancel);
+}
+
+final Map<String, int> _themeRetries = <String, int>{};
+const int _maxFirstLoadRetries = 3;
 
 final tabThemesForStoreProvider =
-    FutureProvider.family<TabThemesResponse, String>(
-        (Ref ref, String storeKey) async {
-  ref.watch(_tabThemesEpochProvider);
-  final String scopedKey = _themeCacheKey(storeKey);
-  final TabThemesResponse? memory = _themeMemoryCache[scopedKey];
-  if (memory != null) {
-    _scheduleThemeWarmAndPrefetch(ref, storeKey, memory);
-    unawaited(_fetchAndCacheTabThemes(ref, storeKey));
-    return memory;
-  }
+    FutureProvider.autoDispose.family<TabThemesResponse, ThemeScopeKey>(
+        (Ref ref, ThemeScopeKey key) async {
+  _rebuildOnChange(ref, themeChangeId(key));
 
-  TabThemesResponse response = storeKey == 'zepto'
-      ? TabThemesResponse.defaults(storeKey: storeKey)
-      : TabThemesResponse.empty(storeKey: storeKey);
-
-  try {
-    final dynamic cached =
-        HiveService.remoteThemeBox.get(_manifestCacheKey(storeKey));
-    if (cached != null) {
-      final Map<String, dynamic> map = _decodeToMap(cached);
-      if (map.isNotEmpty) {
-        response = TabThemesResponse.fromJson(map);
-        _themeMemoryCache[scopedKey] = response;
-        _scheduleThemeWarmAndPrefetch(ref, storeKey, response);
-      }
-    } else if (storeKey == 'zepto' && _isGlobalThemeScope()) {
-      final dynamic legacyManifest =
-          HiveService.remoteThemeBox.get('tab_themes_data');
-      final Map<String, dynamic> legacyMap = _decodeToMap(legacyManifest);
-      if (legacyMap.isNotEmpty) {
-        response = TabThemesResponse.fromJson(legacyMap);
-        _themeMemoryCache[scopedKey] = response;
-        _scheduleThemeWarmAndPrefetch(ref, storeKey, response);
-      } else {
-        final dynamic legacyTheme = HiveService.remoteThemeBox.get('data');
-        final TabThemesResponse? migrated =
-            _decodeLegacyTheme(storeKey, legacyTheme);
-        if (migrated != null) {
-          response = migrated;
-          _themeMemoryCache[scopedKey] = response;
-          _scheduleThemeWarmAndPrefetch(ref, storeKey, response);
-        }
-      }
+  final Held<TabThemesResponse>? held = peekTheme(key);
+  if (held != null) {
+    unawaited(ThemeAssetWarmer.warmAssets(held.data));
+    if (!held.isFresh) {
+      // Background revalidation. Released with the provider: if the customer
+      // has moved on, the request is aborted (unless somebody else needs it).
+      final LayoutClaim<TabThemesResponse> claim = claimTheme(key);
+      ref.onDispose(claim.release);
     }
-  } catch (error) {
-    debugPrint('[TabThemes][$storeKey] Hive read failed: $error');
+    return held.data;
   }
 
-  unawaited(_fetchAndCacheTabThemes(ref, storeKey));
-  return response;
+  // Genuine first load for this (store, shop): nothing to show yet.
+  final LayoutClaim<TabThemesResponse> claim = claimTheme(key);
+  ref.onDispose(claim.release);
+  final FetchOutcome<TabThemesResponse> outcome = await claim.result;
+  final Held<TabThemesResponse>? fresh = outcome.held;
+  if (fresh != null) {
+    _themeRetries.remove(key.id);
+    if (ref.mounted) {
+      reportLayoutHealth(ref, healthy: true);
+    }
+    unawaited(ThemeAssetWarmer.warmAssets(fresh.data));
+    return fresh.data;
+  }
+  if (outcome.status != FetchStatus.cancelled && ref.mounted) {
+    // Offline/unreachable with nothing cached: surface the availability
+    // screen and retry a few times with backoff.
+    reportLayoutHealth(ref, healthy: false);
+    final int attempt = (_themeRetries[key.id] ?? 0) + 1;
+    if (attempt <= _maxFirstLoadRetries) {
+      _themeRetries[key.id] = attempt;
+      final Timer retry = Timer(Duration(seconds: 3 * attempt), () {
+        if (ref.mounted) {
+          ref.invalidateSelf();
+        }
+      });
+      ref.onDispose(retry.cancel);
+    }
+  }
+  throw outcome.error ?? const LayoutUnavailableException();
 });
 
-final tabThemesProvider = FutureProvider<TabThemesResponse>((Ref ref) async {
-  final String storeKey = ref.watch(selectedStoreProvider).id;
-  return ref.watch(tabThemesForStoreProvider(storeKey).future);
+/// Theme manifest of the active storefront.
+///
+/// A plain pass-through (not an async provider that awaits the family's
+/// `.future`): an async intermediary would keep the previous shop's provider —
+/// and its in-flight request — alive until its own pending build finished,
+/// instead of releasing it the moment the customer moves on.
+final tabThemesProvider = Provider<AsyncValue<TabThemesResponse>>((Ref ref) {
+  final ThemeScopeKey key = ref.watch(activeThemeKeyProvider);
+  return ref.watch(tabThemesForStoreProvider(key));
 });
 
+/// Synchronous view of the active storefront's held theme (memory/disk) — what
+/// makes a cold start and a tab/shop return render on the very first frame.
+/// Null until THIS shop's theme has been loaded once; never another shop's.
 final tabThemesSnapshotProvider = Provider<TabThemesResponse?>((Ref ref) {
-  ref.watch(_tabThemesEpochProvider);
-  final String storeKey = ref.watch(selectedStoreProvider).id;
-  return _readCachedManifestSnapshot(storeKey);
+  final ThemeScopeKey key = ref.watch(activeThemeKeyProvider);
+  _rebuildOnChange(ref, themeChangeId(key));
+  return peekTheme(key)?.data;
 });
+
+final RemoteTheme _neutralTheme = RemoteTheme.neutral();
 
 final activeTabThemeProvider = Provider<RemoteTheme>((Ref ref) {
   final String selectedTabKey = ref.watch(selectedCategoryIdProvider);
   final String? userId = _currentUserId();
-  final String storeKey = ref.watch(selectedStoreProvider).id;
   final TabThemesResponse? snapshot = ref.watch(tabThemesSnapshotProvider);
-  final AsyncValue<TabThemesResponse> tabThemes = ref.watch(tabThemesProvider);
-  final TabThemesResponse response = snapshot ??
-      tabThemes.asData?.value ??
-      (storeKey == 'zepto'
-          ? TabThemesResponse.defaults(storeKey: storeKey)
-          : TabThemesResponse.empty(storeKey: storeKey));
+  final TabThemesResponse? response =
+      snapshot ?? ref.watch(tabThemesProvider).asData?.value;
 
-  final TabThemeEntry? entry =
-      response.tabMap[selectedTabKey] ?? response.defaultTabEntry;
+  final TabThemeEntry? entry = response == null
+      ? null
+      : response.tabMap[selectedTabKey] ?? response.defaultTabEntry;
   if (entry == null) {
-    return RemoteTheme.defaults();
+    return _neutralTheme;
   }
-
   return entry.resolveForUser(userId);
 });
 
-final remoteThemeProvider = FutureProvider<RemoteTheme>((Ref ref) async {
-  final String storeKey = ref.watch(selectedStoreProvider).id;
-  final TabThemesResponse? snapshot = ref.watch(tabThemesSnapshotProvider);
-  final TabThemesResponse response =
-      snapshot ?? await ref.watch(tabThemesProvider.future);
-  final String? userId = _currentUserId();
-  final TabThemeEntry? allTab = response.tabMap['all'];
-  return allTab?.resolveForUser(userId) ??
-      (storeKey == 'zepto'
-          ? TabThemesResponse.defaults(storeKey: storeKey).tabs.first.themeData
-          : RemoteTheme.defaults());
+/// True once the active storefront's own theme is available.
+final themeResolvedProvider = Provider<bool>((Ref ref) {
+  return ref.watch(tabThemesSnapshotProvider) != null ||
+      ref.watch(tabThemesProvider).asData != null;
 });
 
-final tabHomeContentProvider =
-    FutureProvider.family<TabHomeContentResponse?, String>(
-        (Ref ref, String providerKey) async {
-  ref.watch(_tabHomeEpochProvider);
-  final List<String> parts = providerKey.split('::');
-  if (parts.length < 2) {
-    return null;
-  }
+final tabHomeContentProvider = FutureProvider.autoDispose
+    .family<TabHomeContentResponse?, SectionScopeKey>(
+        (Ref ref, SectionScopeKey key) async {
+  _rebuildOnChange(ref, tabHomeChangeId(key));
 
-  final String storeKey = parts[0];
-  final String tabKey = parts[1];
-  final String memoryKey = _tabHomeMemoryKey(storeKey, tabKey);
-  final TabHomeContentResponse? memory = _tabHomeMemoryCache[memoryKey];
-  if (memory != null) {
-    unawaited(_fetchAndCacheTabHomeContent(ref, storeKey, tabKey));
-    return memory;
-  }
-
-  try {
-    final dynamic cached =
-        HiveService.remoteThemeBox.get(_tabHomeCacheKey(storeKey, tabKey));
-    if (cached != null) {
-      final Map<String, dynamic> map = _decodeToMap(cached);
-      if (map.isNotEmpty) {
-        final TabHomeContentResponse response =
-            TabHomeContentResponse.fromJson(map);
-        _tabHomeMemoryCache[memoryKey] = response;
-        unawaited(_fetchAndCacheTabHomeContent(ref, storeKey, tabKey));
-        return response;
-      }
+  final Held<TabHomeContentResponse>? held = peekTabHome(key);
+  if (held != null) {
+    if (!held.isFresh) {
+      final LayoutClaim<TabHomeContentResponse> claim = claimTabHome(key);
+      ref.onDispose(claim.release);
     }
-  } catch (error) {
-    debugPrint('[TabHome][$storeKey/$tabKey] Hive read failed: $error');
+    return held.data;
   }
-
-  return _fetchAndCacheTabHomeContent(ref, storeKey, tabKey);
+  final LayoutClaim<TabHomeContentResponse> claim = claimTabHome(key);
+  ref.onDispose(claim.release);
+  final FetchOutcome<TabHomeContentResponse> outcome = await claim.result;
+  return outcome.held?.data;
 });
 
 final selectedTabHomeContentProvider =
-    FutureProvider<TabHomeContentResponse?>((Ref ref) async {
-  final String storeKey = ref.watch(selectedStoreProvider).id;
-  final String selectedTabKey = ref.watch(selectedCategoryIdProvider);
-  final TabThemesResponse? snapshot = ref.watch(tabThemesSnapshotProvider);
-  final TabThemesResponse response =
-      snapshot ?? await ref.watch(tabThemesProvider.future);
-
-  final String? resolvedTabKey = _resolveTabKey(response, selectedTabKey);
-
-  if (resolvedTabKey == null) {
-    return null;
-  }
-
-  return ref.watch(
-    tabHomeContentProvider(_tabHomeProviderKey(storeKey, resolvedTabKey))
-        .future,
-  );
+    Provider<AsyncValue<TabHomeContentResponse?>>((Ref ref) {
+  final SectionScopeKey key = ref.watch(activeSectionKeyProvider);
+  return ref.watch(tabHomeContentProvider(key));
 });
 
+// ─── Refresh entry points (names kept for the screens that use them) ─────────
+
 final themeRefreshTimerProvider = Provider<Timer>((Ref ref) {
-  // PHASE 4A: Scroll-idle-aware theme refresh.
-  //
-  // The timer still fires every 5 minutes, but if the home scroll is active
-  // we defer the provider invalidation until the user stops scrolling.
-  // Only one pending refresh is queued at a time — subsequent timer ticks
-  // while a deferred refresh is already pending are no-ops.
-  //
-  // Mechanism:
-  //   • _homeScrollLastEventMs is updated by _HomeScreenState on every scroll
-  //     tick (set to DateTime.now().millisecondsSinceEpoch).
-  //   • A scroll is considered "active" if a scroll event occurred within the
-  //     last 800ms.
-  //   • When the timer fires during active scroll, a 500ms polling loop checks
-  //     every 500ms until the scroll has been idle for 800ms, then runs the
-  //     refresh. The loop is bounded to 2 minutes max to prevent infinite deferral.
-  Timer? _deferTimer;
+  // Every 5 minutes revalidate the visible storefront IN PLACE (ETag ⇒ usually
+  // a 304). Nothing is cleared and nothing is invalidated, so the screen never
+  // blanks. If the home scroll is active the refresh waits until it is idle.
+  Timer? deferTimer;
 
-  void doRefresh() {
-    _themeMemoryCache.clear();
-    _tabHomeMemoryCache.clear();
-    _tabThemesFetchInFlight.clear();
-    _tabHomeFetchInFlight.clear();
-    _tabHomePrefetchInFlight.clear();
-    _sectionManifestPrefetchInFlight.clear();
-    ref
-      ..invalidate(tabThemesProvider)
-      ..invalidate(selectedTabHomeContentProvider);
-  }
-
-  void scheduleWhenIdle() {
-    _deferTimer?.cancel();
-    final int startMs = DateTime.now().millisecondsSinceEpoch;
-    _deferTimer = Timer.periodic(const Duration(milliseconds: 500), (t) {
-      final int now = DateTime.now().millisecondsSinceEpoch;
-      final bool isScrollActive =
-          (now - homeScrollLastEventMs) < _scrollIdleThresholdMs;
-      final bool timedOut = (now - startMs) > 120000; // 2-min safety cap
-
-      if (!isScrollActive || timedOut) {
-        t.cancel();
-        _deferTimer = null;
-        doRefresh();
-      }
-    });
-  }
+  void refreshNow() =>
+      unawaited(ref.read(storefrontSyncProvider).revalidateActive(force: true));
 
   final Timer timer = Timer.periodic(const Duration(minutes: 5), (_) {
     final int now = DateTime.now().millisecondsSinceEpoch;
-    final bool isScrollActive =
-        (now - homeScrollLastEventMs) < _scrollIdleThresholdMs;
-
-    if (isScrollActive) {
-      // Only queue one deferred refresh — if one is already pending, skip.
-      if (_deferTimer == null || !_deferTimer!.isActive) {
-        scheduleWhenIdle();
-      }
-    } else {
-      doRefresh();
+    final bool scrolling = (now - homeScrollLastEventMs) < 800;
+    if (!scrolling) {
+      refreshNow();
+      return;
     }
+    if (deferTimer?.isActive ?? false) {
+      return;
+    }
+    final int startMs = now;
+    deferTimer = Timer.periodic(const Duration(milliseconds: 500), (Timer t) {
+      final int later = DateTime.now().millisecondsSinceEpoch;
+      final bool stillScrolling = (later - homeScrollLastEventMs) < 800;
+      if (!stillScrolling || later - startMs > 120000) {
+        t.cancel();
+        refreshNow();
+      }
+    });
   });
 
   ref.onDispose(() {
     timer.cancel();
-    _deferTimer?.cancel();
+    deferTimer?.cancel();
   });
   return timer;
 });
-
-class _ManagedThemeRefreshNotifier extends Notifier<int> {
-  @override
-  int build() => 0;
-
-  Future<void> refresh() async {
-    final String storeKey = ref.read(selectedStoreProvider).id;
-
-    _themeMemoryCache.remove(_themeCacheKey(storeKey));
-
-    await _fetchAndCacheTabThemes(ref, storeKey);
-
-    ref
-      ..invalidate(tabThemesForStoreProvider(storeKey))
-      ..invalidate(tabThemesProvider);
-
-    state++;
-  }
-}
-
-final managedThemeRefreshProvider =
-    NotifierProvider<_ManagedThemeRefreshNotifier, int>(
-  _ManagedThemeRefreshNotifier.new,
-);
 
 final socketThemeUpdateStreamProvider =
     StreamProvider<Map<String, dynamic>>((Ref ref) {
@@ -316,472 +452,27 @@ final socketThemeUpdateStreamProvider =
 });
 
 Future<void> refreshCurrentStoreThemes(WidgetRef ref) async {
-  await ref.read(managedThemeRefreshProvider.notifier).refresh();
+  await ref.read(storefrontSyncProvider).revalidateActive(force: true);
 }
 
 Future<void> handleThemeSocketEvent(WidgetRef ref, Map data) async {
-  final String storeKey =
-      _readSocketStoreKey(data) ?? ref.read(selectedStoreProvider).id;
-  final String selectedStoreKey = ref.read(selectedStoreProvider).id;
-
-  _themeMemoryCache.remove(_themeCacheKey(storeKey));
-  _tabThemesFetchInFlight.remove(_themeCacheKey(storeKey));
-  _tabHomePrefetchInFlight.remove(storeKey);
-  _sectionManifestPrefetchInFlight.remove(storeKey);
-  _clearTabHomeCachesForStore(storeKey);
-
-  if (storeKey == selectedStoreKey) {
-    await refreshCurrentStoreThemes(ref);
-    return;
-  }
-
-  ref.invalidate(tabThemesForStoreProvider(storeKey));
-}
-
-void _scheduleThemeWarmAndPrefetch(
-  Ref ref,
-  String storeKey,
-  TabThemesResponse response,
-) {
-  unawaited(ThemeAssetWarmer.warmAssets(response));
-  unawaited(_prefetchSectionManifests(ref, storeKey, response));
-}
-
-Future<void> _prefetchSectionManifests(
-  Ref ref,
-  String storeKey,
-  TabThemesResponse response,
-) async {
-  if (response.tabs.isEmpty) {
-    return;
-  }
-
-  if (ref.read(selectedStoreProvider).id != storeKey) {
-    return;
-  }
-
-  if (!_sectionManifestPrefetchInFlight.add(storeKey)) {
-    return;
-  }
-
-  try {
-    final List<String> prioritizedTabKeys = _prioritizeTabKeys(ref, response);
-    for (final String tabKey
-        in prioritizedTabKeys.take(_tabHomePrefetchLimit)) {
-      await ref.read(sectionManifestProvider(tabKey).future);
-      await Future<void>.delayed(Duration.zero);
-    }
-  } finally {
-    _sectionManifestPrefetchInFlight.remove(storeKey);
-  }
-}
-
-Future<void> _fetchAndCacheTabThemes(Ref ref, String storeKey) {
-  final String scopedKey = _themeCacheKey(storeKey);
-  final Future<void>? inFlight = _tabThemesFetchInFlight[scopedKey];
-  if (inFlight != null) {
-    return inFlight;
-  }
-
-  final Future<void> future = _runFetchAndCacheTabThemes(ref, storeKey);
-  _tabThemesFetchInFlight[scopedKey] = future;
-  future.whenComplete(() {
-    if (identical(_tabThemesFetchInFlight[scopedKey], future)) {
-      _tabThemesFetchInFlight.remove(scopedKey);
-    }
-  });
-  return future;
-}
-
-Future<void> _runFetchAndCacheTabThemes(Ref ref, String storeKey) async {
-  final String scopedKey = _themeCacheKey(storeKey);
-  try {
-    final Dio dio = _buildDio();
-    final Map<String, dynamic> headers = <String, dynamic>{};
-    final String? etag = _themeMemoryCache[scopedKey]?.etag;
-    if (etag != null && etag.isNotEmpty) {
-      headers['If-None-Match'] = etag;
-    }
-
-    final Response<dynamic> response = await dio.get<dynamic>(
-      ApiConstants.tabThemes,
-      queryParameters: <String, dynamic>{'store_key': storeKey},
-      options: Options(
-        headers: headers,
-        validateStatus: (int? status) => status != null && status < 500,
-      ),
-    );
-
-    if (response.statusCode == 304) {
-      // Backend healthy — tell availability provider so it can clear any
-      // prior service-unavailable state.
-      _reportHealthyIfPossible(ref);
-      return;
-    }
-
-    final dynamic payload = response.data;
-    if (payload is! Map) {
-      return;
-    }
-
-    final Map<String, dynamic> body = Map<String, dynamic>.from(payload);
-    if (body['success'] != true || body['data'] is! Map) {
-      return;
-    }
-
-    final Map<String, dynamic> dataMap =
-        Map<String, dynamic>.from(body['data'] as Map<dynamic, dynamic>);
-    final String? responseEtag = response.headers.value('etag');
-    if (responseEtag != null) {
-      dataMap['etag'] = responseEtag;
-    }
-
-    final String encodedData = jsonEncode(dataMap);
-    final dynamic cachedRaw =
-        HiveService.remoteThemeBox.get(_manifestCacheKey(storeKey));
-    final String? cachedEncoded = cachedRaw is String
-        ? cachedRaw
-        : cachedRaw is Map
-            ? jsonEncode(cachedRaw)
-            : null;
-
-    await HiveService.remoteThemeBox
-        .put(_manifestCacheKey(storeKey), encodedData);
-    await HiveService.markCached(
-      StorageKeys.cacheRemoteThemeForStore(storeKey),
-    );
-
-    final TabThemesResponse parsed = TabThemesResponse.fromJson(dataMap);
-    _themeMemoryCache[scopedKey] = parsed;
-    _scheduleThemeWarmAndPrefetch(ref, storeKey, parsed);
-
-    // Successful fetch — clear any service-unavailable flag.
-    _reportHealthyIfPossible(ref);
-
-    if (cachedEncoded != encodedData) {
-      ref.read(_tabThemesEpochProvider.notifier).bump();
-    }
-  } catch (error) {
-    debugPrint('[TabThemes][$storeKey] API fetch failed (using cache): $error');
-
-    // PHASE 6: If we have no valid cache AND the backend is down, surface the
-    // proper offline/error screen instead of silently returning an empty
-    // default theme which can render a blank or broken UI.
-    final bool hasCachedData = _themeMemoryCache.containsKey(scopedKey) ||
-        _hasHiveCacheForStore(storeKey);
-    if (!hasCachedData) {
-      _reportServiceUnavailableIfPossible(ref);
-    }
-  }
-}
-
-/// Whether there is any Hive-cached theme payload for [storeKey].
-bool _hasHiveCacheForStore(String storeKey) {
-  try {
-    final dynamic cached =
-        HiveService.remoteThemeBox.get(_manifestCacheKey(storeKey));
-    if (cached != null) return true;
-    // Also check legacy zepto keys.
-    if (storeKey == 'zepto' && _isGlobalThemeScope()) {
-      return HiveService.remoteThemeBox.get('tab_themes_data') != null ||
-          HiveService.remoteThemeBox.get('data') != null;
-    }
-    return false;
-  } catch (_) {
-    return false;
-  }
-}
-
-void _reportHealthyIfPossible(Ref ref) {
-  try {
-    ref.read(appAvailabilityProvider.notifier).reportHealthy();
-  } catch (_) {
-    // Provider may not be available in all contexts (e.g. during prefetch).
-  }
-}
-
-void _reportServiceUnavailableIfPossible(Ref ref) {
-  try {
-    ref.read(appAvailabilityProvider.notifier).reportServiceUnavailable();
-  } catch (_) {
-    // Provider may not be available in all contexts.
-  }
-}
-
-Future<TabHomeContentResponse?> _fetchAndCacheTabHomeContent(
-  Ref ref,
-  String storeKey,
-  String tabKey,
-) {
-  final String requestKey = _tabHomeProviderKey(storeKey, tabKey);
-  final Future<TabHomeContentResponse?>? inFlight =
-      _tabHomeFetchInFlight[requestKey];
-  if (inFlight != null) {
-    return inFlight;
-  }
-
-  final Future<TabHomeContentResponse?> future =
-      _runFetchAndCacheTabHomeContent(ref, storeKey, tabKey);
-  _tabHomeFetchInFlight[requestKey] = future;
-  future.whenComplete(() {
-    if (identical(_tabHomeFetchInFlight[requestKey], future)) {
-      _tabHomeFetchInFlight.remove(requestKey);
-    }
-  });
-  return future;
-}
-
-Future<TabHomeContentResponse?> _runFetchAndCacheTabHomeContent(
-  Ref ref,
-  String storeKey,
-  String tabKey,
-) async {
-  try {
-    final Dio dio = _buildDio();
-    final Response<dynamic> response = await dio.get<dynamic>(
-      '${ApiConstants.tabThemes}/$tabKey/home',
-      queryParameters: <String, dynamic>{'store_key': storeKey},
-      options: Options(
-        validateStatus: (int? status) => status != null && status < 500,
-      ),
-    );
-
-    if (response.statusCode == 404) {
-      return null;
-    }
-
-    final dynamic payload = response.data;
-    if (payload is! Map) {
-      return null;
-    }
-
-    final Map<String, dynamic> body = Map<String, dynamic>.from(payload);
-    if (body['success'] != true || body['data'] is! Map) {
-      return null;
-    }
-
-    final Map<String, dynamic> dataMap =
-        Map<String, dynamic>.from(body['data'] as Map<dynamic, dynamic>);
-    final String encodedData = jsonEncode(dataMap);
-    final String cacheKey = _tabHomeCacheKey(storeKey, tabKey);
-    final dynamic cachedRaw = HiveService.remoteThemeBox.get(cacheKey);
-    final String? cachedEncoded = cachedRaw is String
-        ? cachedRaw
-        : cachedRaw is Map
-            ? jsonEncode(cachedRaw)
-            : null;
-
-    await HiveService.remoteThemeBox.put(cacheKey, encodedData);
-    await HiveService.markCached(
-      StorageKeys.cacheRemoteThemeHome(storeKey, tabKey),
-    );
-
-    final TabHomeContentResponse parsed =
-        TabHomeContentResponse.fromJson(dataMap);
-    _tabHomeMemoryCache[_tabHomeMemoryKey(storeKey, tabKey)] = parsed;
-
-    if (cachedEncoded != encodedData) {
-      ref.read(_tabHomeEpochProvider.notifier).bump();
-    }
-
-    return parsed;
-  } catch (error) {
-    debugPrint('[TabHome][$storeKey/$tabKey] API fetch failed: $error');
-    return null;
-  }
-}
-
-List<String> _prioritizeTabKeys(
-  Ref ref,
-  TabThemesResponse response,
-) {
-  final List<String> ordered = <String>[];
-  final String? selectedTabKey = _resolveTabKey(
-    response,
-    ref.read(selectedCategoryIdProvider),
-  );
-
-  void addKey(String? key) {
-    if (key == null || key.isEmpty || ordered.contains(key)) {
-      return;
-    }
-    ordered.add(key);
-  }
-
-  addKey(selectedTabKey);
-  addKey(response.defaultTabEntry?.tabKey);
-  for (final TabThemeEntry tab in response.tabs) {
-    addKey(tab.tabKey);
-  }
-
-  return List<String>.unmodifiable(ordered);
-}
-
-Map<String, dynamic> _decodeToMap(dynamic cached) {
-  if (cached is String) {
-    final dynamic decoded = jsonDecode(cached);
-    if (decoded is Map<String, dynamic>) {
-      return decoded;
-    }
-    if (decoded is Map) {
-      return Map<String, dynamic>.from(decoded);
-    }
-    return <String, dynamic>{};
-  }
-  if (cached is Map<String, dynamic>) {
-    return cached;
-  }
-  if (cached is Map) {
-    return Map<String, dynamic>.from(cached);
-  }
-  return <String, dynamic>{};
-}
-
-TabThemesResponse? _decodeLegacyTheme(String storeKey, dynamic cached) {
-  final Map<String, dynamic> map = _decodeToMap(cached);
-  if (map.isEmpty) {
-    return null;
-  }
-
-  final TabThemeEntry defaultEntry = TabThemeEntry(
-    storeKey: storeKey,
-    tabId: null,
-    themeId: null,
-    tabKey: 'all',
-    tabLabel: 'All',
-    tabIconUrl: null,
-    tabTextColor: Colors.black,
-    tabOrder: 0,
-    variant: 'A',
-    themeData: RemoteTheme.fromJson(map),
-  );
-
-  return TabThemesResponse(
-    storeKey: storeKey,
-    etag: null,
-    tabs: <TabThemeEntry>[defaultEntry],
-    tabMap: <String, TabThemeEntry>{'all': defaultEntry},
-  );
-}
-
-TabThemesResponse? _readCachedManifestSnapshot(String storeKey) {
-  final String scopedKey = _themeCacheKey(storeKey);
-  final TabThemesResponse? memory = _themeMemoryCache[scopedKey];
-  if (memory != null) {
-    return memory;
-  }
-
-  try {
-    final dynamic cached =
-        HiveService.remoteThemeBox.get(_manifestCacheKey(storeKey));
-    final Map<String, dynamic> map = _decodeToMap(cached);
-    if (map.isNotEmpty) {
-      final TabThemesResponse response = TabThemesResponse.fromJson(map);
-      _themeMemoryCache[scopedKey] = response;
-      return response;
-    }
-
-    if (storeKey == 'zepto' && _isGlobalThemeScope()) {
-      final dynamic legacyManifest =
-          HiveService.remoteThemeBox.get('tab_themes_data');
-      final Map<String, dynamic> legacyMap = _decodeToMap(legacyManifest);
-      if (legacyMap.isNotEmpty) {
-        final TabThemesResponse response =
-            TabThemesResponse.fromJson(legacyMap);
-        _themeMemoryCache[scopedKey] = response;
-        return response;
-      }
-
-      final TabThemesResponse? migrated = _decodeLegacyTheme(
-        storeKey,
-        HiveService.remoteThemeBox.get('data'),
-      );
-      if (migrated != null) {
-        _themeMemoryCache[scopedKey] = migrated;
-        return migrated;
-      }
-    }
-  } catch (error) {
-    debugPrint('[TabThemes][$storeKey] Snapshot read failed: $error');
-  }
-
-  return null;
-}
-
-Dio _buildDio() {
-  final dio = Dio(
-    BaseOptions(
-      baseUrl: ApiConstants.baseUrl,
-      // Match the main DioClient timeout so mobile-data / Cloudflare tunnel
-      // latency doesn't cause theme fetches to silently fail (previously 5s).
-      connectTimeout: const Duration(seconds: 25),
-      receiveTimeout: const Duration(seconds: 40),
-    ),
-  );
-  dio.interceptors.add(ApiInterceptor(SecureStorageService()));
-  return dio;
-}
-
-String _themeCacheKey(String storeKey) =>
-    '$storeKey::${AppCacheManager.currentShopScope.replaceAll(',', '_')}';
-
-bool _isGlobalThemeScope() =>
-    AppCacheManager.currentShopScope == AppCacheManager.anonShopScope;
-
-String _manifestCacheKey(String storeKey) =>
-    'tab_themes_data_${_themeCacheKey(storeKey)}';
-
-String _tabHomeCacheKey(String storeKey, String tabKey) =>
-    'tab_home_data_${storeKey}_${tabKey}_${_catalogContextKey()}';
-
-String _tabHomeMemoryKey(String storeKey, String tabKey) =>
-    '$storeKey::$tabKey::${_catalogContextKey()}';
-
-String _tabHomeProviderKey(String storeKey, String tabKey) =>
-    '$storeKey::$tabKey::${_catalogContextKey()}';
-
-String _catalogContextKey() {
-  final scope = AppCacheManager.currentShopScope.replaceAll(',', '_');
-  final mode = HiveService.settingsBox.get(StorageKeys.priceMode) as String?;
-  return '${scope}_${mode == 'wholesale' ? 'wholesale' : 'retail'}';
-}
-
-String? _resolveTabKey(TabThemesResponse response, String selectedTabKey) {
-  if (response.tabMap.containsKey(selectedTabKey)) {
-    return selectedTabKey;
-  }
-  return response.defaultTabEntry?.tabKey;
+  ref
+      .read(storefrontSyncProvider)
+      .onThemeEvent(Map<String, dynamic>.from(data));
 }
 
 String? _currentUserId() {
-  final dynamic cachedUser = HiveService.userBox.get('user');
-  if (cachedUser is Map) {
-    final Map<String, dynamic> user = Map<String, dynamic>.from(cachedUser);
-    final dynamic idValue = user['id'] ?? user['userId'];
-    if (idValue is String && idValue.trim().isNotEmpty) {
-      return idValue.trim();
+  try {
+    final dynamic cachedUser = HiveService.userBox.get('user');
+    if (cachedUser is Map) {
+      final Map<String, dynamic> user = Map<String, dynamic>.from(cachedUser);
+      final dynamic idValue = user['id'] ?? user['userId'];
+      if (idValue is String && idValue.trim().isNotEmpty) {
+        return idValue.trim();
+      }
     }
+  } catch (_) {
+    // Hive not ready (very early startup / tests): no A/B bucketing.
   }
   return null;
-}
-
-void _clearTabHomeCachesForStore(String storeKey) {
-  final List<String> keys = _tabHomeMemoryCache.keys
-      .where((String key) => key.startsWith('$storeKey::'))
-      .toList(growable: false);
-
-  for (final String key in keys) {
-    _tabHomeMemoryCache.remove(key);
-    _tabHomeFetchInFlight.remove(key);
-  }
-}
-
-String? _readSocketStoreKey(Map data) {
-  final dynamic value = data['storeKey'] ?? data['store_key'];
-  if (value == null) {
-    return null;
-  }
-
-  final String normalized = value.toString().trim();
-  return normalized.isEmpty ? null : normalized;
 }

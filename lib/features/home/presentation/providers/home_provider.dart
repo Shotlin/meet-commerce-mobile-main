@@ -1,5 +1,6 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import 'package:bakaloo_flutter_app/core/providers/storefront_scope_provider.dart';
 import 'package:bakaloo_flutter_app/features/categories/domain/entities/category_entity.dart';
 import 'package:bakaloo_flutter_app/features/categories/presentation/providers/category_provider.dart';
 import 'package:bakaloo_flutter_app/features/home/domain/entities/banner_entity.dart';
@@ -29,6 +30,8 @@ class HomeScreenData {
 
 @riverpod
 Future<HomeScreenData> home(Ref ref) async {
+  // Shop / price-mode change => a different catalogue: re-key, never reuse.
+  ref.watch(storefrontScopeProvider);
   if (!ref.watch(storefrontReadyProvider)) {
     return const HomeScreenData(
         banners: [], categories: [], featuredProducts: []);
@@ -48,6 +51,8 @@ Future<HomeScreenData> home(Ref ref) async {
 
 @riverpod
 Future<List<ProductEntity>> homeNewArrivals(Ref ref) async {
+  // Shop / price-mode change => a different catalogue: re-key, never reuse.
+  ref.watch(storefrontScopeProvider);
   if (!ref.watch(storefrontReadyProvider)) return const <ProductEntity>[];
   final result = await ref.read(getNewArrivalsUseCaseProvider).call(limit: 12);
   return result.fold((_) => const <ProductEntity>[], (data) => data);
@@ -55,6 +60,8 @@ Future<List<ProductEntity>> homeNewArrivals(Ref ref) async {
 
 @riverpod
 Future<List<ProductEntity>> homeDeals(Ref ref) async {
+  // Shop / price-mode change => a different catalogue: re-key, never reuse.
+  ref.watch(storefrontScopeProvider);
   if (!ref.watch(storefrontReadyProvider)) return const <ProductEntity>[];
   final result = await ref.read(getDealsUseCaseProvider).call(limit: 12);
   return result.fold((_) => const <ProductEntity>[], (data) => data);
@@ -62,6 +69,8 @@ Future<List<ProductEntity>> homeDeals(Ref ref) async {
 
 @riverpod
 Future<List<ProductEntity>> homeTrendingProducts(Ref ref) async {
+  // Shop / price-mode change => a different catalogue: re-key, never reuse.
+  ref.watch(storefrontScopeProvider);
   if (!ref.watch(storefrontReadyProvider)) return const <ProductEntity>[];
   // PHASE 4C: Reduced limit 20 → 12. Sections cap trending at 8–12 items;
   // fetching 20 was wasted JSON decode work.
@@ -83,6 +92,8 @@ Future<List<ProductEntity>> homeCategoryProducts(
   Ref ref,
   String categoryId,
 ) async {
+  // Shop / price-mode change => a different catalogue: re-key, never reuse.
+  ref.watch(storefrontScopeProvider);
   if (!ref.watch(storefrontReadyProvider)) return const <ProductEntity>[];
   // PHASE 5C: Limit reduced 10 → 6.
   // The home category preview grid renders at most 6 products (2 rows × 3

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dartz/dartz.dart';
 import 'package:dio/dio.dart';
 
+import 'package:bakaloo_flutter_app/core/storage/app_cache_manager.dart';
 import 'package:bakaloo_flutter_app/core/errors/error_handler.dart';
 import 'package:bakaloo_flutter_app/core/errors/failure.dart';
 import 'package:bakaloo_flutter_app/core/storage/cache_strategy.dart';
@@ -22,8 +23,15 @@ class HomeRepositoryImpl implements HomeRepository {
 
   @override
   Future<Either<Failure, List<BannerEntity>>> getBanners({String? type}) async {
-    final cacheKey =
-        type == null ? StorageKeys.cacheBanners : '${StorageKeys.cacheBanners}_$type';
+    // Banners are shop-scoped server-side: the cached copy is keyed by the shop
+    // scope captured NOW, so Store A's banners can never be served as Store B's
+    // (fresh-cache hit or offline fallback).
+    final cacheKey = AppCacheManager.scopedKey(
+      type == null
+          ? StorageKeys.cacheBanners
+          : '${StorageKeys.cacheBanners}_$type',
+      shopScope: AppCacheManager.currentShopScope,
+    );
     final cached = _readBannerCache(cacheKey);
     final isFresh = HiveService.isFresh(cacheKey, CacheStrategy.banners.ttl!);
 
@@ -61,7 +69,12 @@ class HomeRepositoryImpl implements HomeRepository {
   Future<Either<Failure, List<ProductEntity>>> getFeaturedProducts({
     int limit = 12,
   }) async {
-    final cacheKey = '${StorageKeys.cacheFeatured}_$limit';
+    // Featured products depend on the shop AND the B2C/B2B price mode.
+    final cacheKey = AppCacheManager.scopedKey(
+      '${StorageKeys.cacheFeatured}_$limit',
+      shopScope: AppCacheManager.currentShopScope,
+      extra: AppCacheManager.currentPriceMode,
+    );
     final cached = _readFeaturedCache(cacheKey);
     final isFresh = HiveService.isFresh(
       cacheKey,

@@ -30,21 +30,96 @@ class AppCacheManager {
 
   /// Bump this whenever ANY cached payload schema changes in a way that would
   /// render stale/wrong UI from an older build.
-  // Store-scoped catalog pricing replaced older master-catalog cache entries.
-  static const int appCacheSchemaVersion = 4;
+  // v5: storefront layout/banner/featured/category-product caches are now keyed
+  // by an explicit (store, shop scope, price mode, tab) key captured when the
+  // request STARTS. Entries written by older builds computed their key from
+  // mutable global state when the response ARRIVED, so a response requested
+  // under one shop/price mode could be stored under another — they are wiped
+  // once rather than trusted.
+  static const int appCacheSchemaVersion = 5;
 
   static const String _schemaVersionKey = 'bakaloo_app_cache_schema_version';
   static const String _apiBaseUrlKey = 'bakaloo_app_cache_api_base_url';
   static const String _lastUserIdKey = 'bakaloo_app_cache_last_user_id';
 
-  static const String _sectionManifestBoxName = 'section_manifests';
-
   static const String _shopScopeKey = 'bakaloo_app_cache_shop_scope';
+  static const String _recentScopesKey = 'bakaloo_app_cache_recent_scopes';
+
+  /// How many distinct shop scopes keep their persisted storefront caches.
+  /// Entries of older scopes are pruned when the scope changes.
+  static const int _retainedScopeCount = 4;
+
+  /// Separator between a base cache key and its shop scope. A scoped key is
+  /// `<base>@<shopScope>[@<extra>]`; [scopeOfKey] recovers the scope.
+  static const String scopeSeparator = '@';
 
   /// The literal scope for anonymous/unallocated browsing — mirrors the
   /// backend's `_scopeKey` in products.service.js, which returns 'anon' for
   /// callers with no resolved shop allocation.
   static const String anonShopScope = 'anon';
+
+  static final ValueNotifier<String> _shopScopeNotifier =
+      ValueNotifier<String>(anonShopScope);
+  static bool _shopScopeSeeded = false;
+
+  static final ValueNotifier<int> _layoutCacheEpoch = ValueNotifier<int>(0);
+
+  /// Fires with the new scope AFTER it has been persisted. Riverpod's
+  /// `shopScopeProvider` mirrors this, which is how every storefront provider
+  /// learns about a shop change without a hand-maintained invalidation list.
+  static ValueListenable<String> get shopScopeListenable {
+    _seedShopScope();
+    return _shopScopeNotifier;
+  }
+
+  /// Bumped whenever persisted storefront caches are wiped so in-memory copies
+  /// (the layout repository's LRU) are dropped with them.
+  static ValueListenable<int> get layoutCacheEpoch => _layoutCacheEpoch;
+
+  static void _seedShopScope() {
+    if (_shopScopeSeeded) {
+      return;
+    }
+    try {
+      final stored = HiveService.settingsBox.get(_shopScopeKey) as String?;
+      _shopScopeNotifier.value =
+          (stored == null || stored.isEmpty) ? anonShopScope : stored;
+      _shopScopeSeeded = true;
+    } catch (_) {
+      // Hive not ready yet — stay on 'anon' and retry on the next read.
+    }
+  }
+
+  /// Test hook: forget the in-memory scope mirror (Hive stays untouched).
+  @visibleForTesting
+  static void debugResetScopeMirror() {
+    _shopScopeSeeded = false;
+    _shopScopeNotifier.value = anonShopScope;
+    _layoutCacheEpoch.value = 0;
+  }
+
+  /// Builds a scope-tagged persistent key: `<base>@<shopScope>[@<extra>]`.
+  ///
+  /// [shopScope] MUST be captured by the caller when the operation starts (not
+  /// re-read after an `await`) — see the note on `ThemeKey`.
+  static String scopedKey(
+    String base, {
+    required String shopScope,
+    String? extra,
+  }) =>
+      extra == null
+          ? '$base$scopeSeparator$shopScope'
+          : '$base$scopeSeparator$shopScope$scopeSeparator$extra';
+
+  /// The shop scope encoded in a key built by [scopedKey], or null.
+  static String? scopeOfKey(String key) {
+    final int first = key.indexOf(scopeSeparator);
+    if (first < 0) {
+      return null;
+    }
+    final int second = key.indexOf(scopeSeparator, first + 1);
+    return key.substring(first + 1, second < 0 ? key.length : second);
+  }
 
   /// Call once after [HiveService.init], before the first screen renders.
   /// Wipes stale caches when the schema version or API base URL changed.
@@ -115,7 +190,8 @@ class AppCacheManager {
     await _safeClearBox(HiveService.ordersBox);
     await _safeClearBox(HiveService.remoteThemeBox);
     await _safeClearBox(HiveService.cacheMetaBox);
-    await _clearSectionManifestBox();
+    await _safeClearBox(HiveService.sectionManifestBox);
+    _layoutCacheEpoch.value++;
     try {
       final settings = HiveService.settingsBox;
       await settings.delete(StorageKeys.cacheUserProfile);
@@ -138,11 +214,19 @@ class AppCacheManager {
   /// Call this whenever the customer's shop allocation may have changed:
   /// login/session-restore and after allocation auto-assign/recompute
   /// (see auth_notifier.dart and allocation_recompute.dart).
+  ///
+  /// NOTE: a plain shop-scope or price-mode change no longer calls this. Every
+  /// storefront cache key now embeds the shop scope (and price mode), so
+  /// entries of another scope are simply never read. This is reserved for the
+  /// cases where the cached data itself can no longer be trusted (schema bump,
+  /// different signed-in user).
   static Future<void> clearShopScopedCaches() async {
     await _safeClearBox(HiveService.productsBox);
     await _safeClearBox(HiveService.categoriesBox);
+    await _safeClearBox(HiveService.bannersBox);
     await _safeClearBox(HiveService.remoteThemeBox);
-    await _clearSectionManifestBox();
+    await _safeClearBox(HiveService.sectionManifestBox);
+    _layoutCacheEpoch.value++;
   }
 
   /// The current customer's shop-allocation scope, as a stable string derived
@@ -160,6 +244,17 @@ class AppCacheManager {
       return (stored == null || stored.isEmpty) ? anonShopScope : stored;
     } catch (_) {
       return anonShopScope;
+    }
+  }
+
+  /// The B2C/B2B browsing mode as `retail` | `wholesale`. Like
+  /// [currentShopScope], callers must capture it when an operation STARTS.
+  static String get currentPriceMode {
+    try {
+      final stored = HiveService.settingsBox.get(StorageKeys.priceMode);
+      return stored == 'wholesale' ? 'wholesale' : 'retail';
+    } catch (_) {
+      return 'retail';
     }
   }
 
@@ -205,19 +300,64 @@ class AppCacheManager {
     }
   }
 
+  /// Commits a new shop scope: persist first, THEN publish it.
+  ///
+  /// Nothing is wiped here. Storefront caches are keyed by scope, so the old
+  /// scope's entries stay valid for that scope (instant return to a previous
+  /// shop) and can never be read under the new one. Entries of scopes that are
+  /// no longer among the [_retainedScopeCount] most recent are pruned so the
+  /// boxes stay bounded.
   static Future<void> _applyShopScope(String next) async {
     try {
       final settings = HiveService.settingsBox;
       final current = settings.get(_shopScopeKey) as String?;
-      if (current == next) {
-        return;
+      if (current != next) {
+        await settings.put(_shopScopeKey, next);
+        await _rememberScope(next);
       }
-      if (current != null) {
-        await clearShopScopedCaches();
+      _shopScopeSeeded = true;
+      if (_shopScopeNotifier.value != next) {
+        _shopScopeNotifier.value = next;
       }
-      await settings.put(_shopScopeKey, next);
     } catch (error) {
       debugPrint('[AppCacheManager] setShopScope failed: $error');
+    }
+  }
+
+  static Future<void> _rememberScope(String scope) async {
+    final settings = HiveService.settingsBox;
+    final dynamic raw = settings.get(_recentScopesKey);
+    final List<String> recent = <String>[
+      scope,
+      if (raw is List) ...raw.whereType<String>().where((s) => s != scope),
+    ].take(_retainedScopeCount).toList(growable: false);
+    await settings.put(_recentScopesKey, recent);
+    await _pruneScopedEntries(recent.toSet());
+  }
+
+  /// Deletes scope-tagged entries whose scope is not in [keep].
+  static Future<void> _pruneScopedEntries(Set<String> keep) async {
+    for (final Box<dynamic> box in <Box<dynamic>>[
+      HiveService.remoteThemeBox,
+      HiveService.sectionManifestBox,
+      HiveService.bannersBox,
+      HiveService.productsBox,
+      HiveService.categoriesBox,
+    ]) {
+      try {
+        final List<dynamic> stale = box.keys.where((dynamic key) {
+          if (key is! String) {
+            return false;
+          }
+          final String? scope = scopeOfKey(key);
+          return scope != null && !keep.contains(scope);
+        }).toList(growable: false);
+        if (stale.isNotEmpty) {
+          await box.deleteAll(stale);
+        }
+      } catch (error) {
+        debugPrint('[AppCacheManager] prune failed: $error');
+      }
     }
   }
 
@@ -251,17 +391,4 @@ class AppCacheManager {
     }
   }
 
-  static Future<void> _clearSectionManifestBox() async {
-    try {
-      if (!Hive.isBoxOpen(_sectionManifestBoxName)) {
-        final box = await Hive.openBox<dynamic>(_sectionManifestBoxName);
-        await box.clear();
-        await box.close();
-      } else {
-        await Hive.box<dynamic>(_sectionManifestBoxName).clear();
-      }
-    } catch (error) {
-      debugPrint('[AppCacheManager] sectionManifestBox clear failed: $error');
-    }
-  }
 }

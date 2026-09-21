@@ -79,7 +79,7 @@ class CategoryRepositoryImpl implements CategoryRepository {
       );
 
       if (cached != null && isFresh) {
-        unawaited(_refreshCategoryProducts(categoryId, limit));
+        unawaited(_refreshCategoryProducts(cacheKey, categoryId, limit));
         return Right(cached);
       }
 
@@ -90,7 +90,7 @@ class CategoryRepositoryImpl implements CategoryRepository {
           limit: limit,
         );
         await _localDataSource.cacheCategoryProducts(
-          categoryId: categoryId,
+          key: cacheKey,
           items: remotePage.items
               .map((ProductModel item) => item.toJson())
               .toList(),
@@ -166,7 +166,11 @@ class CategoryRepositoryImpl implements CategoryRepository {
     } catch (_) {}
   }
 
-  Future<void> _refreshCategoryProducts(String categoryId, int limit) async {
+  Future<void> _refreshCategoryProducts(
+    String cacheKey,
+    String categoryId,
+    int limit,
+  ) async {
     try {
       final remotePage = await _remoteDataSource.getCategoryProducts(
         categoryId: categoryId,
@@ -174,7 +178,7 @@ class CategoryRepositoryImpl implements CategoryRepository {
         limit: limit,
       );
       await _localDataSource.cacheCategoryProducts(
-        categoryId: categoryId,
+        key: cacheKey,
         items:
             remotePage.items.map((ProductModel item) => item.toJson()).toList(),
         pagination: remotePage.pagination,
@@ -183,9 +187,7 @@ class CategoryRepositoryImpl implements CategoryRepository {
   }
 
   ProductListResult? _cachedProducts(String cacheKey) {
-    final cached = _localDataSource.getCategoryProducts(
-      cacheKey.replaceFirst('category_products_', ''),
-    );
+    final cached = _localDataSource.getCategoryProducts(cacheKey);
     if (cached == null) {
       return null;
     }

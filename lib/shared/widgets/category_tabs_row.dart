@@ -8,8 +8,8 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
 
 import 'package:bakaloo_flutter_app/core/constants/api_constants.dart';
-import 'package:bakaloo_flutter_app/core/models/category_model.dart';
 import 'package:bakaloo_flutter_app/core/providers/store_provider.dart';
+import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
 import 'package:bakaloo_flutter_app/core/theme/remote_theme_model.dart';
 import 'package:bakaloo_flutter_app/core/theme/remote_theme_provider.dart';
 
@@ -27,13 +27,13 @@ class CategoryTabsRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final store = ref.watch(selectedStoreProvider);
     final selectedId = ref.watch(selectedCategoryIdProvider);
     // PERF: Only watch the categoryTabs sub-field, not the entire RemoteTheme.
     final categoryTabsTheme = ref.watch(
       activeTabThemeProvider.select((t) => t.sections.categoryTabs),
     );
-    // PERF: Only watch the tabs list, not the full async response.
+    // The tabs come ONLY from the active storefront's Theme Builder manifest
+    // (scoped to store + shop). PERF: only the tabs list is watched.
     final List<TabThemeEntry>? asyncTabs =
         ref.watch(tabThemesProvider.select((a) => a.asData?.value.tabs));
     final List<TabThemeEntry>? snapshotTabs =
@@ -44,74 +44,42 @@ class CategoryTabsRow extends ConsumerWidget {
             : (asyncTabs != null && asyncTabs.isNotEmpty)
                 ? asyncTabs
                 : null;
-    final bool useRemoteTabs = remoteTabs != null && remoteTabs.isNotEmpty;
     final String effectiveSelectedId =
         _resolveSelectedTabId(selectedId, remoteTabs);
-    final localCategories =
-        storeCategoryMap[store.id] ?? storeCategoryMap['zepto']!;
     final resolvedPadding =
         (listPadding ?? EdgeInsets.symmetric(horizontal: 12.w))
             .resolve(Directionality.of(context));
     final resolvedHeight = rowHeight ?? (textOnly ? 44.h : 72.h);
+
+    if (remoteTabs == null) {
+      // First load of this storefront: neutral placeholders that hold the
+      // row's height. There is intentionally NO bundled/legacy tab list to fall
+      // back to — that is what used to flash the old grocery tabs before the
+      // shop's real Theme Builder tabs arrived.
+      return SizedBox(
+        height: resolvedHeight,
+        child: _CategoryTabsSkeleton(
+          padding: resolvedPadding,
+          textOnly: textOnly,
+        ),
+      );
+    }
+
     final defaultGap = textOnly ? 10.w : 6.w;
-    final itemCount =
-        useRemoteTabs ? remoteTabs.length : localCategories.length;
-    final itemSpecs = List<_CategoryTabSpec>.generate(itemCount, (index) {
-      if (useRemoteTabs) {
-        final TabThemeEntry tab = remoteTabs[index];
-        final bool isSelected = tab.tabKey == effectiveSelectedId;
-        final double naturalWidth =
-            textOnly ? math.max(52.w, tab.tabLabel.length * 7.2.w) : 72.w;
-
-        return _CategoryTabSpec(
-          naturalWidth: naturalWidth,
-          minWidth: textOnly ? naturalWidth : 60.w,
-          builder: (double width) => _buildRemoteTab(
-            ref: ref,
-            categoryTabsTheme: categoryTabsTheme,
-            entry: tab,
-            isSelected: isSelected,
-            width: width,
-          ),
-        );
-      }
-
-      final cat = localCategories[index];
-      // Empty selectedId is the "no explicit selection yet" sentinel; the
-      // first local category is always 'all', so highlight that by default.
-      final bool isSelected =
-          cat.id == selectedId || (selectedId.isEmpty && index == 0);
-
-      void onTap() {
-        HapticFeedback.selectionClick();
-        ref.read(selectedCategoryIdProvider.notifier).select(cat.id);
-      }
-
-      if (textOnly) {
-        final double naturalWidth = math.max(52.w, cat.label.length * 7.2.w);
-        return _CategoryTabSpec(
-          naturalWidth: naturalWidth,
-          minWidth: naturalWidth,
-          builder: (double width) => _CategoryTextTab(
-            category: cat,
-            isSelected: isSelected,
-            onTap: onTap,
-            textColor: categoryTabsTheme.textColor,
-            indicatorColor: categoryTabsTheme.indicatorColor,
-            width: width,
-          ),
-        );
-      }
+    final itemSpecs = List<_CategoryTabSpec>.generate(remoteTabs.length, (index) {
+      final TabThemeEntry tab = remoteTabs[index];
+      final bool isSelected = tab.tabKey == effectiveSelectedId;
+      final double naturalWidth =
+          textOnly ? math.max(52.w, tab.tabLabel.length * 7.2.w) : 72.w;
 
       return _CategoryTabSpec(
-        naturalWidth: 72.w,
-        minWidth: 60.w,
-        builder: (double width) => _CategoryTab(
-          category: cat,
+        naturalWidth: naturalWidth,
+        minWidth: textOnly ? naturalWidth : 60.w,
+        builder: (double width) => _buildRemoteTab(
+          ref: ref,
+          categoryTabsTheme: categoryTabsTheme,
+          entry: tab,
           isSelected: isSelected,
-          onTap: onTap,
-          textColor: categoryTabsTheme.textColor,
-          indicatorColor: categoryTabsTheme.indicatorColor,
           width: width,
         ),
       );
@@ -427,146 +395,52 @@ class _CategoryTabLayout {
   }
 }
 
-class _CategoryTab extends StatelessWidget {
-  const _CategoryTab({
-    required this.category,
-    required this.isSelected,
-    required this.onTap,
-    required this.textColor,
-    required this.indicatorColor,
-    required this.width,
+/// Neutral placeholder row shown while a storefront's tabs are unresolved.
+class _CategoryTabsSkeleton extends StatelessWidget {
+  const _CategoryTabsSkeleton({
+    required this.padding,
+    required this.textOnly,
   });
 
-  final CategoryModel category;
-  final bool isSelected;
-  final VoidCallback onTap;
-  final Color textColor;
-  final Color indicatorColor;
-  final double width;
+  final EdgeInsets padding;
+  final bool textOnly;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        width: width,
-        height: double.infinity,
-        padding: EdgeInsets.zero,
-        child: Column(
-          mainAxisSize: MainAxisSize.max,
-          children: <Widget>[
-            Image.asset(
-              category.iconPath,
-              width: 44.w,
-              height: 44.h,
-              fit: BoxFit.contain,
-              filterQuality: FilterQuality.high,
-              color: textColor.withValues(alpha: isSelected ? 1 : 0.72),
-              colorBlendMode: BlendMode.srcIn,
-              errorBuilder: (_, __, ___) => Icon(
-                Icons.category_rounded,
-                size: 30.sp,
-                color: textColor.withValues(alpha: isSelected ? 1 : 0.72),
-              ),
-            ),
-            Gap(1.h),
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 2.w),
-              child: Text(
-                category.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 10.8.sp,
-                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                  color: isSelected
-                      ? textColor
-                      : textColor.withValues(alpha: 0.72),
-                ),
-              ),
-            ),
-            const Spacer(),
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                height: 5.h,
-                width: isSelected ? width * 0.78 : 0,
-                decoration: BoxDecoration(
-                  color: isSelected ? indicatorColor : Colors.transparent,
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(999),
-                    topRight: Radius.circular(999),
+    final Color fill = AppColors.bgSkeleton.withValues(alpha: 0.7);
+    return Padding(
+      padding: padding,
+      child: Row(
+        children: List<Widget>.generate(5, (int index) {
+          return Expanded(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4.w),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  if (!textOnly)
+                    Container(
+                      width: 40.w,
+                      height: 40.w,
+                      decoration: BoxDecoration(
+                        color: fill,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  if (!textOnly) Gap(4.h),
+                  Container(
+                    width: 36.w,
+                    height: 8.h,
+                    decoration: BoxDecoration(
+                      color: fill,
+                      borderRadius: BorderRadius.circular(99),
+                    ),
                   ),
-                ),
+                ],
               ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CategoryTextTab extends StatelessWidget {
-  const _CategoryTextTab({
-    required this.category,
-    required this.isSelected,
-    required this.onTap,
-    required this.textColor,
-    required this.indicatorColor,
-    required this.width,
-  });
-
-  final CategoryModel category;
-  final bool isSelected;
-  final VoidCallback onTap;
-  final Color textColor;
-  final Color indicatorColor;
-  final double width;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: SizedBox(
-        width: width,
-        child: Column(
-          children: <Widget>[
-            Expanded(
-              child: Center(
-                child: Text(
-                  category.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 12.2.sp,
-                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
-                    color: isSelected
-                        ? textColor
-                        : textColor.withValues(alpha: 0.72),
-                    height: 1,
-                  ),
-                ),
-              ),
-            ),
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              height: 5.h,
-              width: isSelected ? width : 0,
-              decoration: BoxDecoration(
-                color: isSelected ? indicatorColor : Colors.transparent,
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(999),
-                  topRight: Radius.circular(999),
-                ),
-              ),
-            ),
-          ],
-        ),
+          );
+        }),
       ),
     );
   }

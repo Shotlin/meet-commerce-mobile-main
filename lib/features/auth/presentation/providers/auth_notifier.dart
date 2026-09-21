@@ -27,7 +27,6 @@ import 'package:bakaloo_flutter_app/features/auth/domain/usecases/send_otp_useca
 import 'package:bakaloo_flutter_app/features/auth/domain/usecases/verify_otp_usecase.dart';
 import 'package:bakaloo_flutter_app/features/auth/presentation/providers/auth_state.dart';
 import 'package:bakaloo_flutter_app/features/addresses/presentation/providers/address_provider.dart';
-import 'package:bakaloo_flutter_app/core/theme/remote_theme_provider.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/providers/cart_provider.dart';
 import 'package:bakaloo_flutter_app/features/home/presentation/providers/banner_provider.dart';
 import 'package:bakaloo_flutter_app/features/home/presentation/providers/home_provider.dart';
@@ -243,7 +242,7 @@ class AuthNotifier extends _$AuthNotifier {
   ///
   /// FIX: the home-feed/theme providers (homeProvider, homeTrendingProducts,
   /// homeFeaturedProducts, homeDeals, homeCategoryProducts,
-  /// selectedTabHomeContentProvider, remoteThemeProvider) are all keepAlive
+  /// selectedTabHomeContentProvider) are all keepAlive
   /// and were missing here entirely — whichever response one of them
   /// happened to fetch FIRST (e.g. during the brief anonymous window before
   /// login completes) stuck around for the rest of the app session, so a
@@ -263,17 +262,13 @@ class AuthNotifier extends _$AuthNotifier {
     unawaited(_invalidateShopScopedHomeProviders());
   }
 
-  /// Shop-allocation-dependent home/theme providers — split out so both
-  /// login (_invalidateUserScopedProviders) and a freshly-resolved
-  /// allocation (_triggerAllocationAutoAssign) can refresh them.
+  /// Refreshes the home feeds after login / a freshly resolved allocation.
   ///
-  /// Invalidating the Riverpod providers alone isn't enough: their build
-  /// functions (via ProductRepositoryImpl) read a page-1 product list from a
-  /// local Hive cache first (10-minute TTL, keyed only by page/limit — never
-  /// by shop), so a re-run just returns the same stale cached page again.
-  /// AppCacheManager.clearShopScopedCaches() drops that local cache too.
+  /// Nothing is wiped and the theme/section/tab-home providers are NOT listed:
+  /// every storefront cache and provider is keyed by `StorefrontScope`, so if
+  /// the allocation moved the customer to another shop they all re-key and
+  /// reload on their own, and if it did not, their content simply stays.
   Future<void> _invalidateShopScopedHomeProviders() async {
-    await AppCacheManager.clearShopScopedCaches();
     try {
       ref.invalidate(homeProvider);
     } catch (_) {}
@@ -291,12 +286,6 @@ class AuthNotifier extends _$AuthNotifier {
     } catch (_) {}
     try {
       ref.invalidate(homeCategoryProductsProvider);
-    } catch (_) {}
-    try {
-      ref.invalidate(selectedTabHomeContentProvider);
-    } catch (_) {}
-    try {
-      ref.invalidate(remoteThemeProvider);
     } catch (_) {}
   }
 

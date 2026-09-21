@@ -781,6 +781,39 @@ class RemoteTheme {
         meta: ThemeMeta.defaults(),
       );
 
+  /// Plain white/grey placeholder shown ONLY while a storefront's own theme is
+  /// still unresolved (first load of that shop). It is deliberately not any
+  /// store's palette, so a store's theme — or a stale/legacy one — can never be
+  /// shown in its place while the real theme loads.
+  factory RemoteTheme.neutral() => RemoteTheme(
+        sections: ThemeSections(
+          topBar: const TopBarTheme(
+            backgroundColor: Color(0xFFFFFFFF),
+            textColor: Color(0xFF1C1C1C),
+          ),
+          storeSelector: const StoreSelectorTheme(
+            backgroundColor: Color(0xFFFFFFFF),
+            activeChipColor: Color(0xFFEEEEEE),
+          ),
+          categoryTabs: const CategoryTabsTheme(
+            visible: true,
+            textColor: Color(0xFF6B6770),
+            indicatorColor: Color(0xFFBDBDBD),
+          ),
+          searchZone: SearchZoneTheme(
+            backgroundColor: const Color(0xFFFFFFFF),
+            waveColor: const Color(0xFFFFFFFF),
+            searchHints: const <String>[],
+            promoBoxImageUrl: null,
+          ),
+          bannerAnimation: BannerAnimationTheme.defaults(),
+          feeStrip: FeeStripTheme.defaults(),
+          seasonalMosaic: SeasonalMosaicTheme.defaults(),
+          bankOffers: BankOffersTheme.defaults(),
+        ),
+        meta: ThemeMeta.defaults(),
+      );
+
   Map<String, dynamic> toJson() => <String, dynamic>{
         'sections': sections.toJson(),
         'meta': meta.toJson(),

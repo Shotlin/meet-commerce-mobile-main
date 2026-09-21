@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:bakaloo_flutter_app/core/constants/api_constants.dart';
 import 'package:bakaloo_flutter_app/core/di/providers.dart';
 import 'package:bakaloo_flutter_app/core/storage/app_cache_manager.dart';
-import 'package:bakaloo_flutter_app/core/theme/remote_theme_provider.dart';
 import 'package:bakaloo_flutter_app/features/home/presentation/providers/banner_provider.dart';
 import 'package:bakaloo_flutter_app/features/home/presentation/providers/home_provider.dart';
 import 'package:bakaloo_flutter_app/core/utils/pincode.dart';
@@ -58,15 +57,10 @@ Future<void> triggerAllocationRecompute(
   }
 }
 
-/// Shop-allocation-dependent home/theme providers. Kept in sync with
-/// auth_notifier.dart's private method of the same purpose (that one can't
-/// be reused directly — WidgetRef vs Ref, and it lives on the notifier).
-///
-/// Also clears the local Hive page-1 product cache (ProductRepositoryImpl)
-/// — invalidating the Riverpod provider alone just re-runs a build function
-/// that reads that same stale, shop-unaware cache straight back out.
+/// Refreshes the home feeds after the allocation may have changed. Storefront
+/// caches/providers are keyed by `StorefrontScope`, so nothing is wiped and the
+/// theme/section providers re-key by themselves if the shop changed.
 Future<void> _invalidateShopScopedHomeProviders(WidgetRef ref) async {
-  await AppCacheManager.clearShopScopedCaches();
   try {
     ref.invalidate(homeProvider);
   } catch (_) {}
@@ -84,11 +78,5 @@ Future<void> _invalidateShopScopedHomeProviders(WidgetRef ref) async {
   } catch (_) {}
   try {
     ref.invalidate(homeCategoryProductsProvider);
-  } catch (_) {}
-  try {
-    ref.invalidate(selectedTabHomeContentProvider);
-  } catch (_) {}
-  try {
-    ref.invalidate(remoteThemeProvider);
   } catch (_) {}
 }
