@@ -64,6 +64,16 @@ bool _parseBool(dynamic value, bool fallback) {
   return value is bool ? value : fallback;
 }
 
+/// Positive whole number from JSON (accepts int or a whole/fractional double,
+/// e.g. `564` or `564.0`); anything else — including zero/negative — is null.
+int? _parsePositiveInt(dynamic value) {
+  if (value is! num || !value.isFinite) {
+    return null;
+  }
+  final rounded = value.round();
+  return rounded > 0 ? rounded : null;
+}
+
 Map<String, dynamic> _asMap(dynamic value) {
   if (value is Map<String, dynamic>) {
     return value;
@@ -334,14 +344,77 @@ class BannerAnimationTheme {
 /// A single image spanning the combined Top Bar + Search Zone + Category
 /// Tabs block, painted behind them. Pair with `colorEnabled: false` on those
 /// three sections' themes so their solid colors don't cover it.
+///
+/// **Extended mode** ("Extend into mini promotional bar" in the dashboard):
+/// the same image is one tall asset. Its top [topRegionHeight] px paint the
+/// block above, and its bottom [promoRegionHeight] px paint a mini
+/// promotional bar directly below the category tabs. All heights are export
+/// pixels at [recommendedWidth] (1080) — the dashboard measures them from its
+/// simulator, so the app never guesses how the image is split.
 class HeaderBackgroundTheme {
-  const HeaderBackgroundTheme({required this.imageUrl});
+  const HeaderBackgroundTheme({
+    required this.imageUrl,
+    this.extendToPromoBar = false,
+    this.recommendedWidth = defaultRecommendedWidth,
+    this.topRegionHeight,
+    this.promoRegionHeight,
+    this.totalHeight,
+  });
+
+  /// Canonical export width the region heights are expressed in.
+  static const int defaultRecommendedWidth = 1080;
 
   final String? imageUrl;
+
+  /// Persisted toggle. Use [isExtended] to decide what to render — it also
+  /// checks that an image and usable region heights exist.
+  final bool extendToPromoBar;
+  final int recommendedWidth;
+
+  /// A — export px of the image that map to the top block.
+  final int? topRegionHeight;
+
+  /// B — export px of the image that map to the mini promotional bar.
+  final int? promoRegionHeight;
+
+  /// Y = A + B, the recommended full upload height (informational).
+  final int? totalHeight;
+
+  bool get hasImage => imageUrl != null && imageUrl!.isNotEmpty;
+
+  /// True only when the extended mode can actually be drawn: toggle on, an
+  /// image uploaded, and both region heights present. Otherwise the app falls
+  /// back to the legacy single-block behaviour rather than guessing a split.
+  bool get isExtended =>
+      extendToPromoBar &&
+      hasImage &&
+      topRegionHeight != null &&
+      promoRegionHeight != null;
+
+  /// Share of the tall image (from the top) that belongs to the top block:
+  /// A / (A + B). Only meaningful when [isExtended].
+  double get topFraction {
+    final top = topRegionHeight ?? 0;
+    final promo = promoRegionHeight ?? 0;
+    final sum = top + promo;
+    return sum == 0 ? 1 : top / sum;
+  }
+
+  /// Height in logical pixels of the mini promotional bar on a screen
+  /// [screenWidth] wide: B scaled by (screenWidth / recommendedWidth), so it
+  /// occupies exactly the share of the image the artist designed for it.
+  double promoBarHeightFor(double screenWidth) =>
+      (promoRegionHeight ?? 0) * screenWidth / recommendedWidth;
 
   factory HeaderBackgroundTheme.fromJson(Map<String, dynamic> json) =>
       HeaderBackgroundTheme(
         imageUrl: _parseNullableString(json['imageUrl']),
+        extendToPromoBar: _parseBool(json['extendToPromoBar'], false),
+        recommendedWidth: _parsePositiveInt(json['recommendedWidth']) ??
+            defaultRecommendedWidth,
+        topRegionHeight: _parsePositiveInt(json['topRegionHeight']),
+        promoRegionHeight: _parsePositiveInt(json['promoRegionHeight']),
+        totalHeight: _parsePositiveInt(json['totalHeight']),
       );
 
   factory HeaderBackgroundTheme.defaults() =>
@@ -349,7 +422,32 @@ class HeaderBackgroundTheme {
 
   Map<String, dynamic> toJson() => <String, dynamic>{
         'imageUrl': imageUrl,
+        'extendToPromoBar': extendToPromoBar,
+        'recommendedWidth': recommendedWidth,
+        'topRegionHeight': topRegionHeight,
+        'promoRegionHeight': promoRegionHeight,
+        'totalHeight': totalHeight,
       };
+
+  @override
+  bool operator ==(Object other) =>
+      other is HeaderBackgroundTheme &&
+      other.imageUrl == imageUrl &&
+      other.extendToPromoBar == extendToPromoBar &&
+      other.recommendedWidth == recommendedWidth &&
+      other.topRegionHeight == topRegionHeight &&
+      other.promoRegionHeight == promoRegionHeight &&
+      other.totalHeight == totalHeight;
+
+  @override
+  int get hashCode => Object.hash(
+        imageUrl,
+        extendToPromoBar,
+        recommendedWidth,
+        topRegionHeight,
+        promoRegionHeight,
+        totalHeight,
+      );
 }
 
 class FeeStripTheme {

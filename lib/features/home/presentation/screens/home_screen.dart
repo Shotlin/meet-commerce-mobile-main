@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:bakaloo_flutter_app/shared/widgets/app_image.dart';
+import 'package:bakaloo_flutter_app/shared/widgets/header_background_regions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -860,11 +861,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             .select((theme) => theme.sections.searchZone.colorEnabled),
       ),
     );
-    final headerBackgroundImageUrl = ref.watch(
+    final headerBackground = ref.watch(
       activeTabThemeProvider.select(
-        (theme) => theme.sections.headerBackground.imageUrl,
+        (theme) => theme.sections.headerBackground,
       ),
     );
+    final headerBackgroundImageUrl = headerBackground.imageUrl;
     final activeTabKey = ref.watch(activeTabKeyProvider);
     final sectionsStatus = ref.watch(activeSectionsStatusProvider);
     // Skeleton ONLY for a genuine first load of this (store, shop, mode, tab).
@@ -949,224 +951,256 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                         ),
                         slivers: <Widget>[
                           SliverToBoxAdapter(
-                            child: Stack(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
                               children: <Widget>[
-                                // Shared background image behind the top
-                                // bar + search zone + category tabs block
-                                // below. The Stack sizes itself to that
-                                // Column's natural height, so Positioned.fill
-                                // matches it with no hardcoded height.
-                                if (headerBackgroundImageUrl != null &&
-                                    headerBackgroundImageUrl.isNotEmpty)
-                                  Positioned.fill(
-                                    child: AppImage(
-                                      imageUrl: headerBackgroundImageUrl,
-                                      memCacheWidth: MediaQuery.sizeOf(context)
-                                          .width
-                                          .round(),
-                                      memCacheHeight: 900,
-                                      fit: BoxFit.cover,
-                                      // Any cropping from a shorter-than-image
-                                      // device (smaller status bar, tabs
-                                      // hidden, etc.) should trim the bottom
-                                      // of the image, not the top — the
-                                      // delivery-address text sits right at
-                                      // the top of this block.
-                                      alignment: Alignment.topCenter,
-                                    ),
-                                  ),
-                                Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                Stack(
                                   children: <Widget>[
-                                    ValueListenableBuilder<bool>(
-                                      valueListenable:
-                                          _isTopChromeMotionEnabled,
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: <Widget>[
-                                          Consumer(
-                                            builder: (context, ref, _) {
-                                              final currentUser = ref.watch(
-                                                currentUserProvider,
-                                              );
-                                              final addresses = currentUser ==
-                                                      null
-                                                  ? null
-                                                  : ref
-                                                      .watch(addressProvider)
-                                                      .asData
-                                                      ?.value;
-                                              final guestLocation =
-                                                  currentUser == null
-                                                      ? ref.watch(
-                                                          guestStorefrontProvider)
-                                                      : null;
-                                              final hasTrackingBanner = ref
-                                                  .watch(
-                                                      orderTrackingBannerProvider)
-                                                  .isNotEmpty;
-                                              return Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: <Widget>[
-                                                  const OrderTrackingTopBanner(),
-                                                  HomeHeader(
-                                                    addressText:
-                                                        resolveAddressLabel(
-                                                      isLoggedIn:
-                                                          currentUser != null,
-                                                      addresses: addresses,
-                                                      guestAddressLine1:
-                                                          guestLocation
-                                                              ?.addressLine1,
-                                                      guestCity:
-                                                          guestLocation?.city,
-                                                      guestPincode:
-                                                          guestLocation
-                                                              ?.pincode,
-                                                    ),
-                                                    onAddressTap: () =>
-                                                        currentUser == null
-                                                            ? context.go(
-                                                                RouteNames
-                                                                    .phone)
-                                                            : showAddressSheet(
-                                                                context),
-                                                    topBarTheme: topBarTheme,
-                                                    searchZoneColor:
-                                                        searchZoneTheme
-                                                                .colorEnabled
-                                                            ? searchZoneTheme
-                                                                .backgroundColor
-                                                            : Colors
-                                                                .transparent,
-                                                    deliveryEtaMinutes:
-                                                        deliveryEtaMinutes,
-                                                    topPaddingOverride:
-                                                        hasTrackingBanner
-                                                            ? 0
-                                                            : null,
-                                                  ),
-                                                ],
-                                              );
-                                            },
-                                          ),
-                                        ],
+                                    // Shared background image behind the top
+                                    // bar + search zone + category tabs block
+                                    // below. The Stack sizes itself to that
+                                    // Column's natural height, so Positioned.fill
+                                    // matches it with no hardcoded height.
+                                    if (headerBackgroundImageUrl != null &&
+                                        headerBackgroundImageUrl.isNotEmpty)
+                                      Positioned.fill(
+                                        child: headerBackground.isExtended
+                                            // "Extend into mini promotional bar":
+                                            // this block shows only the TOP share
+                                            // of the one tall image; the mini promo
+                                            // bar below shows the rest.
+                                            ? HeaderBackgroundSlice(
+                                                imageUrl:
+                                                    headerBackgroundImageUrl,
+                                                topFraction: headerBackground
+                                                    .topFraction,
+                                                showTop: true,
+                                              )
+                                            : AppImage(
+                                                imageUrl:
+                                                    headerBackgroundImageUrl,
+                                                memCacheWidth:
+                                                    MediaQuery.sizeOf(context)
+                                                        .width
+                                                        .round(),
+                                                memCacheHeight: 900,
+                                                fit: BoxFit.cover,
+                                                // Any cropping from a shorter-than-image
+                                                // device (smaller status bar, tabs
+                                                // hidden, etc.) should trim the bottom
+                                                // of the image, not the top — the
+                                                // delivery-address text sits right at
+                                                // the top of this block.
+                                                alignment: Alignment.topCenter,
+                                              ),
                                       ),
-                                      builder: (
-                                        context,
-                                        isTopChromeMotionEnabled,
-                                        child,
-                                      ) {
-                                        return ColoredBox(
-                                          color: topBarTheme.colorEnabled
-                                              ? topBarTheme.backgroundColor
-                                              : Colors.transparent,
-                                          child: TickerMode(
-                                            enabled: isTopChromeMotionEnabled,
-                                            child: child!,
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                    ValueListenableBuilder<bool>(
-                                      valueListenable:
-                                          _isTopChromeMotionEnabled,
-                                      builder: (
-                                        context,
-                                        isTopChromeMotionEnabled,
-                                        _,
-                                      ) {
-                                        return Container(
-                                          key: _topSearchZoneKey,
-                                          color: Colors.transparent,
+                                    Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: <Widget>[
+                                        ValueListenableBuilder<bool>(
+                                          valueListenable:
+                                              _isTopChromeMotionEnabled,
                                           child: Column(
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.start,
-                                            mainAxisSize: MainAxisSize.min,
                                             children: <Widget>[
-                                              // Search zone — uses searchZone.backgroundColor
-                                              ColoredBox(
-                                                color:
-                                                    searchZoneTheme.colorEnabled
-                                                        ? searchZoneTheme
-                                                            .backgroundColor
-                                                        : Colors.transparent,
-                                                child: TickerMode(
-                                                  enabled:
-                                                      isTopChromeMotionEnabled,
-                                                  child: Column(
+                                              Consumer(
+                                                builder: (context, ref, _) {
+                                                  final currentUser = ref.watch(
+                                                    currentUserProvider,
+                                                  );
+                                                  final addresses =
+                                                      currentUser == null
+                                                          ? null
+                                                          : ref
+                                                              .watch(
+                                                                  addressProvider)
+                                                              .asData
+                                                              ?.value;
+                                                  final guestLocation =
+                                                      currentUser == null
+                                                          ? ref.watch(
+                                                              guestStorefrontProvider)
+                                                          : null;
+                                                  final hasTrackingBanner = ref
+                                                      .watch(
+                                                          orderTrackingBannerProvider)
+                                                      .isNotEmpty;
+                                                  return Column(
                                                     crossAxisAlignment:
                                                         CrossAxisAlignment
                                                             .start,
                                                     children: <Widget>[
-                                                      const SizedBox.shrink(),
-                                                      HomeSearchBar(
-                                                        onSearchTap:
-                                                            _openSearch,
-                                                        animateHints:
-                                                            isTopChromeMotionEnabled,
-                                                        searchTheme:
-                                                            searchZoneTheme,
-                                                        outerPadding:
-                                                            EdgeInsets.fromLTRB(
-                                                          12.w,
-                                                          0,
-                                                          12.w,
-                                                          10.h,
+                                                      const OrderTrackingTopBanner(),
+                                                      HomeHeader(
+                                                        addressText:
+                                                            resolveAddressLabel(
+                                                          isLoggedIn:
+                                                              currentUser !=
+                                                                  null,
+                                                          addresses: addresses,
+                                                          guestAddressLine1:
+                                                              guestLocation
+                                                                  ?.addressLine1,
+                                                          guestCity:
+                                                              guestLocation
+                                                                  ?.city,
+                                                          guestPincode:
+                                                              guestLocation
+                                                                  ?.pincode,
                                                         ),
+                                                        onAddressTap: () =>
+                                                            currentUser == null
+                                                                ? context.go(
+                                                                    RouteNames
+                                                                        .phone)
+                                                                : showAddressSheet(
+                                                                    context),
+                                                        topBarTheme:
+                                                            topBarTheme,
+                                                        searchZoneColor:
+                                                            searchZoneTheme
+                                                                    .colorEnabled
+                                                                ? searchZoneTheme
+                                                                    .backgroundColor
+                                                                : Colors
+                                                                    .transparent,
+                                                        deliveryEtaMinutes:
+                                                            deliveryEtaMinutes,
+                                                        topPaddingOverride:
+                                                            hasTrackingBanner
+                                                                ? 0
+                                                                : null,
                                                       ),
                                                     ],
-                                                  ),
-                                                ),
+                                                  );
+                                                },
                                               ),
-                                              // Store-closed banner — sits directly
-                                              // under the search bar (above category
-                                              // tabs) so it reads as a status line
-                                              // right below the primary nav action,
-                                              // not buried after tab browsing.
-                                              const StoreClosedBanner(),
-                                              // Category tabs — independent backgroundColor
-                                              // (falls back to searchZone color for legacy themes)
-                                              if (showCategoryTabs) ...<Widget>[
-                                                ColoredBox(
-                                                  color:
-                                                      categoryTabsColorEnabled
-                                                          ? categoryTabsBgColor
-                                                          : Colors.transparent,
-                                                  child: TickerMode(
-                                                    enabled:
-                                                        isTopChromeMotionEnabled,
-                                                    child: Column(
-                                                      crossAxisAlignment:
-                                                          CrossAxisAlignment
-                                                              .start,
-                                                      children: <Widget>[
-                                                        Gap(4.h),
-                                                        const CategoryTabsRow(),
-                                                        Gap(6.h),
-                                                      ],
-                                                    ),
-                                                  ),
-                                                ),
-                                              ] else
-                                                ColoredBox(
-                                                  color: searchZoneTheme
-                                                          .colorEnabled
-                                                      ? searchZoneTheme
-                                                          .backgroundColor
-                                                      : Colors.transparent,
-                                                  child: Gap(10.h),
-                                                ),
                                             ],
                                           ),
-                                        );
-                                      },
+                                          builder: (
+                                            context,
+                                            isTopChromeMotionEnabled,
+                                            child,
+                                          ) {
+                                            return ColoredBox(
+                                              color: topBarTheme.colorEnabled
+                                                  ? topBarTheme.backgroundColor
+                                                  : Colors.transparent,
+                                              child: TickerMode(
+                                                enabled:
+                                                    isTopChromeMotionEnabled,
+                                                child: child!,
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                        ValueListenableBuilder<bool>(
+                                          valueListenable:
+                                              _isTopChromeMotionEnabled,
+                                          builder: (
+                                            context,
+                                            isTopChromeMotionEnabled,
+                                            _,
+                                          ) {
+                                            return Container(
+                                              key: _topSearchZoneKey,
+                                              color: Colors.transparent,
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: <Widget>[
+                                                  // Search zone — uses searchZone.backgroundColor
+                                                  ColoredBox(
+                                                    color: searchZoneTheme
+                                                            .colorEnabled
+                                                        ? searchZoneTheme
+                                                            .backgroundColor
+                                                        : Colors.transparent,
+                                                    child: TickerMode(
+                                                      enabled:
+                                                          isTopChromeMotionEnabled,
+                                                      child: Column(
+                                                        crossAxisAlignment:
+                                                            CrossAxisAlignment
+                                                                .start,
+                                                        children: <Widget>[
+                                                          const SizedBox
+                                                              .shrink(),
+                                                          HomeSearchBar(
+                                                            onSearchTap:
+                                                                _openSearch,
+                                                            animateHints:
+                                                                isTopChromeMotionEnabled,
+                                                            searchTheme:
+                                                                searchZoneTheme,
+                                                            outerPadding:
+                                                                EdgeInsets
+                                                                    .fromLTRB(
+                                                              12.w,
+                                                              0,
+                                                              12.w,
+                                                              10.h,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  // Store-closed banner — sits directly
+                                                  // under the search bar (above category
+                                                  // tabs) so it reads as a status line
+                                                  // right below the primary nav action,
+                                                  // not buried after tab browsing.
+                                                  const StoreClosedBanner(),
+                                                  // Category tabs — independent backgroundColor
+                                                  // (falls back to searchZone color for legacy themes)
+                                                  if (showCategoryTabs) ...<Widget>[
+                                                    ColoredBox(
+                                                      color: categoryTabsColorEnabled
+                                                          ? categoryTabsBgColor
+                                                          : Colors.transparent,
+                                                      child: TickerMode(
+                                                        enabled:
+                                                            isTopChromeMotionEnabled,
+                                                        child: Column(
+                                                          crossAxisAlignment:
+                                                              CrossAxisAlignment
+                                                                  .start,
+                                                          children: <Widget>[
+                                                            Gap(4.h),
+                                                            const CategoryTabsRow(),
+                                                            Gap(6.h),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ] else
+                                                    ColoredBox(
+                                                      color: searchZoneTheme
+                                                              .colorEnabled
+                                                          ? searchZoneTheme
+                                                              .backgroundColor
+                                                          : Colors.transparent,
+                                                      child: Gap(10.h),
+                                                    ),
+                                                ],
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),
+                                // Mini promotional bar — directly below the
+                                // category tabs; only when the header background
+                                // is extended into it.
+                                HeaderPromoBar(
+                                    headerBackground: headerBackground),
                               ],
                             ),
                           ),
