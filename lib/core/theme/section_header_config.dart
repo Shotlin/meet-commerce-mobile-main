@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+
 enum SectionHeaderStyle {
   text,
   graphic,
@@ -56,6 +58,43 @@ class SectionHeaderConfig {
           _readNonNegativeDouble(header['horizontal_margin']) ?? 16,
       bottomSpacing: _readNonNegativeDouble(header['bottom_spacing']) ?? 12,
       linkUrl: _readString(header['link_url']),
+    );
+  }
+}
+
+/// The premium box a section's graphic banner and product body sit inside —
+/// "Premium Fresh — Product Slider"/"Premium Fresh — Product Grid" only. Flat
+/// top-level `container_*` config keys, same convention as the dashboard's
+/// `container_color` fields elsewhere — kept in lock-step with
+/// `getSectionContainerConfig` in the dashboard's
+/// `components/builder/sectionHeader.ts`.
+class SectionContainerConfig {
+  const SectionContainerConfig({
+    required this.backgroundColor,
+    required this.borderColor,
+    required this.borderWidth,
+    required this.topRadius,
+  });
+
+  static const Color defaultBackgroundColor = Color(0xFFFFFFFF);
+  static const Color defaultBorderColor = Color(0xFFE5E7EB);
+  static const double defaultTopRadius = 16;
+
+  final Color backgroundColor;
+  final Color borderColor;
+  final double borderWidth;
+  final double topRadius;
+
+  factory SectionContainerConfig.fromConfig(Map<String, dynamic> config) {
+    return SectionContainerConfig(
+      backgroundColor: _readColor(config['container_background_color']) ??
+          defaultBackgroundColor,
+      borderColor:
+          _readColor(config['container_border_color']) ?? defaultBorderColor,
+      borderWidth:
+          _readNonNegativeDouble(config['container_border_width']) ?? 0,
+      topRadius: _readNonNegativeDouble(config['container_top_radius']) ??
+          defaultTopRadius,
     );
   }
 }
@@ -139,6 +178,18 @@ double? _readPositiveDouble(dynamic value) {
 double? _readNonNegativeDouble(dynamic value) {
   final double? result = _readDouble(value);
   return result != null && result >= 0 ? result : null;
+}
+
+Color? _readColor(dynamic value) {
+  if (value is! String) {
+    return null;
+  }
+  final String cleaned = value.trim().replaceFirst('#', '');
+  final int? parsed = int.tryParse(cleaned, radix: 16);
+  if (parsed == null || cleaned.length != 6) {
+    return null;
+  }
+  return Color(0xFF000000 | parsed);
 }
 
 double? _readDouble(dynamic value) {

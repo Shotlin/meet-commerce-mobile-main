@@ -302,6 +302,7 @@ Widget _buildCategoryProductGrid(
         ? entry.config['subtitle'] as String
         : null,
     header: header,
+    container: SectionContainerConfig.fromConfig(entry.config),
   );
 }
 
@@ -324,6 +325,7 @@ Widget _buildProductCarousel(
         ? entry.config['subtitle'] as String
         : null,
     header: SectionHeaderConfig.fromConfig(entry.config),
+    container: SectionContainerConfig.fromConfig(entry.config),
   );
 }
 
@@ -1428,6 +1430,12 @@ class _ManifestProductGridSection extends StatelessWidget {
     required this.products,
     required this.columns,
     required this.header,
+    this.container = const SectionContainerConfig(
+      backgroundColor: SectionContainerConfig.defaultBackgroundColor,
+      borderColor: SectionContainerConfig.defaultBorderColor,
+      borderWidth: 0,
+      topRadius: SectionContainerConfig.defaultTopRadius,
+    ),
     this.subtitle,
     this.variant = ProductCardVariant.quickCommerceCompact,
   });
@@ -1437,11 +1445,18 @@ class _ManifestProductGridSection extends StatelessWidget {
   final List<ProductEntity> products;
   final int columns;
   final SectionHeaderConfig header;
+  final SectionContainerConfig container;
   final ProductCardVariant variant;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    // The flush banner + premium container are Premium Fresh's own
+    // presentation — every other product-card style keeps rendering exactly
+    // as before (floating banner card, no container).
+    final bool premium = variant == ProductCardVariant.premiumFresh;
+    final bool flushBanner = premium && header.showGraphic && !header.showText;
+
+    final Widget body = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         if (header.showText)
@@ -1449,8 +1464,13 @@ class _ManifestProductGridSection extends StatelessWidget {
             padding: EdgeInsets.fromLTRB(18.w, 12.h, 18.w, 0),
             child: _productHeading(title, subtitle, variant),
           ),
-        if (header.showGraphic) _ManifestGraphicSectionHeader(header: header),
-        Gap(10.h),
+        if (header.showGraphic)
+          _ManifestGraphicSectionHeader(
+            header: header,
+            flush: flushBanner,
+            topRadius: container.topRadius,
+          ),
+        Gap(flushBanner ? header.bottomSpacing.h : 10.h),
         Padding(
           padding: EdgeInsets.symmetric(horizontal: 14.w),
           child: LayoutBuilder(
@@ -1494,8 +1514,13 @@ class _ManifestProductGridSection extends StatelessWidget {
             },
           ),
         ),
+        Gap(premium ? 8.h : 0),
       ],
     );
+
+    return premium
+        ? _PremiumSectionContainer(container: container, child: body)
+        : body;
   }
 }
 
@@ -1513,6 +1538,12 @@ class _ManifestHorizontalProductSection extends StatelessWidget {
       bottomSpacing: 12,
       linkUrl: null,
     ),
+    this.container = const SectionContainerConfig(
+      backgroundColor: SectionContainerConfig.defaultBackgroundColor,
+      borderColor: SectionContainerConfig.defaultBorderColor,
+      borderWidth: 0,
+      topRadius: SectionContainerConfig.defaultTopRadius,
+    ),
     this.subtitle,
     this.accentColor,
     this.variant = ProductCardVariant.quickCommerceCompact,
@@ -1522,12 +1553,18 @@ class _ManifestHorizontalProductSection extends StatelessWidget {
   final String? subtitle;
   final List<ProductEntity> products;
   final SectionHeaderConfig header;
+  final SectionContainerConfig container;
   final Color? accentColor;
   final ProductCardVariant variant;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    // See _ManifestProductGridSection: the flush banner + premium container
+    // are Premium Fresh's own presentation only.
+    final bool premium = variant == ProductCardVariant.premiumFresh;
+    final bool flushBanner = premium && header.showGraphic && !header.showText;
+
+    final Widget body = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         if (header.showText)
@@ -1540,8 +1577,13 @@ class _ManifestHorizontalProductSection extends StatelessWidget {
               accentColor: accentColor,
             ),
           ),
-        if (header.showGraphic) _ManifestGraphicSectionHeader(header: header),
-        Gap(10.h),
+        if (header.showGraphic)
+          _ManifestGraphicSectionHeader(
+            header: header,
+            flush: flushBanner,
+            topRadius: container.topRadius,
+          ),
+        Gap(flushBanner ? header.bottomSpacing.h : 10.h),
         SizedBox(
           height: variant == ProductCardVariant.premiumFresh
               ? 320.h * MediaQuery.textScalerOf(context).scale(1)
@@ -1582,15 +1624,36 @@ class _ManifestHorizontalProductSection extends StatelessWidget {
             },
           ),
         ),
+        Gap(premium ? 8.h : 0),
       ],
     );
+
+    return premium
+        ? _PremiumSectionContainer(container: container, child: body)
+        : body;
   }
 }
 
 class _ManifestGraphicSectionHeader extends StatelessWidget {
-  const _ManifestGraphicSectionHeader({required this.header});
+  const _ManifestGraphicSectionHeader({
+    required this.header,
+    this.flush = false,
+    this.topRadius,
+  });
 
   final SectionHeaderConfig header;
+
+  /// True for "Premium Fresh — Product Slider"/"Product Grid" only: the
+  /// banner is the top cover of its section container — 0 margin/padding, no
+  /// corner radius of its own (the parent container clips it instead). False
+  /// (the default) keeps the original floating-card treatment every other
+  /// `section_header` consumer (e.g. round_category_icons) still uses.
+  final bool flush;
+
+  /// When [flush], the parent container's own top radius — kept separate
+  /// from [SectionHeaderConfig.borderRadius], which still governs the
+  /// non-flush floating card everywhere else.
+  final double? topRadius;
 
   @override
   Widget build(BuildContext context) {
@@ -1599,6 +1662,37 @@ class _ManifestGraphicSectionHeader extends StatelessWidget {
     final VoidCallback? onTap = header.linkUrl == null
         ? null
         : () => _handleManifestLinkTap(context, header.linkUrl!);
+    final Widget image = AspectRatio(
+      aspectRatio: header.aspectRatio,
+      child: AppImage(
+        imageUrl: imageUrl,
+        // An exact 1080×300 image has no crop. `contain` is the safe
+        // default for uploads that are slightly off-ratio, preserving
+        // the complete campaign composition rather than stretching it.
+        fit: BoxFit.contain,
+        alignment: Alignment.center,
+        memCacheWidth: 1080,
+        memCacheHeight: 300,
+        filterQuality: FilterQuality.high,
+        placeholder: const ColoredBox(
+          color: Color(0xFFF8FAFC),
+          child: SizedBox.expand(),
+        ),
+        errorWidget: const ColoredBox(
+          color: Color(0xFFF8FAFC),
+          child: SizedBox.expand(),
+        ),
+      ),
+    );
+
+    if (flush) {
+      // No margin, no padding, no radius of its own — the enclosing
+      // _PremiumSectionContainer clips this to its own top-left/top-right
+      // radius, so the banner reads as the section's top cover, not a
+      // separate floating card.
+      return GestureDetector(onTap: onTap, child: image);
+    }
+
     return Padding(
       padding: EdgeInsets.fromLTRB(
         header.horizontalMargin.w,
@@ -1610,30 +1704,46 @@ class _ManifestGraphicSectionHeader extends StatelessWidget {
         onTap: onTap,
         child: ClipRRect(
           borderRadius: BorderRadius.circular(header.borderRadius.r),
-          child: AspectRatio(
-            aspectRatio: header.aspectRatio,
-            child: AppImage(
-              imageUrl: imageUrl,
-              // An exact 1080×300 image has no crop. `contain` is the safe
-              // default for uploads that are slightly off-ratio, preserving
-              // the complete campaign composition rather than stretching it.
-              fit: BoxFit.contain,
-              alignment: Alignment.center,
-              memCacheWidth: 1080,
-              memCacheHeight: 300,
-              filterQuality: FilterQuality.high,
-              placeholder: const ColoredBox(
-                color: Color(0xFFF8FAFC),
-                child: SizedBox.expand(),
-              ),
-              errorWidget: const ColoredBox(
-                color: Color(0xFFF8FAFC),
-                child: SizedBox.expand(),
-              ),
-            ),
-          ),
+          child: image,
         ),
       ),
+    );
+  }
+}
+
+/// The premium card "Premium Fresh — Product Slider"/"Product Grid" sections
+/// render inside: the graphic banner is flush against its top edge (see
+/// [_ManifestGraphicSectionHeader]'s `flush` mode) and the configurable
+/// background fills the rest of the section body, so the two read as one
+/// continuous block instead of a floating banner over a plain page.
+class _PremiumSectionContainer extends StatelessWidget {
+  const _PremiumSectionContainer({
+    required this.container,
+    required this.child,
+  });
+
+  final SectionContainerConfig container;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final BorderRadius radius = BorderRadius.only(
+      topLeft: Radius.circular(container.topRadius.r),
+      topRight: Radius.circular(container.topRadius.r),
+    );
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: container.backgroundColor,
+        borderRadius: radius,
+        border: container.borderWidth > 0
+            ? Border.all(
+                color: container.borderColor,
+                width: container.borderWidth,
+              )
+            : null,
+      ),
+      child: child,
     );
   }
 }
