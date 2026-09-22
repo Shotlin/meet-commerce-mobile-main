@@ -1247,6 +1247,7 @@ class _ManifestCategoryRail extends StatelessWidget {
                 tileWidth.w,
                 boxRadius,
                 artworkRadius,
+                iconSize.w,
               ),
             );
           },
@@ -1264,6 +1265,11 @@ class _ManifestCategoryRail extends StatelessWidget {
         builder: (BuildContext context, BoxConstraints constraints) {
           final double spacing = gap.w;
           final double tileWidth = (constraints.maxWidth - (spacing * 3)) / 4;
+          final double gridIconSize = categoryGridIconSize(
+            availableWidth: constraints.maxWidth,
+            requestedIconSize: iconSize.w,
+            gap: spacing,
+          );
           return Wrap(
             spacing: spacing,
             runSpacing: rowGap.h,
@@ -1277,6 +1283,7 @@ class _ManifestCategoryRail extends StatelessWidget {
                       tileWidth,
                       boxRadius,
                       artworkRadius,
+                      gridIconSize,
                     ),
                   ),
                 )
@@ -1293,6 +1300,7 @@ class _ManifestCategoryRail extends StatelessWidget {
     double tileWidth,
     double boxRadius,
     double artworkRadius,
+    double renderedIconSize,
   ) {
     return GestureDetector(
       onTap: item.categoryId == null
@@ -1304,8 +1312,8 @@ class _ManifestCategoryRail extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             Container(
-              width: iconSize.w,
-              height: iconSize.h,
+              width: renderedIconSize,
+              height: renderedIconSize,
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(boxRadius.r),
@@ -1321,7 +1329,9 @@ class _ManifestCategoryRail extends StatelessWidget {
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(artworkRadius.r),
                 child: _CategoryArtwork(
-                    label: item.label, imageUrl: item.imageUrl),
+                  label: item.label,
+                  imageUrl: item.imageUrl,
+                ),
               ),
             ),
             if (showLabels) ...<Widget>[

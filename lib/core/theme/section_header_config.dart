@@ -99,6 +99,16 @@ int categoryGridRowCount(int itemCount, {int columns = 4}) {
   return (itemCount / columns.clamp(1, 4)).ceil();
 }
 
+double categoryGridIconSize({
+  required double availableWidth,
+  required double requestedIconSize,
+  required double gap,
+}) {
+  final double cellWidth =
+      ((availableWidth - (gap * 3)) / 4).clamp(0, double.infinity).toDouble();
+  return requestedIconSize.clamp(0, cellWidth).toDouble();
+}
+
 String? _readString(dynamic value) {
   if (value is String && value.trim().isNotEmpty) {
     return value.trim();

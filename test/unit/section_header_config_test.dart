@@ -35,4 +35,16 @@ void main() {
     expect(categoryGridRowCount(8), 2);
     expect(categoryGridRowCount(0), 0);
   });
+
+  test('category grid caps a large icon to its calculated four-column cell',
+      () {
+    expect(
+      categoryGridIconSize(
+        availableWidth: 328,
+        requestedIconSize: 96,
+        gap: 12,
+      ),
+      73,
+    );
+  });
 }
