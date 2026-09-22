@@ -15,6 +15,7 @@ import 'package:bakaloo_flutter_app/core/theme/app_text_styles.dart';
 import 'package:bakaloo_flutter_app/core/theme/remote_theme_model.dart';
 import 'package:bakaloo_flutter_app/core/theme/remote_theme_provider.dart';
 import 'package:bakaloo_flutter_app/core/theme/section_manifest_model.dart';
+import 'package:bakaloo_flutter_app/core/theme/section_header_config.dart';
 import 'package:bakaloo_flutter_app/features/categories/domain/entities/category_entity.dart';
 import 'package:bakaloo_flutter_app/features/categories/presentation/providers/category_provider.dart';
 import 'package:bakaloo_flutter_app/features/home/domain/entities/banner_entity.dart';
@@ -229,24 +230,18 @@ Widget _buildRoundCategoryIcons(
 ) {
   final List<_CategoryRailItem> configuredItems =
       _resolveConfiguredCategoryRailItems(ref, entry);
-  final double iconSize = (_readDouble(entry.config['icon_size']) ??
-          _readInt(entry.config['icon_size'])?.toDouble() ??
-          64)
-      .clamp(40, 96)
-      .toDouble();
-  final double gap = (_readDouble(entry.config['gap']) ??
-          _readInt(entry.config['gap'])?.toDouble() ??
-          12)
-      .clamp(4, 24)
-      .toDouble();
-  final bool showLabels = _readBool(entry.config['show_labels']) ?? true;
+  final CategorySectionLayoutConfig layout =
+      CategorySectionLayoutConfig.fromConfig(entry.config);
+  final SectionHeaderConfig header =
+      SectionHeaderConfig.fromConfig(entry.config);
 
   if (configuredItems.isNotEmpty) {
-    return _ManifestCategoryRail(
+    return _ManifestCategorySection(
+      title: entry.title,
+      subtitle: _readString(entry.config['subtitle']),
+      header: header,
       items: configuredItems,
-      iconSize: iconSize,
-      gap: gap,
-      showLabels: showLabels,
+      layout: layout,
     );
   }
 
@@ -255,7 +250,10 @@ Widget _buildRoundCategoryIcons(
     return const SizedBox.shrink();
   }
 
-  return _ManifestCategoryRail(
+  return _ManifestCategorySection(
+    title: entry.title,
+    subtitle: _readString(entry.config['subtitle']),
+    header: header,
     items: categories
         .map(
           (CategoryEntity category) => _CategoryRailItem(
@@ -265,9 +263,7 @@ Widget _buildRoundCategoryIcons(
           ),
         )
         .toList(growable: false),
-    iconSize: iconSize,
-    gap: gap,
-    showLabels: showLabels,
+    layout: layout,
   );
 }
 
@@ -283,6 +279,8 @@ Widget _buildCategoryProductGrid(
 
   final premium = entry.productCardStyle == null ||
       entry.productCardStyle == 'PREMIUM_FRESH';
+  final SectionHeaderConfig header =
+      SectionHeaderConfig.fromConfig(entry.config);
   final columns = (entry.columns ?? (premium ? 1 : 3))
       .clamp(premium ? 1 : 2, premium ? 2 : 3);
   // A premium section sells a product family, not every individual size as a
@@ -303,6 +301,7 @@ Widget _buildCategoryProductGrid(
     subtitle: entry.config['subtitle'] is String
         ? entry.config['subtitle'] as String
         : null,
+    header: header,
   );
 }
 
@@ -324,6 +323,7 @@ Widget _buildProductCarousel(
     subtitle: entry.config['subtitle'] is String
         ? entry.config['subtitle'] as String
         : null,
+    header: SectionHeaderConfig.fromConfig(entry.config),
   );
 }
 
@@ -1130,21 +1130,94 @@ class _FeeStripFallback extends StatelessWidget {
   }
 }
 
+class _ManifestCategorySection extends StatelessWidget {
+  const _ManifestCategorySection({
+    required this.title,
+    required this.subtitle,
+    required this.header,
+    required this.items,
+    required this.layout,
+  });
+
+  final String? title;
+  final String? subtitle;
+  final SectionHeaderConfig header;
+  final List<_CategoryRailItem> items;
+  final CategorySectionLayoutConfig layout;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        if (header.showText &&
+            ((title?.trim().isNotEmpty ?? false) ||
+                (subtitle?.trim().isNotEmpty ?? false)))
+          Padding(
+            padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 0),
+            child: _categorySectionHeading(title, subtitle),
+          ),
+        if (header.showGraphic) _ManifestGraphicSectionHeader(header: header),
+        _ManifestCategoryRail(
+          items: items,
+          iconSize: layout.iconSize,
+          gap: layout.gap,
+          rowGap: layout.rowGap,
+          showLabels: layout.showLabels,
+          isGrid: layout.isGrid,
+        ),
+      ],
+    );
+  }
+}
+
+Widget _categorySectionHeading(String? title, String? subtitle) {
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: <Widget>[
+      if (title != null && title.trim().isNotEmpty)
+        Text(
+          title,
+          style: TextStyle(
+            fontFamily: 'DMSans',
+            fontSize: 18.sp,
+            fontWeight: FontWeight.w700,
+            color: const Color(0xFF141414),
+          ),
+        ),
+      if (subtitle != null && subtitle.trim().isNotEmpty) ...<Widget>[
+        Gap(4.h),
+        Text(
+          subtitle,
+          style: TextStyle(fontSize: 12.sp, color: const Color(0xFF626262)),
+        ),
+      ],
+    ],
+  );
+}
+
 class _ManifestCategoryRail extends StatelessWidget {
   const _ManifestCategoryRail({
     required this.items,
     required this.iconSize,
     required this.gap,
+    required this.rowGap,
     required this.showLabels,
+    required this.isGrid,
   });
 
   final List<_CategoryRailItem> items;
   final double iconSize;
   final double gap;
+  final double rowGap;
   final bool showLabels;
+  final bool isGrid;
 
   @override
   Widget build(BuildContext context) {
+    if (isGrid) {
+      return _buildGrid(context);
+    }
     final double tileWidth = (iconSize + 18).clamp(82, 120).toDouble();
     final double boxRadius = (iconSize * 0.34).clamp(16, 26).toDouble();
     final double artworkRadius = (boxRadius - 2).clamp(14, 24).toDouble();
@@ -1168,67 +1241,105 @@ class _ManifestCategoryRail extends StatelessWidget {
             final item = items[index];
             return Align(
               alignment: Alignment.centerLeft,
-              child: GestureDetector(
-                onTap: item.categoryId == null
-                    ? null
-                    : () => context.push(
-                          '/categories/${item.categoryId}/products',
-                        ),
-                child: SizedBox(
-                  width: tileWidth.w,
-                  child: Column(
-                    children: <Widget>[
-                      Container(
-                        width: iconSize.w,
-                        height: iconSize.h,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(boxRadius.r),
-                          border: Border.all(
-                            color: const Color(0xFFF0F0F0),
-                            width: 1,
-                          ),
-                          // PHASE 3D: Replace blurred shadow with a slightly
-                          // stronger border. The category icon tiles are
-                          // static — no need for blur rasterisation on each
-                          // visible tile.
-                          boxShadow: const <BoxShadow>[
-                            BoxShadow(
-                              color: Color(0x06000000),
-                              blurRadius: 0,
-                              offset: Offset(0, 1),
-                            ),
-                          ],
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(artworkRadius.r),
-                          child: _CategoryArtwork(
-                            label: item.label,
-                            imageUrl: item.imageUrl,
-                          ),
-                        ),
-                      ),
-                      if (showLabels) ...<Widget>[
-                        Gap(8.h),
-                        Text(
-                          item.label,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.center,
-                          style: AppTextStyles.labelSmall.copyWith(
-                            color: const Color(0xFF131313),
-                            fontSize: 11.sp,
-                            fontWeight: FontWeight.w700,
-                            height: 1.05,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
+              child: _categoryRailTile(
+                context,
+                item,
+                tileWidth.w,
+                boxRadius,
+                artworkRadius,
               ),
             );
           },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGrid(BuildContext context) {
+    final double boxRadius = (iconSize * 0.34).clamp(16, 26).toDouble();
+    final double artworkRadius = (boxRadius - 2).clamp(14, 24).toDouble();
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16.w, 10.h, 16.w, 2.h),
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          final double spacing = gap.w;
+          final double tileWidth = (constraints.maxWidth - (spacing * 3)) / 4;
+          return Wrap(
+            spacing: spacing,
+            runSpacing: rowGap.h,
+            children: items
+                .map(
+                  (_CategoryRailItem item) => SizedBox(
+                    width: tileWidth,
+                    child: _categoryRailTile(
+                      context,
+                      item,
+                      tileWidth,
+                      boxRadius,
+                      artworkRadius,
+                    ),
+                  ),
+                )
+                .toList(growable: false),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _categoryRailTile(
+    BuildContext context,
+    _CategoryRailItem item,
+    double tileWidth,
+    double boxRadius,
+    double artworkRadius,
+  ) {
+    return GestureDetector(
+      onTap: item.categoryId == null
+          ? null
+          : () => context.push('/categories/${item.categoryId}/products'),
+      child: SizedBox(
+        width: tileWidth,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Container(
+              width: iconSize.w,
+              height: iconSize.h,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(boxRadius.r),
+                border: Border.all(color: const Color(0xFFF0F0F0), width: 1),
+                boxShadow: const <BoxShadow>[
+                  BoxShadow(
+                    color: Color(0x06000000),
+                    blurRadius: 0,
+                    offset: Offset(0, 1),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(artworkRadius.r),
+                child: _CategoryArtwork(
+                    label: item.label, imageUrl: item.imageUrl),
+              ),
+            ),
+            if (showLabels) ...<Widget>[
+              Gap(8.h),
+              Text(
+                item.label,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: AppTextStyles.labelSmall.copyWith(
+                  color: const Color(0xFF131313),
+                  fontSize: 11.sp,
+                  fontWeight: FontWeight.w700,
+                  height: 1.05,
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );
@@ -1306,6 +1417,7 @@ class _ManifestProductGridSection extends StatelessWidget {
     required this.title,
     required this.products,
     required this.columns,
+    required this.header,
     this.subtitle,
     this.variant = ProductCardVariant.quickCommerceCompact,
   });
@@ -1314,6 +1426,7 @@ class _ManifestProductGridSection extends StatelessWidget {
   final String? subtitle;
   final List<ProductEntity> products;
   final int columns;
+  final SectionHeaderConfig header;
   final ProductCardVariant variant;
 
   @override
@@ -1321,10 +1434,12 @@ class _ManifestProductGridSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Padding(
-          padding: EdgeInsets.fromLTRB(18.w, 12.h, 18.w, 0),
-          child: _productHeading(title, subtitle, variant),
-        ),
+        if (header.showText)
+          Padding(
+            padding: EdgeInsets.fromLTRB(18.w, 12.h, 18.w, 0),
+            child: _productHeading(title, subtitle, variant),
+          ),
+        if (header.showGraphic) _ManifestGraphicSectionHeader(header: header),
         Gap(10.h),
         Padding(
           padding: EdgeInsets.symmetric(horizontal: 14.w),
@@ -1378,6 +1493,16 @@ class _ManifestHorizontalProductSection extends StatelessWidget {
   const _ManifestHorizontalProductSection({
     required this.title,
     required this.products,
+    this.header = const SectionHeaderConfig(
+      style: SectionHeaderStyle.text,
+      imageUrl: null,
+      visible: true,
+      aspectRatio: SectionHeaderConfig.canonicalAspectRatio,
+      borderRadius: 14,
+      horizontalMargin: 16,
+      bottomSpacing: 12,
+      linkUrl: null,
+    ),
     this.subtitle,
     this.accentColor,
     this.variant = ProductCardVariant.quickCommerceCompact,
@@ -1386,6 +1511,7 @@ class _ManifestHorizontalProductSection extends StatelessWidget {
   final String title;
   final String? subtitle;
   final List<ProductEntity> products;
+  final SectionHeaderConfig header;
   final Color? accentColor;
   final ProductCardVariant variant;
 
@@ -1394,15 +1520,17 @@ class _ManifestHorizontalProductSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Padding(
-          padding: EdgeInsets.fromLTRB(18.w, 12.h, 18.w, 0),
-          child: _productHeading(
-            title,
-            subtitle,
-            variant,
-            accentColor: accentColor,
+        if (header.showText)
+          Padding(
+            padding: EdgeInsets.fromLTRB(18.w, 12.h, 18.w, 0),
+            child: _productHeading(
+              title,
+              subtitle,
+              variant,
+              accentColor: accentColor,
+            ),
           ),
-        ),
+        if (header.showGraphic) _ManifestGraphicSectionHeader(header: header),
         Gap(10.h),
         SizedBox(
           height: variant == ProductCardVariant.premiumFresh
@@ -1445,6 +1573,57 @@ class _ManifestHorizontalProductSection extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _ManifestGraphicSectionHeader extends StatelessWidget {
+  const _ManifestGraphicSectionHeader({required this.header});
+
+  final SectionHeaderConfig header;
+
+  @override
+  Widget build(BuildContext context) {
+    final String imageUrl =
+        ApiConstants.resolveMediaUrl(header.imageUrl) ?? header.imageUrl ?? '';
+    final VoidCallback? onTap = header.linkUrl == null
+        ? null
+        : () => _handleManifestLinkTap(context, header.linkUrl!);
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        header.horizontalMargin.w,
+        12.h,
+        header.horizontalMargin.w,
+        header.bottomSpacing.h,
+      ),
+      child: GestureDetector(
+        onTap: onTap,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(header.borderRadius.r),
+          child: AspectRatio(
+            aspectRatio: header.aspectRatio,
+            child: AppImage(
+              imageUrl: imageUrl,
+              // An exact 1080×300 image has no crop. `contain` is the safe
+              // default for uploads that are slightly off-ratio, preserving
+              // the complete campaign composition rather than stretching it.
+              fit: BoxFit.contain,
+              alignment: Alignment.center,
+              memCacheWidth: 1080,
+              memCacheHeight: 300,
+              filterQuality: FilterQuality.high,
+              placeholder: const ColoredBox(
+                color: Color(0xFFF8FAFC),
+                child: SizedBox.expand(),
+              ),
+              errorWidget: const ColoredBox(
+                color: Color(0xFFF8FAFC),
+                child: SizedBox.expand(),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
