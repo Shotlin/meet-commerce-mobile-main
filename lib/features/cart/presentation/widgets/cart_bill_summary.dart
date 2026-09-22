@@ -14,9 +14,15 @@ import 'package:bakaloo_flutter_app/features/cart/domain/entities/bill_summary_e
 /// standalone card; expanding it reveals the same itemized breakdown a
 /// dedicated savings card used to show.
 class CartBillSummary extends StatefulWidget {
-  const CartBillSummary({required this.summary, super.key});
+  const CartBillSummary({required this.summary, super.key, this.walletApplied = 0});
 
   final BillSummaryEntity summary;
+
+  /// Wallet balance applied against `summary.payable` — a pure display
+  /// value, computed the same `min(balance, payable)` way everywhere
+  /// (checkout_provider.dart#walletApplied) so this row can never disagree
+  /// with the dock's own buttons or what the backend will actually charge.
+  final double walletApplied;
 
   @override
   State<CartBillSummary> createState() => _CartBillSummaryState();
@@ -312,6 +318,12 @@ class _CartBillSummaryState extends State<CartBillSummary> {
               Gap(12.h),
             ],
 
+            // ── FreshCuts Wallet applied ─────────────────────────
+            if (widget.walletApplied > 0) ...<Widget>[
+              _WalletAppliedRow(amount: widget.walletApplied),
+              Gap(12.h),
+            ],
+
             Padding(
               padding: EdgeInsets.symmetric(vertical: 2.h),
               child: const Divider(height: 1, thickness: 1, color: _divider),
@@ -333,9 +345,10 @@ class _CartBillSummaryState extends State<CartBillSummary> {
                 ),
                 Row(
                   children: <Widget>[
-                    if (summary.toPay.original > summary.payable) ...<Widget>[
+                    if (summary.toPay.original > summary.payable ||
+                        widget.walletApplied > 0) ...<Widget>[
                       Text(
-                        '₹${_fmt(summary.toPay.original)}',
+                        '₹${_fmt(widget.walletApplied > 0 ? summary.payable : summary.toPay.original)}',
                         style: TextStyle(
                           fontSize: 13.sp,
                           fontWeight: FontWeight.w400,
@@ -348,7 +361,7 @@ class _CartBillSummaryState extends State<CartBillSummary> {
                       Gap(7.w),
                     ],
                     Text(
-                      '₹${_fmt(summary.payable)}',
+                      '₹${_fmt(_finalPayable)}',
                       style: TextStyle(
                         fontSize: 17.sp,
                         fontWeight: FontWeight.w800,
@@ -364,6 +377,11 @@ class _CartBillSummaryState extends State<CartBillSummary> {
         ),
       ),
     );
+  }
+
+  double get _finalPayable {
+    final value = widget.summary.payable - widget.walletApplied;
+    return value < 0 ? 0 : value;
   }
 
   static String _fmt(double v) => v.toStringAsFixed(0);
@@ -696,6 +714,62 @@ class _CouponDiscountRow extends StatelessWidget {
               Flexible(
                 child: Text(
                   label,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 14.sp,
+                    fontWeight: FontWeight.w500,
+                    color: _green,
+                    fontFamily: 'Inter',
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Text(
+          '−₹${amount.toStringAsFixed(0)}',
+          style: TextStyle(
+            fontSize: 14.sp,
+            fontWeight: FontWeight.w700,
+            color: _green,
+            fontFamily: 'Inter',
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FreshCuts Wallet applied — reduces "Amount to be paid" directly, unlike
+// the cashback-earned row below which is only ever informational.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _WalletAppliedRow extends StatelessWidget {
+  const _WalletAppliedRow({required this.amount});
+
+  final double amount;
+
+  static const Color _green = Color(0xFF0AC26B);
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: <Widget>[
+        Flexible(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              PhosphorIcon(
+                PhosphorIcons.walletFill,
+                size: 14.sp,
+                color: _green,
+              ),
+              Gap(6.w),
+              Flexible(
+                child: Text(
+                  'FreshCuts Wallet applied',
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 14.sp,

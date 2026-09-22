@@ -44,20 +44,21 @@ class CartOffersSection extends ConsumerWidget {
 
     return Container(
       color: Colors.white,
-      padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 16.h),
+      padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 14.h),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(
             'Offers & Benefits',
             style: TextStyle(
-              fontSize: 16.sp,
-              fontWeight: FontWeight.w700,
+              fontSize: 17.sp,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.2,
               color: const Color(0xFF1A1A1A),
               fontFamily: 'Inter',
             ),
           ),
-          Gap(12.h),
+          Gap(10.h),
           CartCouponTile(
             coupon: highlightedCoupon,
             isApplied: isApplied,
@@ -68,7 +69,7 @@ class CartOffersSection extends ConsumerWidget {
                 : null,
           ),
           if (showWalletTile) ...<Widget>[
-            Gap(10.h),
+            Gap(8.h),
             CartWalletTile(
               balance: walletBalance,
               value: checkoutState.useWallet,
@@ -172,12 +173,17 @@ class CartWalletTile extends StatelessWidget {
       iconColor: const Color(0xFF555555),
       iconBackground: const Color(0xFFF2F2F2),
       borderColor: const Color(0xFFE2E2E2),
-      title: 'FreshCuts Wallet Balance: ${balance.toInrCurrency}',
+      title: 'FreshCuts Wallet',
+      subtitle: '${balance.toInrCurrency} available',
       titleColor: const Color(0xFF1A1A1A),
-      trailing: Switch(
-        value: value && balance > 0,
-        onChanged: onChanged,
-        activeThumbColor: AppColors.brandRed,
+      trailing: Transform.scale(
+        scale: 0.78,
+        child: Switch(
+          value: value && balance > 0,
+          onChanged: onChanged,
+          activeThumbColor: AppColors.brandRed,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
       ),
     );
   }
@@ -191,6 +197,7 @@ class _OfferTile extends StatelessWidget {
     required this.borderColor,
     required this.title,
     required this.titleColor,
+    this.subtitle,
     this.trailing,
     this.onTap,
   });
@@ -201,6 +208,7 @@ class _OfferTile extends StatelessWidget {
   final Color borderColor;
   final String title;
   final Color titleColor;
+  final String? subtitle;
   final Widget? trailing;
   final VoidCallback? onTap;
 
@@ -208,42 +216,70 @@ class _OfferTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(12.r),
+      borderRadius: BorderRadius.circular(11.r),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12.r),
+        borderRadius: BorderRadius.circular(11.r),
         child: Container(
-          padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 11.h),
+          padding: EdgeInsets.symmetric(horizontal: 11.w, vertical: 9.h),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12.r),
-            border: Border.all(color: borderColor, width: 1.3),
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(11.r),
+            border: Border.all(color: borderColor, width: 1),
+            boxShadow: <BoxShadow>[
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.03),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
           child: Row(
             children: <Widget>[
               Container(
-                width: 30.w,
-                height: 30.w,
+                width: 26.w,
+                height: 26.w,
                 decoration: BoxDecoration(
                   color: iconBackground,
                   shape: BoxShape.circle,
                 ),
-                child: Icon(icon, size: 15.sp, color: iconColor),
+                child: Icon(icon, size: 13.sp, color: iconColor),
               ),
-              Gap(10.w),
+              Gap(9.w),
               Expanded(
-                child: Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 13.5.sp,
-                    fontWeight: FontWeight.w700,
-                    color: titleColor,
-                    fontFamily: 'Inter',
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13.sp,
+                        fontWeight: FontWeight.w700,
+                        color: titleColor,
+                        fontFamily: 'Inter',
+                      ),
+                    ),
+                    if (subtitle != null) ...<Widget>[
+                      Gap(1.h),
+                      Text(
+                        subtitle!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11.sp,
+                          fontWeight: FontWeight.w500,
+                          color: const Color(0xFF8A8A8A),
+                          fontFamily: 'Inter',
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-              if (trailing != null) ...<Widget>[Gap(8.w), trailing!],
+              if (trailing != null) ...<Widget>[Gap(6.w), trailing!],
             ],
           ),
         ),

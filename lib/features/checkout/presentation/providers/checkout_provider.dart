@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:dio/dio.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
@@ -13,6 +14,7 @@ import 'package:bakaloo_flutter_app/features/addresses/domain/entities/address_e
 import 'package:bakaloo_flutter_app/features/addresses/presentation/providers/address_provider.dart';
 import 'package:bakaloo_flutter_app/features/cart/domain/entities/cart_entity.dart';
 import 'package:bakaloo_flutter_app/features/cart/domain/repositories/cart_repository.dart';
+import 'package:bakaloo_flutter_app/features/cart/presentation/providers/cart_enhancement_providers.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/providers/cart_provider.dart';
 import 'package:bakaloo_flutter_app/features/checkout/data/datasources/order_remote_datasource.dart';
 import 'package:bakaloo_flutter_app/features/checkout/data/repositories/checkout_repository_impl.dart';
@@ -378,6 +380,12 @@ class CheckoutNotifier extends _$CheckoutNotifier {
           ),
     );
 
+    // One fresh key per attempt — protects against a network-layer retry of
+    // this exact call landing twice server-side (the client-side
+    // isPlacingOrder guard above already stops a second concurrent tap from
+    // even reaching here). See PlaceOrderParams.clientOrderRef.
+    final clientOrderRef = _generateOrderRef();
+
     final result = await ref.read(placeOrderUseCaseProvider).call(
           PlaceOrderParams(
             addressId: state.selectedAddress!.id,
@@ -390,6 +398,7 @@ class CheckoutNotifier extends _$CheckoutNotifier {
             scheduledSlotLabel: _scheduledSlotLabel,
             quickDeliverySelected: effectiveDeliverySlot.quickDeliverySelected,
             useWallet: state.useWallet,
+            clientOrderRef: clientOrderRef,
           ),
         );
 
@@ -593,6 +602,66 @@ class CheckoutNotifier extends _$CheckoutNotifier {
   double get total {
     final value = subtotal - discount + deliveryFee + platformFee;
     return value < 0 ? 0 : value;
+  }
+
+  // ── Wallet ───────────────────────────────────────────────────────────
+  //
+  // Client-side preview only — the actual amount charged/debited is always
+  // independently and authoritatively computed server-side at
+  // order-creation time (orders.service.js#placeOrder), using the exact
+  // same `min(availableBalance, payable)` rule. This mirrors that rule so
+  // the cart/dock never shows a number the backend would then disagree
+  // with.
+  //
+  // `payableBeforeWallet` prefers the real backend bill
+  // (billSummaryProvider.payable) over the local `total` estimate — same
+  // preference checkout_screen.dart's own `rawPayable` already used.
+  double get payableBeforeWallet {
+    final billSummary = ref.read(billSummaryProvider).asData?.value;
+    if (billSummary != null && billSummary.payable > 0) {
+      return billSummary.payable;
+    }
+    return total;
+  }
+
+  double get _walletBalance {
+    return ref.read(walletProvider).value?.balance ?? 0.0;
+  }
+
+  /// walletApplied = min(availableWalletBalance, currentPayableAmount) —
+  /// zero whenever the toggle is off, the wallet has nothing in it, or
+  /// there's nothing left to pay.
+  double get walletApplied {
+    if (!state.useWallet) return 0;
+    final payable = payableBeforeWallet;
+    final balance = _walletBalance;
+    if (payable <= 0 || balance <= 0) return 0;
+    return balance < payable ? balance : payable;
+  }
+
+  /// The amount actually left to pay (COD collection / Razorpay charge)
+  /// once the wallet slice above is taken off `payableBeforeWallet`.
+  double get payableAfterWallet {
+    final value = payableBeforeWallet - walletApplied;
+    return value < 0 ? 0 : value;
+  }
+
+  static const _orderRefChars = '0123456789abcdef';
+  static const _orderRefVariantChars = '89ab';
+
+  /// A real (RFC 4122) v4 UUID, hand-rolled from `Random.secure()` rather
+  /// than pulling in the `uuid` package for this one call site — the
+  /// backend's request schema validates this field with ajv's strict
+  /// `format: 'uuid'` (version nibble `4`, variant nibble `8|9|a|b`), which
+  /// a plain random hex string only satisfies by chance.
+  String _generateOrderRef() {
+    final random = Random.secure();
+    String hex(int n) =>
+        List<String>.generate(n, (_) => _orderRefChars[random.nextInt(16)])
+            .join();
+
+    return '${hex(8)}-${hex(4)}-4${hex(3)}-'
+        '${_orderRefVariantChars[random.nextInt(4)]}${hex(3)}-${hex(12)}';
   }
 
   void _syncAddresses(List<AddressEntity> addresses) {

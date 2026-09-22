@@ -36,6 +36,7 @@ import 'package:bakaloo_flutter_app/features/checkout/presentation/providers/che
 import 'package:bakaloo_flutter_app/features/checkout/presentation/providers/delivery_slot_provider.dart';
 import 'package:bakaloo_flutter_app/features/checkout/presentation/providers/store_status_provider.dart';
 import 'package:bakaloo_flutter_app/features/location/presentation/providers/non_serviceable_location_provider.dart';
+import 'package:bakaloo_flutter_app/features/payments/presentation/providers/payment_provider.dart';
 import 'package:bakaloo_flutter_app/features/wallet/presentation/providers/wallet_provider.dart';
 import 'package:bakaloo_flutter_app/features/wishlist/presentation/providers/wishlist_ids_provider.dart';
 import 'package:bakaloo_flutter_app/routing/route_names.dart';
@@ -44,12 +45,13 @@ import 'package:bakaloo_flutter_app/shared/widgets/empty_state.dart';
 import 'package:bakaloo_flutter_app/shared/widgets/error_state.dart';
 
 /// Cart screen — a compact review-and-adjust page. It shows what's in the
-/// cart and lets the customer edit it (quantities, coupon, tip); it does
-/// NOT collect payment. Address is a compact display+edit affordance in the
-/// sticky dock only (no full address card in the scroll), and the dock's
-/// single CTA hands off to `CheckoutScreen` (`RouteNames.checkout`), which
-/// owns address completeness, delivery-slot changes, wallet, and payment
-/// method selection. See cart_checkout_dock.dart.
+/// cart and lets the customer edit it (quantities, coupon, tip), AND places
+/// the order directly: the sticky dock's two buttons (Cash on Delivery /
+/// Pay Online) call `checkoutProvider.placeOrder()` right from here — no
+/// separate Checkout page in this flow. Address is a compact display+edit
+/// affordance in the dock only (no full address card in the scroll);
+/// address completeness/serviceability is still enforced server-side at
+/// placement. See cart_checkout_dock.dart.
 class CartScreen extends ConsumerStatefulWidget {
   const CartScreen({super.key});
 
@@ -57,10 +59,12 @@ class CartScreen extends ConsumerStatefulWidget {
   ConsumerState<CartScreen> createState() => _CartScreenState();
 }
 
-class _CartScreenState extends ConsumerState<CartScreen> {
+class _CartScreenState extends ConsumerState<CartScreen>
+    with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(priceDropProductsProvider);
       ref.read(paymentOffersProvider);
@@ -74,7 +78,29 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       // walletProvider on its own — refetch on every visit to this screen,
       // which shows (and can toggle spending) the wallet balance.
       unawaited(ref.read(walletProvider.notifier).refreshWallet());
+      // Address list can also change elsewhere (edited/deleted) — refresh
+      // so the dock's selected address and placeOrder() never point at a
+      // stale id (matches checkout_screen.dart's old behaviour, now that
+      // this screen is the one actually placing the order).
+      ref.read(addressProvider.notifier).refresh();
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Returning from a backgrounded UPI/wallet app is exactly when the
+      // Razorpay SDK's own callback is most likely to have been lost — see
+      // payment_provider.dart#recheckIfPending's own doc comment.
+      ref.read(paymentProvider.notifier).recheckIfPending();
+      unawaited(ref.read(walletProvider.notifier).refreshWallet());
+    }
   }
 
   @override
@@ -86,6 +112,27 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     };
     final selectedAddress = ref.watch(cartSelectedAddressProvider);
     final hasAddress = selectedAddress != null;
+    // Watched (not just read) so the screen rebuilds the instant the wallet
+    // toggle flips (CartOffersSection's switch lives in a sibling widget)
+    // or a placement starts/finishes.
+    final checkoutState = ref.watch(checkoutProvider);
+    final paymentState = ref.watch(paymentProvider);
+
+    ref
+      ..listen<CheckoutState>(checkoutProvider, (prev, next) {
+        final msg = next.errorMessage;
+        if (msg != null && msg != prev?.errorMessage && mounted) {
+          AppToast.show(context, msg);
+          ref.read(checkoutProvider.notifier).clearError();
+        }
+      })
+      ..listen<PaymentState>(paymentProvider, (prev, next) {
+        final msg = next.errorMessage;
+        if (msg != null && msg != prev?.errorMessage && mounted) {
+          AppToast.show(context, msg);
+          ref.read(paymentProvider.notifier).clearError();
+        }
+      });
     // Only meaningful while hasAddress is false — see
     // non_serviceable_location_provider.dart.
     final isLocationNotServiceable =
@@ -117,61 +164,85 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       cart: cart,
       remoteSummary: billSummary,
     );
-    final toPay = lastKnownSummary?.payable ?? displayBillSummary.payable;
     // `.value`, not `.asData?.value` — keeps showing the last known balance
     // while a refetch is in flight instead of flashing to ₹0.
     final walletBalance = ref.watch(walletProvider).value?.balance ?? 0.0;
+    // walletApplied = min(availableWalletBalance, currentPayableAmount) —
+    // the exact same rule the backend applies for real at order-creation
+    // time (orders.service.js#placeOrder), so this preview can never
+    // disagree with what actually gets charged/debited.
+    final checkoutNotifier = ref.read(checkoutProvider.notifier);
+    final walletApplied = checkoutNotifier.walletApplied;
+    final payableAfterWallet = checkoutNotifier.payableAfterWallet;
+    final codInfo = (lastKnownSummary ?? displayBillSummary).paymentMethods.cod;
+    final onlineEnabled =
+        (lastKnownSummary ?? displayBillSummary).paymentMethods.razorpay.enabled;
+    final isPlacingOrder =
+        checkoutState.isPlacingOrder || paymentState.isPendingConfirmation;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
       appBar: _buildAppBar(context, cart.itemCount),
-      body: cartAsync.when(
-        loading: () => const Center(
-          child: CircularProgressIndicator(color: Color(0xFFE23372)),
-        ),
-        error: (error, _) => ErrorState(
-          message: error.toString().replaceFirst('Bad state: ', ''),
-          onRetry: () => ref.read(cartProvider.notifier).refresh(),
-        ),
-        data: (resolvedCart) {
-          if (resolvedCart.isEmpty) {
-            return EmptyState(
-              title: 'Your cart is empty',
-              message: 'Add fresh groceries to start your order.',
-              buttonLabel: 'Start Shopping',
-              onPressed: () => context.go(RouteNames.home),
-            );
-          }
+      body: Column(
+        children: <Widget>[
+          if (paymentState.isPendingConfirmation)
+            _PendingConfirmationBanner(message: paymentState.pendingMessage),
+          Expanded(
+            child: cartAsync.when(
+              loading: () => const Center(
+                child: CircularProgressIndicator(color: Color(0xFFE23372)),
+              ),
+              error: (error, _) => ErrorState(
+                message: error.toString().replaceFirst('Bad state: ', ''),
+                onRetry: () => ref.read(cartProvider.notifier).refresh(),
+              ),
+              data: (resolvedCart) {
+                if (resolvedCart.isEmpty) {
+                  return EmptyState(
+                    title: 'Your cart is empty',
+                    message: 'Add fresh groceries to start your order.',
+                    buttonLabel: 'Start Shopping',
+                    onPressed: () => context.go(RouteNames.home),
+                  );
+                }
 
-          // Piggybacks on the cart fetch that's already happening — no
-          // extra per-line network call. Cheap no-op once already known.
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            ref.read(purchaseLimitsNotifierProvider.notifier).ensureLoaded(
-                  resolvedCart.items.map((item) => item.productId).toList(),
+                // Piggybacks on the cart fetch that's already happening —
+                // no extra per-line network call. Cheap no-op once already
+                // known.
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  ref
+                      .read(purchaseLimitsNotifierProvider.notifier)
+                      .ensureLoaded(
+                        resolvedCart.items.map((item) => item.productId).toList(),
+                      );
+                });
+
+                return ListView(
+                  physics: const BouncingScrollPhysics(
+                    parent: AlwaysScrollableScrollPhysics(),
+                  ),
+                  cacheExtent: 500,
+                  padding: EdgeInsets.zero,
+                  children: _buildSections(
+                    context: context,
+                    cart: resolvedCart,
+                    hasAddress: hasAddress,
+                    billSummaryAsync: billSummaryAsync,
+                    // Same "never show a fabricated number" rule as the
+                    // dock's `payableAfterWallet`: prefer the last real
+                    // backend total over the client-guessed fallback
+                    // whenever one exists, so a reload (quantity change,
+                    // coupon apply, etc.) keeps showing accurate figures
+                    // instead of a stale-guess-then-jump.
+                    billSummary: lastKnownSummary ?? displayBillSummary,
+                    walletBalance: walletBalance,
+                    walletApplied: walletApplied,
+                  ),
                 );
-          });
-
-          return ListView(
-            physics: const BouncingScrollPhysics(
-              parent: AlwaysScrollableScrollPhysics(),
+              },
             ),
-            cacheExtent: 500,
-            padding: EdgeInsets.zero,
-            children: _buildSections(
-              context: context,
-              cart: resolvedCart,
-              hasAddress: hasAddress,
-              billSummaryAsync: billSummaryAsync,
-              // Same "never show a fabricated number" rule as the dock's
-              // `toPay`: prefer the last real backend total over the
-              // client-guessed fallback whenever one exists, so a reload
-              // (quantity change, coupon apply, etc.) keeps showing
-              // accurate figures instead of a stale-guess-then-jump.
-              billSummary: lastKnownSummary ?? displayBillSummary,
-              walletBalance: walletBalance,
-            ),
-          );
-        },
+          ),
+        ],
       ),
       bottomNavigationBar: cart.isEmpty
           ? null
@@ -179,10 +250,15 @@ class _CartScreenState extends ConsumerState<CartScreen> {
               hasAddress: hasAddress,
               selectedAddress: selectedAddress,
               isLocationNotServiceable: isLocationNotServiceable,
-              toPay: toPay,
+              toPay: payableAfterWallet,
               onAddAddress: () => _ensureAddressAndProceed(context),
               onEditAddress: () => _openAddressList(context),
-              onContinue: () => _goToCheckout(context),
+              isPlacing: isPlacingOrder,
+              codAvailable: codInfo.available,
+              codUnavailableReason: codInfo.reason,
+              onlineAvailable: onlineEnabled,
+              onPlaceCod: () => _placeOrder(context, PaymentMethod.cod),
+              onPlaceOnline: () => _placeOrder(context, PaymentMethod.online),
             ),
     );
   }
@@ -256,6 +332,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     required AsyncValue<BillSummaryEntity> billSummaryAsync,
     required BillSummaryEntity billSummary,
     required double walletBalance,
+    required double walletApplied,
   }) {
     final savingsTotal = billSummary.savings.total;
     final estimateMinutes = billSummary.deliveryEstimate.minutes;
@@ -332,10 +409,10 @@ class _CartScreenState extends ConsumerState<CartScreen> {
         skipLoadingOnReload: true,
         loading: () => RepaintBoundary(child: _buildBillSummaryShimmer()),
         error: (_, __) => RepaintBoundary(
-          child: CartBillSummary(summary: billSummary),
+          child: CartBillSummary(summary: billSummary, walletApplied: walletApplied),
         ),
         data: (_) => RepaintBoundary(
-          child: CartBillSummary(summary: billSummary),
+          child: CartBillSummary(summary: billSummary, walletApplied: walletApplied),
         ),
       ),
     );
@@ -621,10 +698,8 @@ class _CartScreenState extends ConsumerState<CartScreen> {
 
   /// "Add Address to Proceed" — just adds the address. No further
   /// auto-proceed step needed: once it's saved, `hasAddress` flips true and
-  /// the dock re-renders into the "Pay ₹…" CTA on its own for the customer
-  /// to tap. Address *completeness* (House No./Building) is no longer
-  /// gated here — `CheckoutScreen`'s own address card is where that address
-  /// actually gets used to place the order, so it owns that check.
+  /// the dock re-renders into the two payment buttons on its own for the
+  /// customer to tap.
   Future<void> _ensureAddressAndProceed(BuildContext context) async {
     await _openAddAddress(context);
   }
@@ -638,11 +713,54 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     ref.read(addressProvider.notifier).refresh();
   }
 
-  /// Hands off to `CheckoutScreen`, which owns delivery-slot changes,
-  /// wallet, and payment-method selection — the cart page itself places no
-  /// order and shows no payment UI.
-  void _goToCheckout(BuildContext context) {
-    context.push(RouteNames.checkout);
+  /// Places the order directly from the cart — Cash on Delivery or Pay
+  /// Online, whichever button was tapped. Mirrors the old
+  /// CheckoutScreen#_handlePayment: pick the method, wait for the real
+  /// bill (never submit against a still-loading estimate), then delegate
+  /// to CheckoutNotifier.placeOrder(), which validates the cart/address,
+  /// applies the coupon + wallet, creates the order and — for ONLINE with
+  /// money still owing — hands off to Razorpay.
+  Future<void> _placeOrder(BuildContext context, PaymentMethod method) async {
+    final currentState = ref.read(checkoutProvider);
+    if (currentState.isPlacingOrder) {
+      return;
+    }
+
+    if (currentState.selectedAddress == null) {
+      AppToast.show(
+        context,
+        '📍 Please choose a delivery address first.',
+        type: ToastType.warning,
+      );
+      return;
+    }
+
+    // Same guard checkout_screen.dart used to apply: never submit before
+    // the real backend bill has loaded at least once, since every button
+    // here displays that real total — a fast tap must never charge
+    // something different from what was just shown.
+    final billSummaryAsync = ref.read(billSummaryProvider);
+    if (billSummaryAsync.isLoading && !billSummaryAsync.hasValue) {
+      AppToast.show(
+        context,
+        'Calculating your final bill — please wait a moment.',
+        type: ToastType.warning,
+      );
+      return;
+    }
+
+    ref.read(checkoutProvider.notifier).selectPaymentMethod(method);
+    final result = await ref.read(checkoutProvider.notifier).placeOrder();
+
+    if (!context.mounted) {
+      return;
+    }
+    if (result.handedOffToPayment || result.isSuccess) {
+      return;
+    }
+    if (result.errorMessage != null) {
+      AppToast.show(context, result.errorMessage!);
+    }
   }
 
   Future<void> _removeItem(BuildContext context, CartItemEntity item) async {
@@ -722,6 +840,50 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       totalPayable: cart.subtotal,
       tipAmount: cart.tipAmount,
       itemCount: cart.itemCount,
+    );
+  }
+}
+
+/// Shown while a Razorpay result is ambiguous and the app is asking the
+/// backend to confirm it — see payment_provider.dart#_beginPendingConfirmation.
+/// Never a dead-end error while this is up: the payment could still turn
+/// out to have succeeded.
+class _PendingConfirmationBanner extends StatelessWidget {
+  const _PendingConfirmationBanner({this.message});
+
+  final String? message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+      color: const Color(0xFFFFF3E0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          SizedBox(
+            width: 18.w,
+            height: 18.w,
+            child: const CircularProgressIndicator(
+              strokeWidth: 2,
+              color: Color(0xFFB45309),
+            ),
+          ),
+          SizedBox(width: 10.w),
+          Expanded(
+            child: Text(
+              message ?? 'Verifying your payment…',
+              style: TextStyle(
+                fontSize: 12.5.sp,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFFB45309),
+                fontFamily: 'Inter',
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

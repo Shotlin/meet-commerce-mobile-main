@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:gap/gap.dart';
 
 import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
 import 'package:bakaloo_flutter_app/features/addresses/domain/entities/address_entity.dart';
 
-/// Cart's sticky bottom dock — a compact address row plus a single primary
-/// CTA. Deliberately carries no payment-method UI of its own: tapping the
-/// CTA (once an address is set) hands off to `CheckoutScreen`
-/// (`RouteNames.checkout`), which owns wallet/online/COD selection. This
-/// replaces the old `CartBottomBar`, which used to place the order directly
-/// from the cart screen with two payment buttons + a wallet stripe inline.
+/// Cart's sticky bottom dock — a compact address row plus two premium,
+/// equal-width payment buttons (Cash on Delivery / Pay Online). Placing an
+/// order happens directly from the cart — there is no separate Checkout
+/// page in this flow any more; both buttons already reflect the real
+/// payable amount after coupon + wallet.
 class CartCheckoutDock extends StatelessWidget {
   const CartCheckoutDock({
     required this.hasAddress,
@@ -19,11 +19,19 @@ class CartCheckoutDock extends StatelessWidget {
     this.isLocationNotServiceable = false,
     this.onAddAddress,
     this.onEditAddress,
-    this.onContinue,
+    this.onPlaceCod,
+    this.onPlaceOnline,
+    this.isPlacing = false,
+    this.codAvailable = true,
+    this.codUnavailableReason,
+    this.onlineAvailable = true,
   });
 
   final bool hasAddress;
   final AddressEntity? selectedAddress;
+
+  /// The real amount left to pay — after coupon discount and any wallet
+  /// balance applied — shown on both buttons.
   final double toPay;
 
   /// True when the customer's last auto-detected location landed outside
@@ -34,8 +42,15 @@ class CartCheckoutDock extends StatelessWidget {
   final VoidCallback? onAddAddress;
   final VoidCallback? onEditAddress;
 
-  /// Pushes `CheckoutScreen`. Only reachable once `hasAddress` is true.
-  final VoidCallback? onContinue;
+  /// Places the order directly (COD / Pay Online). Only reachable once
+  /// `hasAddress` is true; `null` while a placement is already in flight.
+  final VoidCallback? onPlaceCod;
+  final VoidCallback? onPlaceOnline;
+
+  final bool isPlacing;
+  final bool codAvailable;
+  final String? codUnavailableReason;
+  final bool onlineAvailable;
 
   @override
   Widget build(BuildContext context) {
@@ -59,44 +74,173 @@ class CartCheckoutDock extends StatelessWidget {
           children: <Widget>[
             if (hasAddress && selectedAddress != null) ...<Widget>[
               _AddressRow(address: selectedAddress!, onTap: onEditAddress),
-              SizedBox(height: 8.h),
+              SizedBox(height: 10.h),
             ] else if (isLocationNotServiceable) ...<Widget>[
               const _NotServiceableRow(),
-              SizedBox(height: 8.h),
+              SizedBox(height: 10.h),
             ],
-            SizedBox(
-              width: double.infinity,
-              height: 52.h,
-              child: ElevatedButton(
-                onPressed: hasAddress ? onContinue : onAddAddress,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.brandRed,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12.r),
+            if (!hasAddress)
+              SizedBox(
+                width: double.infinity,
+                height: 52.h,
+                child: ElevatedButton(
+                  onPressed: onAddAddress,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.brandRed,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12.r),
+                    ),
+                  ),
+                  child: Text(
+                    'Add Address to Proceed',
+                    style: TextStyle(
+                      fontSize: 15.5.sp,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                      fontFamily: 'Inter',
+                    ),
                   ),
                 ),
-                child: Text(
-                  hasAddress
-                      ? 'Pay ${_formatInr(toPay)}'
-                      : 'Add Address to Proceed',
-                  style: TextStyle(
-                    fontSize: 15.5.sp,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                    fontFamily: 'Inter',
+              )
+            else
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: _DockButton(
+                      label: 'Cash on Delivery',
+                      amount: toPay,
+                      isPrimary: false,
+                      isLoading: isPlacing,
+                      disabled: !codAvailable,
+                      disabledReason: codUnavailableReason,
+                      onPressed: (isPlacing || !codAvailable) ? null : onPlaceCod,
+                    ),
                   ),
-                ),
+                  Gap(10.w),
+                  Expanded(
+                    child: _DockButton(
+                      label: 'Pay Online',
+                      amount: toPay,
+                      isPrimary: true,
+                      isLoading: isPlacing,
+                      disabled: !onlineAvailable,
+                      onPressed: (isPlacing || !onlineAvailable) ? null : onPlaceOnline,
+                    ),
+                  ),
+                ],
               ),
-            ),
           ],
         ),
       ),
     );
   }
+}
 
-  static String _formatInr(double v) => '₹${v.toStringAsFixed(0)}';
+class _DockButton extends StatelessWidget {
+  const _DockButton({
+    required this.label,
+    required this.amount,
+    required this.isPrimary,
+    required this.isLoading,
+    required this.disabled,
+    required this.onPressed,
+    this.disabledReason,
+  });
+
+  final String label;
+  final double amount;
+  final bool isPrimary;
+  final bool isLoading;
+  final bool disabled;
+  final String? disabledReason;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final child = isLoading
+        ? SizedBox(
+            width: 18.w,
+            height: 18.w,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                isPrimary ? Colors.white : AppColors.brandRed,
+              ),
+            ),
+          )
+        : Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13.5.sp,
+                  fontWeight: FontWeight.w700,
+                  color: isPrimary
+                      ? Colors.white
+                      : (disabled ? const Color(0xFFAAAAAA) : AppColors.brandRed),
+                  fontFamily: 'Inter',
+                ),
+              ),
+              Gap(1.h),
+              Text(
+                '₹${amount.toStringAsFixed(0)}',
+                style: TextStyle(
+                  fontSize: 15.sp,
+                  fontWeight: FontWeight.w800,
+                  color: isPrimary
+                      ? Colors.white
+                      : (disabled ? const Color(0xFFAAAAAA) : AppColors.brandRed),
+                  fontFamily: 'Inter',
+                ),
+              ),
+            ],
+          );
+
+    final button = SizedBox(
+      width: double.infinity,
+      height: 54.h,
+      child: isPrimary
+          ? ElevatedButton(
+              onPressed: onPressed,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.brandRed,
+                disabledBackgroundColor: AppColors.brandRed.withValues(alpha: 0.4),
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12.r),
+                ),
+              ),
+              child: child,
+            )
+          : OutlinedButton(
+              onPressed: onPressed,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.brandRed,
+                side: BorderSide(
+                  color: disabled
+                      ? const Color(0xFFDDDDDD)
+                      : AppColors.brandRed.withValues(alpha: 0.55),
+                  width: 1.4,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12.r),
+                ),
+              ),
+              child: child,
+            ),
+    );
+
+    if (!disabled || disabledReason == null || disabledReason!.isEmpty) {
+      return button;
+    }
+
+    return Tooltip(message: disabledReason!, child: button);
+  }
 }
 
 class _AddressRow extends StatelessWidget {

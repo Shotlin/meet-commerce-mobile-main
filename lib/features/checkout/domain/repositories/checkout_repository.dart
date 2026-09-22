@@ -15,6 +15,7 @@ class PlaceOrderParams {
     this.scheduledSlotLabel,
     this.quickDeliverySelected = false,
     this.useWallet = false,
+    this.clientOrderRef,
   });
 
   final String addressId;
@@ -32,6 +33,12 @@ class PlaceOrderParams {
   /// of [paymentMethod] rather than replacing it. Ignored by the backend
   /// when paymentMethod is the legacy 'WALLET'.
   final bool useWallet;
+
+  /// Idempotency key for this one placeOrder() attempt — a retried request
+  /// (a network-layer retry of a timed-out call) returns the order(s)
+  /// already created instead of duplicating them or debiting the wallet
+  /// twice. Generated fresh per attempt by CheckoutNotifier.placeOrder().
+  final String? clientOrderRef;
 
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
@@ -55,6 +62,7 @@ class PlaceOrderParams {
       // Always explicit — unlike couponCode/deliveryNotes, false here is a
       // meaningful, deliberate value, not an absent one.
       'useWallet': useWallet,
+      if (clientOrderRef != null) 'clientOrderRef': clientOrderRef,
     };
   }
 }
