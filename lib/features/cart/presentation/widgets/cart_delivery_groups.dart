@@ -3,6 +3,119 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import 'package:bakaloo_flutter_app/features/checkout/domain/entities/delivery_slot_entity.dart';
 
+/// Centered "── Items will arrive in N Deliveries ⓘ ──" title — a thin
+/// divider on each side of the text, always shown (singular "1 Delivery"
+/// when the cart ships as one). [deliveryCount] is real data — the number
+/// of distinct delivery boxes the caller is about to render below, never
+/// hardcoded — see cart_screen.dart's `_buildDeliveryGroups`.
+class CartDeliveryGroupsHeading extends StatelessWidget {
+  const CartDeliveryGroupsHeading({required this.deliveryCount, super.key});
+
+  final int deliveryCount;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: Colors.white,
+      width: double.infinity,
+      padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 2.h),
+      child: Row(
+        children: <Widget>[
+          const Expanded(
+            child: Divider(height: 1, thickness: 1, color: Color(0xFFE5E5E5)),
+          ),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: 10.w),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Text(
+                  'Items will arrive in $deliveryCount '
+                  '${deliveryCount == 1 ? 'Delivery' : 'Deliveries'}',
+                  style: TextStyle(
+                    fontSize: 13.sp,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF555555),
+                    fontFamily: 'Inter',
+                  ),
+                ),
+                SizedBox(width: 6.w),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _showInfo(context),
+                  child: Icon(
+                    Icons.info_outline_rounded,
+                    size: 15.sp,
+                    color: const Color(0xFF999999),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Expanded(
+            child: Divider(height: 1, thickness: 1, color: Color(0xFFE5E5E5)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showInfo(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20.r)),
+      ),
+      builder: (_) => Padding(
+        padding: EdgeInsets.fromLTRB(20.w, 16.h, 20.w, 28.h),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Center(
+              child: Container(
+                width: 40.w,
+                height: 4.h,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE0E0E0),
+                  borderRadius: BorderRadius.circular(999.r),
+                ),
+              ),
+            ),
+            SizedBox(height: 18.h),
+            Text(
+              deliveryCount == 1 ? 'One delivery' : 'Multiple deliveries',
+              style: TextStyle(
+                fontSize: 17.sp,
+                fontWeight: FontWeight.w700,
+                color: const Color(0xFF222222),
+                fontFamily: 'Inter',
+              ),
+            ),
+            SizedBox(height: 8.h),
+            Text(
+              deliveryCount == 1
+                  ? 'All the items in your cart are on the same delivery.'
+                  : 'Some items in your cart take longer to prepare or '
+                      'deliver than others, so your order will arrive in '
+                      'separate deliveries — each shown below with its own '
+                      'estimate.',
+              style: TextStyle(
+                fontSize: 14.sp,
+                height: 1.5,
+                fontWeight: FontWeight.w400,
+                color: const Color(0xFF555555),
+                fontFamily: 'Inter',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// One delivery-group card: a header row (clock/calendar icon, timing
 /// label, item-count sub-label, "Change Slot" CTA) followed by that
 /// group's cart-item rows. Purely presentational — the caller supplies the

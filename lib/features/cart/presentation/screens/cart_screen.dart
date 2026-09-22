@@ -1,5 +1,7 @@
 // ignore_for_file: cascade_invocations
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -16,6 +18,7 @@ import 'package:bakaloo_flutter_app/core/providers/price_mode_provider.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/add_to_wishlist_prompt_sheet.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_bill_summary.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_checkout_dock.dart';
+import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_coupon_sheet.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_delivery_groups.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_first_time_offer_teaser.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_item_card.dart';
@@ -25,7 +28,6 @@ import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_orde
 import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_recommendations_section.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/schedule_delivery_sheet.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_savings_banner.dart';
-import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_savings_breakdown.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_tip_section.dart';
 import 'package:bakaloo_flutter_app/core/utils/app_toast.dart';
 import 'package:bakaloo_flutter_app/features/purchase_limits/presentation/providers/purchase_limits_provider.dart';
@@ -33,8 +35,8 @@ import 'package:bakaloo_flutter_app/features/checkout/domain/entities/delivery_s
 import 'package:bakaloo_flutter_app/features/checkout/presentation/providers/checkout_provider.dart';
 import 'package:bakaloo_flutter_app/features/checkout/presentation/providers/delivery_slot_provider.dart';
 import 'package:bakaloo_flutter_app/features/checkout/presentation/providers/store_status_provider.dart';
-import 'package:bakaloo_flutter_app/features/checkout/presentation/screens/coupons_screen.dart';
 import 'package:bakaloo_flutter_app/features/location/presentation/providers/non_serviceable_location_provider.dart';
+import 'package:bakaloo_flutter_app/features/wallet/presentation/providers/wallet_provider.dart';
 import 'package:bakaloo_flutter_app/features/wishlist/presentation/providers/wishlist_ids_provider.dart';
 import 'package:bakaloo_flutter_app/routing/route_names.dart';
 import 'package:bakaloo_flutter_app/shared/widgets/confirmation_dialog.dart';
@@ -67,6 +69,11 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       // look at their cart — refresh on every visit so that shows up
       // promptly instead of only being discovered at a failed checkout.
       ref.read(cartProvider.notifier).refresh();
+      // Same reasoning for wallet: a balance change made outside this app
+      // (admin credit, refund, cashback) never invalidates the keepAlive
+      // walletProvider on its own — refetch on every visit to this screen,
+      // which shows (and can toggle spending) the wallet balance.
+      unawaited(ref.read(walletProvider.notifier).refreshWallet());
     });
   }
 
@@ -111,6 +118,9 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       remoteSummary: billSummary,
     );
     final toPay = lastKnownSummary?.payable ?? displayBillSummary.payable;
+    // `.value`, not `.asData?.value` — keeps showing the last known balance
+    // while a refetch is in flight instead of flashing to ₹0.
+    final walletBalance = ref.watch(walletProvider).value?.balance ?? 0.0;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
@@ -158,6 +168,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
               // (quantity change, coupon apply, etc.) keeps showing
               // accurate figures instead of a stale-guess-then-jump.
               billSummary: lastKnownSummary ?? displayBillSummary,
+              walletBalance: walletBalance,
             ),
           );
         },
@@ -244,6 +255,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     required bool hasAddress,
     required AsyncValue<BillSummaryEntity> billSummaryAsync,
     required BillSummaryEntity billSummary,
+    required double walletBalance,
   }) {
     final savingsTotal = billSummary.savings.total;
     final estimateMinutes = billSummary.deliveryEstimate.minutes;
@@ -257,6 +269,13 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       );
     }
 
+    widgets.add(
+      RepaintBoundary(
+        child: CartDeliveryGroupsHeading(
+          deliveryCount: _deliveryGroupCount(cart.items, estimateMinutes),
+        ),
+      ),
+    );
     widgets.addAll(
       _buildDeliveryGroups(
         context: context,
@@ -282,13 +301,9 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     widgets.add(
       RepaintBoundary(
         child: CartOffersSection(
-          onViewCoupons: () {
-            Navigator.of(context).push<void>(
-              MaterialPageRoute<void>(
-                builder: (_) => const CouponsScreen(),
-              ),
-            );
-          },
+          onViewCoupons: () => showCartCouponSheet(context),
+          showWalletTile: billSummary.paymentMethods.wallet.enabled,
+          walletBalance: walletBalance,
         ),
       ),
     );
@@ -325,15 +340,8 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       ),
     );
 
-    if (billSummary.savings.total > 0) {
-      widgets.add(const CartSectionDivider());
-      widgets.add(
-        RepaintBoundary(
-          child: CartSavingsBreakdown(savings: billSummary.savings),
-        ),
-      );
-    }
-
+    // Savings is now a compact expandable row inside CartBillSummary
+    // itself, not a separate standalone card.
     widgets.add(const CartSectionDivider());
     widgets.add(const RepaintBoundary(child: CartPoliciesSection()));
 
@@ -469,6 +477,20 @@ class _CartScreenState extends ConsumerState<CartScreen> {
         ),
       ),
     );
+  }
+
+  /// The number of distinct delivery timings the cart's items actually
+  /// split into — 1 for the overwhelming common case (everything ships on
+  /// the cart's one real slot), 2 only when at least one item genuinely
+  /// carries its own, distinctly longer estimate (see
+  /// [_buildDeliveryGroups]'s `isLater` check, which this mirrors). Drives
+  /// [CartDeliveryGroupsHeading]'s real, never-hardcoded count.
+  int _deliveryGroupCount(List<CartItemEntity> items, int estimateMinutes) {
+    final hasLaterItem = items.any((item) {
+      final minutes = item.displayDeliveryMinutes;
+      return minutes != null && minutes > estimateMinutes + 15;
+    });
+    return hasLaterItem ? 2 : 1;
   }
 
   /// Renders one [CartDeliveryGroupCard] PER cart item — never several

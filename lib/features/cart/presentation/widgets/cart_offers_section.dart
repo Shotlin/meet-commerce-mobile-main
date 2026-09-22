@@ -5,35 +5,37 @@ import 'package:gap/gap.dart';
 
 import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
 import 'package:bakaloo_flutter_app/core/utils/extensions/double_extensions.dart';
-import 'package:bakaloo_flutter_app/features/cart/domain/entities/payment_offer_entity.dart';
-import 'package:bakaloo_flutter_app/features/cart/presentation/providers/cart_enhancement_providers.dart';
 import 'package:bakaloo_flutter_app/features/checkout/domain/entities/coupon_entity.dart';
 import 'package:bakaloo_flutter_app/features/checkout/presentation/providers/checkout_provider.dart';
 import 'package:bakaloo_flutter_app/features/checkout/presentation/providers/coupon_provider.dart';
 
-/// "Offers & Benefits" section — a titled group of simple bordered rows
-/// (Apply Coupon, Payment offers). Same underlying data/actions as before
-/// (best-coupon highlighting, apply/remove, payment-offer count) — only
-/// the shell is lighter, matching the flatter row style used across the
-/// rest of this redesign. No wallet row here: wallet selection is a
-/// payment-method decision, made on `CheckoutScreen`, not the cart.
+/// "Offers & Benefits" section — two compact single-line bordered rows
+/// (Apply Coupon, FreshCuts Wallet balance). Same underlying data/actions
+/// as before (best-coupon highlighting, apply/remove, real wallet balance
+/// and the same `useWallet` state `CheckoutScreen`'s own wallet stripe
+/// reads/writes) — only the shell is lighter and more compact.
 class CartOffersSection extends ConsumerWidget {
   const CartOffersSection({
     required this.onViewCoupons,
     super.key,
+    this.showWalletTile = false,
+    this.walletBalance = 0,
   });
 
   final VoidCallback? onViewCoupons;
 
+  /// Shown only when the admin allows wallet at all (even at zero balance —
+  /// same gate `CheckoutScreen` uses for its own wallet stripe).
+  final bool showWalletTile;
+  final double walletBalance;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final couponsAsync = ref.watch(availableCouponsProvider);
-    final offersAsync = ref.watch(paymentOffersProvider);
     final checkoutState = ref.watch(checkoutProvider);
     final subtotal = ref.read(checkoutProvider.notifier).subtotal;
 
     final coupons = couponsAsync.asData?.value ?? const <CouponEntity>[];
-    final offers = offersAsync.asData?.value ?? const <PaymentOfferEntity>[];
 
     final highlightedCoupon =
         checkoutState.appliedCoupon ?? _pickBestCoupon(coupons, subtotal);
@@ -65,9 +67,16 @@ class CartOffersSection extends ConsumerWidget {
                 ? () => ref.read(checkoutProvider.notifier).removeCoupon()
                 : null,
           ),
-          if (offers.isNotEmpty) ...<Widget>[
+          if (showWalletTile) ...<Widget>[
             Gap(10.h),
-            _PaymentOffersTile(count: offers.length, onTap: onViewCoupons),
+            CartWalletTile(
+              balance: walletBalance,
+              value: checkoutState.useWallet,
+              onChanged: walletBalance > 0
+                  ? (value) =>
+                      ref.read(checkoutProvider.notifier).setUseWallet(value)
+                  : null,
+            ),
           ],
         ],
       ),
@@ -91,9 +100,8 @@ class CartOffersSection extends ConsumerWidget {
   }
 }
 
-/// Reusable bordered row: coupon icon, dynamic headline ("Save ₹40 with
-/// WELCOME40" / "Add ₹X more to unlock" / "View all coupons"), Apply/Remove
-/// action.
+/// Compact single-line bordered row: green coupon icon, dynamic headline
+/// ("Save ₹40 with WELCOME40" / "Apply Coupon"), Apply/Remove action.
 class CartCouponTile extends StatelessWidget {
   const CartCouponTile({
     required this.coupon,
@@ -110,56 +118,66 @@ class CartCouponTile extends StatelessWidget {
   final VoidCallback? onTap;
   final VoidCallback? onRemove;
 
+  static const Color _green = Color(0xFF0AC26B);
+
   @override
   Widget build(BuildContext context) {
-    final title = coupon != null
-        ? 'Save ${coupon!.discountAmount.toInrCurrency} with ${coupon!.code}'
-        : 'Apply Coupon';
-    final subtitle = coupon != null
-        ? isApplied
-            ? 'Applied to this checkout'
+    final title = coupon == null
+        ? 'Apply Coupon'
+        : isApplied
+            ? 'Applied ${coupon!.code} — saved ${coupon!.discountAmount.toInrCurrency}'
             : subtotal >= coupon!.minOrderAmount
-                ? 'Ready for this basket'
-                : 'Add ${(coupon!.minOrderAmount - subtotal).toInrCurrency} more to unlock'
-        : 'Tap to browse live coupons';
+                ? 'Save ${coupon!.discountAmount.toInrCurrency} with ${coupon!.code}'
+                : 'Add ${(coupon!.minOrderAmount - subtotal).toInrCurrency} more to unlock ${coupon!.code}';
 
     return _OfferTile(
-      icon: Icons.local_offer_outlined,
-      iconColor: AppColors.primaryGreen,
-      iconBackground: AppColors.primaryGreenLight,
+      icon: Icons.sell_rounded,
+      iconColor: Colors.white,
+      iconBackground: _green,
+      borderColor: _green,
       title: title,
-      subtitle: subtitle,
+      titleColor: const Color(0xFF1A1A1A),
       onTap: onTap,
       trailing: isApplied
           ? _RemoveChip(onTap: onRemove)
           : Icon(
               Icons.chevron_right_rounded,
               size: 22.sp,
-              color: AppColors.textTertiary,
+              color: _green,
             ),
     );
   }
 }
 
-class _PaymentOffersTile extends StatelessWidget {
-  const _PaymentOffersTile({required this.count, this.onTap});
+/// Compact single-line bordered row: wallet icon, real balance, ON/OFF
+/// toggle. Wired to the exact same `useWallet` state `CheckoutScreen`'s own
+/// wallet stripe reads and writes — flipping it here changes the same real
+/// order math, not a separate/duplicate wallet flag.
+class CartWalletTile extends StatelessWidget {
+  const CartWalletTile({
+    required this.balance,
+    required this.value,
+    super.key,
+    this.onChanged,
+  });
 
-  final int count;
-  final VoidCallback? onTap;
+  final double balance;
+  final bool value;
+  final ValueChanged<bool>? onChanged;
 
   @override
   Widget build(BuildContext context) {
     return _OfferTile(
-      icon: Icons.credit_card_rounded,
-      iconColor: const Color(0xFF2B6CFF),
-      iconBackground: const Color(0xFFEAF1FF),
-      title: 'View payment offers',
-      subtitle: count == 1 ? '1 payment offer available' : '$count payment offers available',
-      onTap: onTap,
-      trailing: Icon(
-        Icons.chevron_right_rounded,
-        size: 22.sp,
-        color: AppColors.textTertiary,
+      icon: Icons.account_balance_wallet_outlined,
+      iconColor: const Color(0xFF555555),
+      iconBackground: const Color(0xFFF2F2F2),
+      borderColor: const Color(0xFFE2E2E2),
+      title: 'FreshCuts Wallet Balance: ${balance.toInrCurrency}',
+      titleColor: const Color(0xFF1A1A1A),
+      trailing: Switch(
+        value: value && balance > 0,
+        onChanged: onChanged,
+        activeThumbColor: AppColors.brandRed,
       ),
     );
   }
@@ -170,8 +188,9 @@ class _OfferTile extends StatelessWidget {
     required this.icon,
     required this.iconColor,
     required this.iconBackground,
+    required this.borderColor,
     required this.title,
-    required this.subtitle,
+    required this.titleColor,
     this.trailing,
     this.onTap,
   });
@@ -179,8 +198,9 @@ class _OfferTile extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
   final Color iconBackground;
+  final Color borderColor;
   final String title;
-  final String subtitle;
+  final Color titleColor;
   final Widget? trailing;
   final VoidCallback? onTap;
 
@@ -193,51 +213,34 @@ class _OfferTile extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(12.r),
         child: Container(
-          padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
+          padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 11.h),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12.r),
-            border: Border.all(color: const Color(0xFFEDEDED)),
+            border: Border.all(color: borderColor, width: 1.3),
           ),
           child: Row(
             children: <Widget>[
               Container(
-                width: 40.w,
-                height: 40.w,
+                width: 30.w,
+                height: 30.w,
                 decoration: BoxDecoration(
                   color: iconBackground,
-                  borderRadius: BorderRadius.circular(12.r),
+                  shape: BoxShape.circle,
                 ),
-                child: Icon(icon, size: 20.sp, color: iconColor),
+                child: Icon(icon, size: 15.sp, color: iconColor),
               ),
-              Gap(12.w),
+              Gap(10.w),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 13.5.sp,
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFF1A1A1A),
-                        fontFamily: 'Inter',
-                      ),
-                    ),
-                    Gap(2.h),
-                    Text(
-                      subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 12.sp,
-                        fontWeight: FontWeight.w400,
-                        color: const Color(0xFF888888),
-                        fontFamily: 'Inter',
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13.5.sp,
+                    fontWeight: FontWeight.w700,
+                    color: titleColor,
+                    fontFamily: 'Inter',
+                  ),
                 ),
               ),
               if (trailing != null) ...<Widget>[Gap(8.w), trailing!],

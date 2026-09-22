@@ -1,152 +1,133 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
-import 'package:bakaloo_flutter_app/features/cart/domain/entities/bill_summary_entity.dart';
+import 'package:bakaloo_flutter_app/features/checkout/domain/entities/coupon_entity.dart';
+import 'package:bakaloo_flutter_app/features/checkout/presentation/providers/checkout_provider.dart';
+import 'package:bakaloo_flutter_app/features/checkout/presentation/providers/coupon_provider.dart';
 
-/// Savings banner — "Yay! You saved ₹44 on this order" plus, when the
-/// backend has a genuine next reward to tease (a cart-milestone tier or the
-/// free-delivery threshold), a second line: "Shop for ₹34 more to save
-/// ₹50 | FREEDEL". Both numbers are real (never fabricated) — sourced
-/// straight from [BillSummaryEntity.cartMilestone]/[BillSummaryEntity.
-/// freeDelivery], the same fields the bill-summary card's own progress hint
-/// already uses.
-class CartSavingsBanner extends StatefulWidget {
-  const CartSavingsBanner({
-    required this.savingsTotal,
-    super.key,
-    this.nextRewardLabel,
-  });
+/// Savings banner — "You have saved ₹44!" plus, only when a real coupon is
+/// genuinely close to unlocking, a second line: "Shop for ₹34 more to save
+/// ₹50 | 20FLAT". Every number on both lines comes straight from cart/offer
+/// data (`billSummary.savings.total`, `availableCouponsProvider`,
+/// `checkoutProvider`'s live subtotal) — nothing here is hardcoded, and the
+/// second line simply doesn't render when there's no such coupon.
+class CartSavingsBanner extends ConsumerWidget {
+  const CartSavingsBanner({required this.savingsTotal, super.key});
 
   final double savingsTotal;
 
-  /// Pre-formatted "Shop for ₹X more to save ₹Y | CODE" style line — see
-  /// [CartSavingsBanner.nextRewardLabelFor] for how callers build it.
-  final String? nextRewardLabel;
-
-  /// Builds the second-line nudge from real bill-summary data: prefers the
-  /// next cart-milestone tier (admin-configured reward ladder) and falls
-  /// back to the free-delivery threshold when no milestone is configured.
-  /// Returns null when the cart already has nothing left to unlock.
-  static String? nextRewardLabelFor(BillSummaryEntity summary) {
-    final nextTier = summary.cartMilestone.next;
-    if (nextTier != null && nextTier.amountToUnlock > 0) {
-      final reward = nextTier.rewardType == 'CASHBACK'
-          ? 'cashback'
-          : nextTier.name.isNotEmpty
-              ? nextTier.name
-              : 'a reward';
-      return 'Shop for ₹${nextTier.amountToUnlock.toStringAsFixed(0)} more to unlock $reward';
-    }
-
-    final free = summary.freeDelivery;
-    if (free.enabled && !summary.deliveryFee.isFree && free.amountToUnlock > 0) {
-      return 'Shop for ₹${free.amountToUnlock.toStringAsFixed(0)} more for FREE delivery';
-    }
-
-    return null;
-  }
-
   @override
-  State<CartSavingsBanner> createState() => _CartSavingsBannerState();
-}
-
-class _CartSavingsBannerState extends State<CartSavingsBanner> {
-  bool _expanded = false;
-
-  @override
-  Widget build(BuildContext context) {
-    if (widget.savingsTotal <= 0) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (savingsTotal <= 0) {
       return const SizedBox.shrink();
     }
 
-    final nextReward = widget.nextRewardLabel;
+    final nextRewardLine = _nextCouponTease(ref);
 
-    return Material(
-      color: const Color(0xFFF0FFF4),
-      child: InkWell(
-        onTap: () {
-          setState(() {
-            _expanded = !_expanded;
-          });
-        },
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return Container(
+      width: double.infinity,
+      color: const Color(0xFFEAFBEF),
+      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Row(
             children: <Widget>[
-              Row(
-                children: <Widget>[
-                  Expanded(
-                    child: RichText(
-                      text: TextSpan(
-                        style: TextStyle(
-                          fontSize: 14.sp,
-                          fontWeight: FontWeight.w400,
-                          color: const Color(0xFF333333),
-                          fontFamily: 'Inter',
-                        ),
-                        children: <InlineSpan>[
-                          const TextSpan(text: 'Yay! You '),
-                          TextSpan(
-                            text:
-                                'saved ₹${widget.savingsTotal.toStringAsFixed(0)}',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF0AC26B),
-                              fontFamily: 'Inter',
-                            ),
-                          ),
-                          const TextSpan(text: ' on this order'),
-                        ],
-                      ),
-                    ),
-                  ),
-                  SizedBox(width: 12.w),
-                  Icon(
-                    _expanded
-                        ? Icons.keyboard_arrow_up_rounded
-                        : Icons.keyboard_arrow_down_rounded,
-                    size: 18.sp,
-                    color: const Color(0xFF0AC26B),
-                  ),
-                ],
+              Icon(
+                Icons.all_inclusive_rounded,
+                size: 18.sp,
+                color: const Color(0xFFFFA31A),
               ),
-              if (nextReward != null) ...<Widget>[
-                SizedBox(height: 4.h),
-                Text(
-                  nextReward,
-                  style: TextStyle(
-                    fontSize: 12.5.sp,
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFF1E7A3A),
-                    fontFamily: 'Inter',
-                  ),
-                ),
-              ],
-              AnimatedCrossFade(
-                duration: const Duration(milliseconds: 300),
-                crossFadeState: _expanded
-                    ? CrossFadeState.showSecond
-                    : CrossFadeState.showFirst,
-                firstChild: const SizedBox.shrink(),
-                secondChild: Padding(
-                  padding: EdgeInsets.only(top: 10.h),
-                  child: Text(
-                    'MRP discounts and waived fees are already reflected in your total.',
+              SizedBox(width: 8.w),
+              Expanded(
+                child: RichText(
+                  text: TextSpan(
                     style: TextStyle(
-                      fontSize: 12.sp,
-                      fontWeight: FontWeight.w400,
-                      color: const Color(0xFF4D4D4D),
-                      height: 1.4,
+                      fontSize: 14.sp,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF222222),
                       fontFamily: 'Inter',
                     ),
+                    children: <InlineSpan>[
+                      const TextSpan(text: 'You have saved '),
+                      TextSpan(
+                        text: '₹${savingsTotal.toStringAsFixed(0)}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF0AC26B),
+                        ),
+                      ),
+                      const TextSpan(text: '!'),
+                    ],
                   ),
                 ),
               ),
             ],
           ),
-        ),
+          if (nextRewardLine != null) ...<Widget>[
+            SizedBox(height: 3.h),
+            Padding(
+              padding: EdgeInsets.only(left: 26.w),
+              child: Text(
+                nextRewardLine,
+                style: TextStyle(
+                  fontSize: 12.5.sp,
+                  fontWeight: FontWeight.w500,
+                  color: const Color(0xFF444444),
+                  fontFamily: 'Inter',
+                ),
+              ),
+            ),
+          ],
+        ],
       ),
     );
+  }
+
+  /// "Shop for ₹X more to save ₹Y | CODE" — built from the nearest coupon
+  /// the customer hasn't unlocked yet (smallest shortfall to its
+  /// `minOrderAmount`, ties broken by the larger discount). Cashback/
+  /// free-delivery coupons (`discountAmount == 0`) don't fit the "save ₹Y"
+  /// phrasing, so they're excluded; an already-applied coupon has nothing
+  /// left to tease. Returns null — hiding the line entirely — when no such
+  /// coupon exists.
+  String? _nextCouponTease(WidgetRef ref) {
+    final coupons = ref.watch(availableCouponsProvider).asData?.value ??
+        const <CouponEntity>[];
+    if (coupons.isEmpty) {
+      return null;
+    }
+
+    final appliedCode = ref.watch(
+      checkoutProvider.select((s) => s.appliedCoupon?.code),
+    );
+    final subtotal = ref.watch(checkoutProvider.notifier).subtotal;
+
+    CouponEntity? best;
+    double bestShortfall = double.infinity;
+    for (final coupon in coupons) {
+      if (coupon.code == appliedCode || coupon.discountAmount <= 0) {
+        continue;
+      }
+      final shortfall = coupon.minOrderAmount - subtotal;
+      if (shortfall <= 0) {
+        continue;
+      }
+      if (shortfall < bestShortfall ||
+          (shortfall == bestShortfall &&
+              (best == null || coupon.discountAmount > best.discountAmount))) {
+        best = coupon;
+        bestShortfall = shortfall;
+      }
+    }
+
+    if (best == null) {
+      return null;
+    }
+
+    return 'Shop for ₹${bestShortfall.toStringAsFixed(0)} more to save '
+        '₹${best.discountAmount.toStringAsFixed(0)} | ${best.code}';
   }
 }
