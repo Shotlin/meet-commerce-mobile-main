@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
+import 'package:bakaloo_flutter_app/features/addresses/domain/entities/address_entity.dart';
+
 class CartBottomBar extends StatelessWidget {
   const CartBottomBar({
     required this.hasAddress,
@@ -24,11 +26,20 @@ class CartBottomBar extends StatelessWidget {
     this.onToggleWallet,
     this.onAddMoney,
     this.onPayFullWallet,
+    this.selectedAddress,
+    this.onEditAddress,
   });
 
   final bool hasAddress;
   final double toPay;
   final VoidCallback? onAddAddress;
+
+  /// The address this order will ship to — shown as a compact "Home,
+  /// {address}" strip above the payment buttons, same address
+  /// `CartAddressHeader` (top of the scroll) lets the customer change.
+  /// Null hides the strip (nothing selected yet).
+  final AddressEntity? selectedAddress;
+  final VoidCallback? onEditAddress;
 
   /// Whether the address `hasAddress` refers to has House No./Building
   /// filled in — customers can now get this far with an address that only
@@ -99,33 +110,44 @@ class CartBottomBar extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20.r)),
           border: const Border(
             top: BorderSide(color: Color(0xFFF0F0F0)),
           ),
-          boxShadow: _readyForPayment
-              ? const <BoxShadow>[
-                  BoxShadow(
-                    color: Color(0x14000000),
-                    blurRadius: 18,
-                    offset: Offset(0, -6),
-                  ),
-                ]
-              : null,
+          boxShadow: <BoxShadow>[
+            BoxShadow(
+              color: Colors.black.withValues(alpha: _readyForPayment ? 0.08 : 0.05),
+              blurRadius: 20,
+              offset: const Offset(0, -6),
+            ),
+          ],
         ),
         padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 12.h),
-        child: _readyForPayment
-            ? _buildPaymentState()
-            : (hasAddress
-                ? _buildPinkCta(
-                    label: 'Complete Your Address',
-                    onPressed: onCompleteAddress,
-                  )
-                : (isLocationNotServiceable
-                    ? _buildNotServiceableState()
-                    : _buildPinkCta(
-                        label: 'Add Address to Proceed',
-                        onPressed: onAddAddress,
-                      ))),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            if (selectedAddress != null) ...<Widget>[
+              _MiniAddressStrip(
+                address: selectedAddress!,
+                onTap: onEditAddress,
+              ),
+              SizedBox(height: 10.h),
+            ],
+            _readyForPayment
+                ? _buildPaymentState()
+                : (hasAddress
+                    ? _buildPinkCta(
+                        label: 'Complete Your Address',
+                        onPressed: onCompleteAddress,
+                      )
+                    : (isLocationNotServiceable
+                        ? _buildNotServiceableState()
+                        : _buildPinkCta(
+                            label: 'Add Address to Proceed',
+                            onPressed: onAddAddress,
+                          ))),
+          ],
+        ),
       ),
     );
   }
@@ -393,6 +415,82 @@ class CartBottomBar extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Compact "Home, {address preview}" strip pinned above the payment
+/// buttons — the sticky-dock equivalent of the fuller `CartAddressHeader`
+/// card at the top of the scroll. Tapping it opens the same address list.
+class _MiniAddressStrip extends StatelessWidget {
+  const _MiniAddressStrip({required this.address, this.onTap});
+
+  final AddressEntity address;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = address.label.trim().isEmpty ? 'Address' : address.label;
+    final preview = <String>[
+      address.addressLine1,
+      if ((address.addressLine2 ?? '').trim().isNotEmpty)
+        address.addressLine2!.trim(),
+      address.city,
+    ].join(', ');
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12.r),
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 4.h),
+          child: Row(
+            children: <Widget>[
+              Icon(
+                Icons.home_rounded,
+                size: 16.sp,
+                color: const Color(0xFF666666),
+              ),
+              SizedBox(width: 8.w),
+              Expanded(
+                child: Text.rich(
+                  TextSpan(
+                    children: <InlineSpan>[
+                      TextSpan(
+                        text: '$label, ',
+                        style: TextStyle(
+                          fontSize: 12.5.sp,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF222222),
+                          fontFamily: 'Inter',
+                        ),
+                      ),
+                      TextSpan(
+                        text: preview,
+                        style: TextStyle(
+                          fontSize: 12.5.sp,
+                          fontWeight: FontWeight.w400,
+                          color: const Color(0xFF888888),
+                          fontFamily: 'Inter',
+                        ),
+                      ),
+                    ],
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              SizedBox(width: 8.w),
+              Icon(
+                Icons.edit_outlined,
+                size: 15.sp,
+                color: const Color(0xFF999999),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

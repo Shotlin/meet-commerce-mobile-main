@@ -67,35 +67,78 @@ class CartGstInvoice extends StatelessWidget {
   }
 }
 
-class CartCancellationPolicy extends StatelessWidget {
-  const CartCancellationPolicy({super.key});
+/// Titled "Policies" section — three bullet points covering the same real
+/// rules the previous single-paragraph `CartCancellationPolicy` stated
+/// (item/quantity changes, cancellation-after-packing, and rescheduling),
+/// just laid out to match a scannable bullet list instead of one paragraph.
+class CartPoliciesSection extends StatelessWidget {
+  const CartPoliciesSection({super.key});
+
+  static const List<String> _bullets = <String>[
+    'Item or quantity changes aren\'t possible after you place your '
+        'order — please review your cart carefully before checkout.',
+    'Orders can be cancelled any time before they\'re packed for '
+        'delivery. Once packed, cancellation may not be possible; any '
+        'eligible refund is processed automatically.',
+    'You can reschedule your delivery slot any time before it\'s '
+        'dispatched — use "Change Slot" above.',
+  ];
 
   @override
   Widget build(BuildContext context) {
     return Container(
       color: Colors.white,
-      padding: EdgeInsets.fromLTRB(16.w, 14.h, 16.w, 14.h),
-      child: Row(
+      width: double.infinity,
+      padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 18.h),
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Icon(
-            Icons.info_outline_rounded,
-            size: 18.sp,
-            color: const Color(0xFF8A8A8A),
-          ),
-          SizedBox(width: 10.w),
-          Expanded(
-            child: Text(
-              'Orders cannot be cancelled after they are packed for delivery. If there is an unexpected delay, any applicable refund will be processed.',
-              style: TextStyle(
-                fontSize: 12.sp,
-                fontWeight: FontWeight.w400,
-                color: const Color(0xFF777777),
-                height: 1.45,
-                fontFamily: 'Inter',
-              ),
+          Text(
+            'Policies',
+            style: TextStyle(
+              fontSize: 15.sp,
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFF1A1A1A),
+              fontFamily: 'Inter',
             ),
           ),
+          SizedBox(height: 10.h),
+          ...List<Widget>.generate(_bullets.length, (index) {
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: index == _bullets.length - 1 ? 0 : 8.h,
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Padding(
+                    padding: EdgeInsets.only(top: 6.h),
+                    child: Container(
+                      width: 4.w,
+                      height: 4.w,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF999999),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 10.w),
+                  Expanded(
+                    child: Text(
+                      _bullets[index],
+                      style: TextStyle(
+                        fontSize: 12.sp,
+                        fontWeight: FontWeight.w400,
+                        color: const Color(0xFF777777),
+                        height: 1.45,
+                        fontFamily: 'Inter',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
         ],
       ),
     );

@@ -181,8 +181,17 @@ LayoutClaim<TabThemesResponse> claimTheme(
   );
 }
 
-void markThemeStale({String? storeKey}) => _themeMemory.markStale(
-      (String id) => storeKey == null || id.split('|').first == storeKey,
+/// `shopId`, when given, narrows to exactly that shop (id format is
+/// `storeKey|shopScope`) — used when a dashboard event names the specific
+/// shop it was about, so an edit to Kolkata's theme does not mark a Delhi
+/// customer's cached theme stale too.
+void markThemeStale({String? storeKey, String? shopId}) =>
+    _themeMemory.markStale(
+      (String id) {
+        final List<String> parts = id.split('|');
+        return (storeKey == null || parts[0] == storeKey) &&
+            (shopId == null || parts[1] == shopId);
+      },
     );
 
 // ─── Tab-home content (products for sections that carry none) ────────────────
@@ -258,10 +267,12 @@ LayoutClaim<TabHomeContentResponse> claimTabHome(
   );
 }
 
-void markTabHomeStale({String? storeKey, String? tabKey}) =>
+/// `shopId`, when given, narrows to exactly that shop — see [markThemeStale].
+void markTabHomeStale({String? storeKey, String? shopId, String? tabKey}) =>
     _tabHomeMemory.markStale((String id) {
       final List<String> parts = id.split('|');
-      return (storeKey == null || parts.first == storeKey) &&
+      return (storeKey == null || parts[0] == storeKey) &&
+          (shopId == null || parts[1] == shopId) &&
           (tabKey == null || parts.last == tabKey);
     });
 
@@ -288,9 +299,8 @@ final activeThemeKeyProvider = Provider<ThemeScopeKey>((Ref ref) {
 /// the CHANGED key rebuilds — there is no global epoch that rebuilds (and
 /// re-fetches) every family member.
 void _rebuildOnChange(Ref ref, String changeId) {
-  final StreamSubscription<String> sub = layoutChanges.stream
-      .where((String id) => id == changeId)
-      .listen((_) {
+  final StreamSubscription<String> sub =
+      layoutChanges.stream.where((String id) => id == changeId).listen((_) {
     if (ref.mounted) {
       ref.invalidateSelf();
     }
@@ -301,8 +311,8 @@ void _rebuildOnChange(Ref ref, String changeId) {
 final Map<String, int> _themeRetries = <String, int>{};
 const int _maxFirstLoadRetries = 3;
 
-final tabThemesForStoreProvider =
-    FutureProvider.autoDispose.family<TabThemesResponse, ThemeScopeKey>(
+final tabThemesForStoreProvider = FutureProvider.autoDispose
+    .family<TabThemesResponse, ThemeScopeKey>(
         (Ref ref, ThemeScopeKey key) async {
   if (key.isUnresolved) {
     // No shop resolved yet (a guest that has not been located, an account

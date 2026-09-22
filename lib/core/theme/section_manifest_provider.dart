@@ -110,10 +110,15 @@ LayoutClaim<SectionManifestResponse> claimSections(
   );
 }
 
-void markSectionsStale({String? storeKey, String? tabKey}) =>
+/// `shopId`, when given, narrows to exactly that shop (id format is
+/// `storeKey|shopScope|priceMode|tabKey`) — used when a dashboard event names
+/// the specific shop it was about, so an edit to Kolkata's theme does not mark
+/// a Delhi customer's cached sections stale too.
+void markSectionsStale({String? storeKey, String? shopId, String? tabKey}) =>
     _sectionMemory.markStale((String id) {
       final List<String> parts = id.split('|');
-      return (storeKey == null || parts.first == storeKey) &&
+      return (storeKey == null || parts[0] == storeKey) &&
+          (shopId == null || parts[1] == shopId) &&
           (tabKey == null || parts.last == tabKey);
     });
 
@@ -305,25 +310,44 @@ class StorefrontSync {
 
   /// Dashboard changed a theme. Marks that storefront's held content stale (it
   /// keeps rendering) and, when it is the visible one, refreshes it.
+  ///
+  /// `shopId` in the event (when present) names the ONE shop the edit was
+  /// for — a null `event_shop_id` means the shop-less/global theme changed,
+  /// which can cascade to any shop without its own override, so that case is
+  /// never narrowed. A concrete `event_shop_id` that does not match this
+  /// device's own shop means the edit cannot possibly affect what is on
+  /// screen here, so no revalidation is scheduled — this is what keeps one
+  /// shop's edit from causing every OTHER shop's connected app (same store
+  /// type) to re-fetch.
   void onThemeEvent(Map<String, dynamic> data) {
-    final String current = _ref.read(storefrontScopeProvider).storeKey;
-    final String storeKey = _readString(data['storeKey'] ?? data['store_key']) ??
-        current;
-    markThemeStale(storeKey: storeKey);
-    if (storeKey == current) {
-      _scheduleRevalidate();
+    final StorefrontScope scope = _ref.read(storefrontScopeProvider);
+    final String storeKey =
+        _readString(data['storeKey'] ?? data['store_key']) ?? scope.storeKey;
+    final String? eventShopId = _readString(data['shopId'] ?? data['shop_id']);
+    markThemeStale(storeKey: storeKey, shopId: eventShopId);
+    if (storeKey != scope.storeKey) {
+      return;
     }
+    if (eventShopId != null && eventShopId != scope.shopScope) {
+      return;
+    }
+    _scheduleRevalidate();
   }
 
-  /// Dashboard changed a tab's sections.
+  /// Dashboard changed a tab's sections. See [onThemeEvent] for the shopId
+  /// narrowing rule.
   void onSectionEvent(Map<String, dynamic> data) {
-    final String current = _ref.read(storefrontScopeProvider).storeKey;
-    final String storeKey = _readString(data['storeKey'] ?? data['store_key']) ??
-        current;
+    final StorefrontScope scope = _ref.read(storefrontScopeProvider);
+    final String storeKey =
+        _readString(data['storeKey'] ?? data['store_key']) ?? scope.storeKey;
+    final String? eventShopId = _readString(data['shopId'] ?? data['shop_id']);
     final String? tabKey = _readString(data['tab_key'] ?? data['tabKey']);
-    markSectionsStale(storeKey: storeKey, tabKey: tabKey);
-    markTabHomeStale(storeKey: storeKey, tabKey: tabKey);
-    if (storeKey != current) {
+    markSectionsStale(storeKey: storeKey, shopId: eventShopId, tabKey: tabKey);
+    markTabHomeStale(storeKey: storeKey, shopId: eventShopId, tabKey: tabKey);
+    if (storeKey != scope.storeKey) {
+      return;
+    }
+    if (eventShopId != null && eventShopId != scope.shopScope) {
       return;
     }
     if (tabKey == null || tabKey == _ref.read(activeTabKeyProvider)) {

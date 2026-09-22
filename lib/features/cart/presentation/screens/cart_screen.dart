@@ -21,13 +21,14 @@ import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/add_to_wi
 import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_address_header.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_bill_summary.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_bottom_bar.dart';
-import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_coupons_offers.dart';
-import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_delivery_header.dart';
+import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_delivery_groups.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_first_time_offer_teaser.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_item_card.dart';
+import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_membership_upsell_card.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_misc_widgets.dart';
+import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_offers_section.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_ordering_for.dart';
-import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_quick_add_section.dart';
+import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_recommendations_section.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_savings_banner.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_savings_breakdown.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_tip_section.dart';
@@ -205,6 +206,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
               // (quantity change, coupon apply, etc.) keeps showing
               // accurate figures instead of a stale-guess-then-jump.
               billSummary: lastKnownSummary ?? displayBillSummary,
+              walletBalance: walletBalance,
             ),
           );
         },
@@ -255,6 +257,8 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                   : () => _completeAddress(context, selectedAddress),
               onPayOnline: () => _handlePayOnline(context),
               onCod: () => _handleCod(context),
+              selectedAddress: selectedAddress,
+              onEditAddress: () => _openAddressList(context),
             ),
     );
   }
@@ -328,6 +332,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     required bool hasAddress,
     required AsyncValue<BillSummaryEntity> billSummaryAsync,
     required BillSummaryEntity billSummary,
+    required double walletBalance,
   }) {
     final savingsTotal = billSummary.savings.total;
     final estimateMinutes = billSummary.deliveryEstimate.minutes;
@@ -347,43 +352,50 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     if (savingsTotal > 0) {
       widgets.add(
         RepaintBoundary(
-          child: CartSavingsBanner(savingsTotal: savingsTotal),
+          child: CartSavingsBanner(
+            savingsTotal: savingsTotal,
+            nextRewardLabel: CartSavingsBanner.nextRewardLabelFor(billSummary),
+          ),
         ),
       );
     }
 
-    widgets.add(
-      RepaintBoundary(
-        child: _buildDeliveryHeader(
-          context: context,
-          estimateMinutes: estimateMinutes,
-          itemCount: cart.itemCount,
-        ),
+    widgets.addAll(
+      _buildDeliveryGroups(
+        context: context,
+        items: cart.items,
+        estimateMinutes: estimateMinutes,
       ),
     );
-    widgets.add(const CartSectionDivider());
+    widgets.add(SizedBox(height: 12.h));
 
-    widgets.addAll(_buildItemCards(context, cart.items));
-    widgets.add(const CartSectionDivider());
+    if (CartMembershipUpsellCard.isEligible(billSummary)) {
+      widgets.add(
+        RepaintBoundary(
+          child: CartMembershipUpsellCard(
+            summary: billSummary,
+            onShopMore: () => context.go(RouteNames.home),
+          ),
+        ),
+      );
+    }
 
     // Divider is bundled inside the section itself (not added here) since
     // whether it has anything to show is only known once the async
-    // suggestions load — see CartQuickAddSection.
-    widgets.add(const RepaintBoundary(child: CartQuickAddSection()));
+    // suggestions load — see CartRecommendationsSection.
+    widgets.add(const RepaintBoundary(child: CartRecommendationsSection()));
 
     widgets.add(const RepaintBoundary(child: CartTipSection()));
 
     if (hasAddress) {
       widgets.add(const CartSectionDivider());
       widgets.add(const RepaintBoundary(child: CartOrderingFor()));
-      widgets.add(const CartSectionDivider());
-      widgets.add(const RepaintBoundary(child: CartCancellationPolicy()));
     }
 
     widgets.add(const CartSectionDivider());
     widgets.add(
       RepaintBoundary(
-        child: CartCouponsOffers(
+        child: CartOffersSection(
           onViewCoupons: () {
             Navigator.of(context).push<void>(
               MaterialPageRoute<void>(
@@ -391,6 +403,13 @@ class _CartScreenState extends ConsumerState<CartScreen> {
               ),
             );
           },
+          showWalletTile: billSummary.paymentMethods.wallet.enabled,
+          walletBalance: walletBalance,
+          useWallet: ref.watch(
+            checkoutProvider.select((s) => s.useWallet),
+          ),
+          onToggleWallet: (value) =>
+              ref.read(checkoutProvider.notifier).setUseWallet(value),
         ),
       ),
     );
@@ -435,6 +454,9 @@ class _CartScreenState extends ConsumerState<CartScreen> {
         ),
       );
     }
+
+    widgets.add(const CartSectionDivider());
+    widgets.add(const RepaintBoundary(child: CartPoliciesSection()));
 
     widgets.add(SizedBox(height: 110.h));
 
@@ -570,11 +592,37 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     );
   }
 
-  Widget _buildDeliveryHeader({
+  /// Splits the cart into one or more delivery groups and renders each as
+  /// a [CartDeliveryGroupCard]. The overwhelming majority of carts ship as
+  /// a single group (the cart's one real ASAP/Scheduled preference); a
+  /// second, informational-only group appears only when an item genuinely
+  /// carries its own, distinctly longer [CartItemEntity.displayDeliveryMinutes]
+  /// than the cart's usual estimate — real per-item data already returned
+  /// by the backend, never a fabricated split.
+  List<Widget> _buildDeliveryGroups({
     required BuildContext context,
+    required List<CartItemEntity> items,
     required int estimateMinutes,
-    required int itemCount,
   }) {
+    final primaryItems = <CartItemEntity>[];
+    final laterItems = <CartItemEntity>[];
+    for (final item in items) {
+      final itemMinutes = item.displayDeliveryMinutes;
+      if (itemMinutes != null && itemMinutes > estimateMinutes + 15) {
+        laterItems.add(item);
+      } else {
+        primaryItems.add(item);
+      }
+    }
+
+    final groups = <List<CartItemEntity>>[
+      if (primaryItems.isNotEmpty) primaryItems,
+      if (laterItems.isNotEmpty) laterItems,
+    ];
+    if (groups.isEmpty) {
+      return const <Widget>[];
+    }
+
     final selectedSlot = ref.watch(
       checkoutProvider.select((s) => s.selectedDeliverySlot),
     );
@@ -598,15 +646,41 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       }
     }
 
-    return CartDeliveryHeader(
-      estimateMinutes: estimateMinutes,
-      itemCount: itemCount,
-      selectedSlot: effectiveSlot,
-      nextAvailableLabel: nextAvailableLabel,
-      onScheduleTap: () => _openScheduleSheet(context, initialScheduled: true),
-      onExpressTap: () => _openScheduleSheet(context, initialScheduled: false),
-      onViewHoursTap: () => StoreHoursSheet.show(context),
-    );
+    final widgets = <Widget>[
+      if (groups.length > 1)
+        RepaintBoundary(child: CartDeliveryGroupsHeading(groupCount: groups.length)),
+    ];
+
+    for (var i = 0; i < groups.length; i++) {
+      final groupItems = groups[i];
+      final isPrimaryGroup = i == 0 && primaryItems.isNotEmpty;
+      final groupItemCount =
+          groupItems.fold<int>(0, (sum, item) => sum + item.quantity);
+
+      widgets.add(
+        RepaintBoundary(
+          child: CartDeliveryGroupCard.fromSlot(
+            estimateMinutes: isPrimaryGroup
+                ? estimateMinutes
+                : (groupItems.first.displayDeliveryMinutes ?? estimateMinutes),
+            itemCount: groupItemCount,
+            selectedSlot: isPrimaryGroup ? effectiveSlot : null,
+            nextAvailableLabel: isPrimaryGroup ? nextAvailableLabel : null,
+            onScheduleTap: isPrimaryGroup
+                ? () => _openScheduleSheet(context, initialScheduled: true)
+                : null,
+            onExpressTap: isPrimaryGroup
+                ? () => _openScheduleSheet(context, initialScheduled: false)
+                : null,
+            onViewHoursTap:
+                isPrimaryGroup ? () => StoreHoursSheet.show(context) : null,
+            itemRows: _buildItemCards(context, groupItems),
+          ),
+        ),
+      );
+    }
+
+    return widgets;
   }
 
   Future<void> _openScheduleSheet(
