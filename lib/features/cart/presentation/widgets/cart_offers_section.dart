@@ -12,29 +12,18 @@ import 'package:bakaloo_flutter_app/features/checkout/presentation/providers/che
 import 'package:bakaloo_flutter_app/features/checkout/presentation/providers/coupon_provider.dart';
 
 /// "Offers & Benefits" section — a titled group of simple bordered rows
-/// (Apply Coupon, Wallet balance, Payment offers), replacing the previous
-/// single dense card. Same underlying data/actions as before (best-coupon
-/// highlighting, apply/remove, payment-offer count) — only the shell is
-/// lighter, matching the flatter row style used across the rest of this
-/// redesign.
+/// (Apply Coupon, Payment offers). Same underlying data/actions as before
+/// (best-coupon highlighting, apply/remove, payment-offer count) — only
+/// the shell is lighter, matching the flatter row style used across the
+/// rest of this redesign. No wallet row here: wallet selection is a
+/// payment-method decision, made on `CheckoutScreen`, not the cart.
 class CartOffersSection extends ConsumerWidget {
   const CartOffersSection({
     required this.onViewCoupons,
     super.key,
-    this.showWalletTile = false,
-    this.walletBalance = 0,
-    this.useWallet = false,
-    this.onToggleWallet,
   });
 
   final VoidCallback? onViewCoupons;
-
-  /// Same gate as the bottom bar's wallet stripe (`showWalletStripe` in
-  /// cart_screen.dart) — shown only when the admin allows wallet at all.
-  final bool showWalletTile;
-  final double walletBalance;
-  final bool useWallet;
-  final ValueChanged<bool>? onToggleWallet;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -76,14 +65,6 @@ class CartOffersSection extends ConsumerWidget {
                 ? () => ref.read(checkoutProvider.notifier).removeCoupon()
                 : null,
           ),
-          if (showWalletTile) ...<Widget>[
-            Gap(10.h),
-            CartWalletTile(
-              balance: walletBalance,
-              value: useWallet,
-              onChanged: onToggleWallet,
-            ),
-          ],
           if (offers.isNotEmpty) ...<Widget>[
             Gap(10.h),
             _PaymentOffersTile(count: offers.length, onTap: onViewCoupons),
@@ -160,41 +141,6 @@ class CartCouponTile extends StatelessWidget {
   }
 }
 
-/// Reusable bordered row: wallet icon, balance line, toggle switch — the
-/// in-body equivalent of the sticky bottom bar's wallet stripe (same
-/// `useWallet`/`onToggleWallet` state), for a customer scrolling the page
-/// rather than looking at the checkout dock.
-class CartWalletTile extends StatelessWidget {
-  const CartWalletTile({
-    required this.balance,
-    required this.value,
-    super.key,
-    this.onChanged,
-  });
-
-  final double balance;
-  final bool value;
-  final ValueChanged<bool>? onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return _OfferTile(
-      icon: Icons.account_balance_wallet_outlined,
-      iconColor: AppColors.brandRed,
-      iconBackground: AppColors.brandRedSurface,
-      title: 'FreshCuts Wallet Balance: ${balance.toInrCurrency}',
-      subtitle: balance > 0
-          ? 'Use wallet balance for this order'
-          : 'Top up to pay faster next time',
-      trailing: Switch(
-        value: value && balance > 0,
-        onChanged: balance > 0 ? onChanged : null,
-        activeThumbColor: AppColors.brandRed,
-      ),
-    );
-  }
-}
-
 class _PaymentOffersTile extends StatelessWidget {
   const _PaymentOffersTile({required this.count, this.onTap});
 
@@ -242,14 +188,14 @@ class _OfferTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(14.r),
+      borderRadius: BorderRadius.circular(12.r),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(14.r),
+        borderRadius: BorderRadius.circular(12.r),
         child: Container(
-          padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 12.h),
+          padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14.r),
+            borderRadius: BorderRadius.circular(12.r),
             border: Border.all(color: const Color(0xFFEDEDED)),
           ),
           child: Row(

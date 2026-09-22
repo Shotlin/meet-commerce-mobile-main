@@ -6,6 +6,11 @@ import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
 import 'package:bakaloo_flutter_app/features/cart/domain/entities/cart_item_entity.dart';
 
+/// A single cart-item row: image, name/pack on the left, price + stepper
+/// stacked on the right. Price is shown exactly once (the real unit price,
+/// struck-through MRP + discounted price — never a computed line total),
+/// and there is no per-item delivery-time line: that belongs to the
+/// delivery box this row sits inside (see cart_delivery_groups.dart).
 class CartItemCard extends StatelessWidget {
   const CartItemCard({
     required this.item,
@@ -51,17 +56,17 @@ class CartItemCard extends StatelessWidget {
       ),
       child: Container(
         color: Colors.white,
-        padding: EdgeInsets.fromLTRB(16.w, 14.h, 16.w, 14.h),
+        padding: EdgeInsets.fromLTRB(14.w, 11.h, 14.w, 11.h),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: <Widget>[
             Opacity(
               opacity: outOfStock ? 0.45 : 1,
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(8.r),
+                borderRadius: BorderRadius.circular(9.r),
                 child: SizedBox(
-                  width: 64.w,
-                  height: 64.w,
+                  width: 72.w,
+                  height: 72.w,
                   child:
                       item.thumbnailUrl != null && item.thumbnailUrl!.isNotEmpty
                           ? CachedNetworkImage(
@@ -96,6 +101,7 @@ class CartItemCard extends StatelessWidget {
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
                   Text(
                     item.name,
@@ -137,20 +143,20 @@ class CartItemCard extends StatelessWidget {
                     ),
                   if (item.optionLabel != null && item.optionLabel!.isNotEmpty)
                     Padding(
-                      padding: EdgeInsets.only(top: 2.h),
+                      padding: EdgeInsets.only(top: 3.h),
                       child: Text(
                         item.optionLabel!,
                         style: TextStyle(
-                          fontSize: 11.sp,
+                          fontSize: 12.sp,
                           fontWeight: FontWeight.w500,
-                          color: const Color(0xFF666666),
+                          color: const Color(0xFF888888),
                           fontFamily: 'Inter',
                         ),
                       ),
-                    ),
-                  if (item.optionLabel == null || item.optionLabel!.isEmpty)
+                    )
+                  else
                     Padding(
-                      padding: EdgeInsets.only(top: 4.h),
+                      padding: EdgeInsets.only(top: 3.h),
                       child: Text(
                         item.netQuantity ?? item.unit ?? '1 unit',
                         style: TextStyle(
@@ -161,105 +167,54 @@ class CartItemCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                  // Delivery time badge
-                  if (item.displayDeliveryMinutes != null &&
-                      item.displayDeliveryMinutes! > 0)
-                    Padding(
-                      padding: EdgeInsets.only(top: 5.h),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: <Widget>[
-                          Icon(
-                            Icons.access_time_rounded,
-                            size: 11.sp,
-                            color: const Color(0xFF0AC26B),
-                          ),
-                          SizedBox(width: 3.w),
-                          Text(
-                            '${item.displayDeliveryMinutes} mins delivery',
-                            style: TextStyle(
-                              fontSize: 11.sp,
-                              fontWeight: FontWeight.w500,
-                              color: const Color(0xFF0AC26B),
-                              fontFamily: 'Inter',
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  SizedBox(height: 10.h),
-                  Opacity(
-                    opacity: outOfStock ? 0.5 : 1,
-                    child: Row(
-                      children: <Widget>[
-                        if (hasDiscount) ...<Widget>[
-                          Text(
-                            '₹${item.price.toStringAsFixed(0)}',
-                            style: TextStyle(
-                              fontSize: 13.sp,
-                              fontWeight: FontWeight.w400,
-                              color: const Color(0xFF999999),
-                              decoration: TextDecoration.lineThrough,
-                              decorationColor: const Color(0xFF999999),
-                              fontFamily: 'Inter',
-                            ),
-                          ),
-                          SizedBox(width: 8.w),
-                        ],
-                        Text(
-                          '₹${effectivePrice.toStringAsFixed(0)}',
-                          style: TextStyle(
-                            fontSize: 14.sp,
-                            fontWeight: FontWeight.w700,
-                            color: const Color(0xFF0AC26B),
-                            fontFamily: 'Inter',
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                 ],
               ),
             ),
-            SizedBox(width: 12.w),
+            SizedBox(width: 10.w),
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
               children: <Widget>[
+                Opacity(
+                  opacity: outOfStock ? 0.5 : 1,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      if (hasDiscount) ...<Widget>[
+                        Text(
+                          '₹${item.price.toStringAsFixed(0)}',
+                          style: TextStyle(
+                            fontSize: 12.sp,
+                            fontWeight: FontWeight.w400,
+                            color: const Color(0xFF999999),
+                            decoration: TextDecoration.lineThrough,
+                            decorationColor: const Color(0xFF999999),
+                            fontFamily: 'Inter',
+                          ),
+                        ),
+                        SizedBox(width: 6.w),
+                      ],
+                      Text(
+                        outOfStock
+                            ? 'Not included'
+                            : '₹${effectivePrice.toStringAsFixed(0)}',
+                        style: TextStyle(
+                          fontSize: 13.5.sp,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF1A1A1A),
+                          fontFamily: 'Inter',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(height: 8.h),
                 _CartStepper(
                   quantity: item.quantity,
                   onDecrease: onDecrease,
                   onIncrease: onIncrease,
                   disableIncrease: disableIncrease,
                 ),
-                SizedBox(height: 12.h),
-                Opacity(
-                  opacity: outOfStock ? 0.5 : 1,
-                  child: Text(
-                    '₹${item.total.toStringAsFixed(0)}',
-                    style: TextStyle(
-                      fontSize: 13.sp,
-                      fontWeight: FontWeight.w700,
-                      color: const Color(0xFF222222),
-                      fontFamily: 'Inter',
-                      decoration: outOfStock
-                          ? TextDecoration.lineThrough
-                          : TextDecoration.none,
-                    ),
-                  ),
-                ),
-                if (outOfStock)
-                  Padding(
-                    padding: EdgeInsets.only(top: 2.h),
-                    child: Text(
-                      'Not included',
-                      style: TextStyle(
-                        fontSize: 10.sp,
-                        fontWeight: FontWeight.w500,
-                        color: const Color(0xFF999999),
-                        fontFamily: 'Inter',
-                      ),
-                    ),
-                  ),
               ],
             ),
           ],
@@ -269,10 +224,11 @@ class CartItemCard extends StatelessWidget {
   }
 }
 
-// ── Pill-shaped stepper  ─ [–] count [+]  ────────────────────────────────────
-// – button: light violet surface + violet icon
-// + button: solid violet fill + white icon
-// Both buttons share the same pill container with a count in the middle.
+// ── Box-shaped stepper  ─ [–] count [+]  ─────────────────────────────────
+// A single flat, bordered rectangle — no filled circular buttons. Minus
+// and plus are just colored glyphs on the same box, matching the
+// reference's plain outlined-box control rather than a pill of two
+// separately-colored round buttons.
 
 class _CartStepper extends StatelessWidget {
   const _CartStepper({
@@ -282,7 +238,7 @@ class _CartStepper extends StatelessWidget {
     this.disableIncrease = false,
   });
 
-  static const Color _brandRedSurface = Color(0xFFFBEAEA);
+  static const Color _borderColor = Color(0xFFF0C6C7);
 
   final int quantity;
   final VoidCallback onDecrease;
@@ -292,28 +248,27 @@ class _CartStepper extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 40.h,
+      height: 34.h,
       decoration: BoxDecoration(
-        color: _brandRedSurface,
-        borderRadius: BorderRadius.circular(50.r),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8.r),
+        border: Border.all(color: _borderColor, width: 1.3),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          // ── minus ─────────────────────────────────────────────────────────
           _StepButton(
-            icon: Icons.remove_rounded,
+            label: '−',
             onPressed: onDecrease,
-            isFilled: false,
           ),
-          // ── count ─────────────────────────────────────────────────────────
+          Container(width: 1, height: 18.h, color: _borderColor),
           SizedBox(
-            width: 28.w,
+            width: 30.w,
             child: Text(
               '$quantity',
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 15.sp,
+                fontSize: 14.sp,
                 fontWeight: FontWeight.w700,
                 color: const Color(0xFF1A1A1A),
                 fontFamily: 'Inter',
@@ -321,11 +276,10 @@ class _CartStepper extends StatelessWidget {
               ),
             ),
           ),
-          // ── plus ──────────────────────────────────────────────────────────
+          Container(width: 1, height: 18.h, color: _borderColor),
           _StepButton(
-            icon: Icons.add_rounded,
+            label: '+',
             onPressed: onIncrease,
-            isFilled: true,
             disabled: disableIncrease,
           ),
         ],
@@ -334,59 +288,39 @@ class _CartStepper extends StatelessWidget {
   }
 }
 
-class _StepButton extends StatefulWidget {
+class _StepButton extends StatelessWidget {
   const _StepButton({
-    required this.icon,
+    required this.label,
     required this.onPressed,
-    required this.isFilled,
     this.disabled = false,
   });
 
-  final IconData icon;
+  static const Color _brandRed = Color(0xFFD02428);
+
+  final String label;
   final VoidCallback onPressed;
-  final bool isFilled; // true = solid violet (+), false = ghost (–)
-  // Purely visual — onPressed always stays wired so a stale cache can
-  // still be caught (and toasted) at the call site instead of the tap
-  // silently doing nothing.
   final bool disabled;
 
   @override
-  State<_StepButton> createState() => _StepButtonState();
-}
-
-class _StepButtonState extends State<_StepButton> {
-  double _scale = 1;
-
-  static const Color _brandRed = Color(0xFFD02428);
-  static const Color _brandRedSurface = Color(0xFFFBEAEA);
-
-  @override
   Widget build(BuildContext context) {
-    return AnimatedScale(
-      scale: _scale,
-      duration: const Duration(milliseconds: 90),
-      curve: Curves.easeOut,
-      child: GestureDetector(
-        onTapDown:
-            widget.disabled ? null : (_) => setState(() => _scale = 0.88),
-        onTapUp: (_) {
-          setState(() => _scale = 1);
-          widget.onPressed();
-        },
-        onTapCancel: () => setState(() => _scale = 1),
-        child: Opacity(
-          opacity: widget.disabled ? 0.4 : 1,
-          child: Container(
-            width: 40.h,
-            height: 40.h,
-            decoration: BoxDecoration(
-              color: widget.isFilled ? _brandRed : _brandRedSurface,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              widget.icon,
-              size: 18.sp,
-              color: widget.isFilled ? Colors.white : _brandRed,
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: disabled ? null : onPressed,
+      child: Opacity(
+        opacity: disabled ? 0.35 : 1,
+        child: SizedBox(
+          width: 32.w,
+          height: 34.h,
+          child: Center(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 17.sp,
+                fontWeight: FontWeight.w700,
+                color: _brandRed,
+                fontFamily: 'Inter',
+                height: 1,
+              ),
             ),
           ),
         ),

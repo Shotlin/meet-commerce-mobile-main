@@ -1,15 +1,11 @@
 // ignore_for_file: cascade_invocations
 
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:bakaloo_flutter_app/features/addresses/domain/entities/address_entity.dart';
 import 'package:bakaloo_flutter_app/features/addresses/presentation/providers/address_provider.dart';
-import 'package:bakaloo_flutter_app/features/addresses/presentation/screens/add_edit_address_screen.dart';
 import 'package:bakaloo_flutter_app/features/cart/domain/entities/bill_summary_entity.dart';
 import 'package:bakaloo_flutter_app/features/cart/domain/entities/cart_entity.dart';
 import 'package:bakaloo_flutter_app/features/cart/domain/entities/cart_item_entity.dart';
@@ -18,17 +14,16 @@ import 'package:bakaloo_flutter_app/features/cart/presentation/providers/cart_en
 import 'package:bakaloo_flutter_app/features/cart/presentation/providers/cart_provider.dart';
 import 'package:bakaloo_flutter_app/core/providers/price_mode_provider.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/add_to_wishlist_prompt_sheet.dart';
-import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_address_header.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_bill_summary.dart';
-import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_bottom_bar.dart';
+import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_checkout_dock.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_delivery_groups.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_first_time_offer_teaser.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_item_card.dart';
-import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_membership_upsell_card.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_misc_widgets.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_offers_section.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_ordering_for.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_recommendations_section.dart';
+import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/schedule_delivery_sheet.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_savings_banner.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_savings_breakdown.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/cart_tip_section.dart';
@@ -39,16 +34,20 @@ import 'package:bakaloo_flutter_app/features/checkout/presentation/providers/che
 import 'package:bakaloo_flutter_app/features/checkout/presentation/providers/delivery_slot_provider.dart';
 import 'package:bakaloo_flutter_app/features/checkout/presentation/providers/store_status_provider.dart';
 import 'package:bakaloo_flutter_app/features/checkout/presentation/screens/coupons_screen.dart';
-import 'package:bakaloo_flutter_app/features/cart/presentation/widgets/schedule_delivery_sheet.dart';
-import 'package:bakaloo_flutter_app/features/checkout/presentation/widgets/store_hours_sheet.dart';
 import 'package:bakaloo_flutter_app/features/location/presentation/providers/non_serviceable_location_provider.dart';
-import 'package:bakaloo_flutter_app/features/wallet/presentation/providers/wallet_provider.dart';
 import 'package:bakaloo_flutter_app/features/wishlist/presentation/providers/wishlist_ids_provider.dart';
 import 'package:bakaloo_flutter_app/routing/route_names.dart';
 import 'package:bakaloo_flutter_app/shared/widgets/confirmation_dialog.dart';
 import 'package:bakaloo_flutter_app/shared/widgets/empty_state.dart';
 import 'package:bakaloo_flutter_app/shared/widgets/error_state.dart';
 
+/// Cart screen — a compact review-and-adjust page. It shows what's in the
+/// cart and lets the customer edit it (quantities, coupon, tip); it does
+/// NOT collect payment. Address is a compact display+edit affordance in the
+/// sticky dock only (no full address card in the scroll), and the dock's
+/// single CTA hands off to `CheckoutScreen` (`RouteNames.checkout`), which
+/// owns address completeness, delivery-slot changes, wallet, and payment
+/// method selection. See cart_checkout_dock.dart.
 class CartScreen extends ConsumerStatefulWidget {
   const CartScreen({super.key});
 
@@ -68,11 +67,6 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       // look at their cart — refresh on every visit so that shows up
       // promptly instead of only being discovered at a failed checkout.
       ref.read(cartProvider.notifier).refresh();
-      // Same reasoning for wallet: a balance change made outside this app
-      // (admin credit, refund, cashback) never invalidates the keepAlive
-      // walletProvider on its own — refetch on every visit to this screen,
-      // which shows (and can spend against) the wallet balance.
-      unawaited(ref.read(walletProvider.notifier).refreshWallet());
     });
   }
 
@@ -89,13 +83,6 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     // non_serviceable_location_provider.dart.
     final isLocationNotServiceable =
         !hasAddress && ref.watch(nonServiceableLocationProvider);
-    // House No./Building is no longer forced at app open (see
-    // home_screen.dart's _maybeShowLocationPrompt) — an address that only
-    // ever came from reverse geocoding can reach checkout with
-    // addressLine2 still empty. This is the one place that actually needs
-    // to block on it.
-    final hasCompleteAddress = hasAddress &&
-        (selectedAddress.addressLine2 ?? '').trim().isNotEmpty;
     final billSummaryAsync = ref.watch(billSummaryProvider);
     final billSummary = switch (billSummaryAsync) {
       AsyncData(:final value) => value,
@@ -104,60 +91,26 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     // AsyncValue.value keeps the last successfully-loaded summary visible
     // even while a new one is loading (e.g. after a quantity change),
     // unlike `billSummary` above which resets to null on every reload.
-    // Used for both payment-method flags (rarely change mid-session, so no
-    // reason to re-flash a loading state on every cart edit) and the "To
-    // Pay" figure below.
     //
-    // Reported bug: the bottom bar used to fall back to `cart.subtotal`
-    // (item total only — no delivery/platform fee, no coupon/first-time-
-    // offer discount) the instant `billSummary` went back to `AsyncLoading`
-    // on ANY reload, so every quantity change flashed a wrong, lower total
+    // Reported bug: the dock used to fall back to `cart.subtotal` (item
+    // total only — no delivery/platform fee, no coupon/first-time-offer
+    // discount) the instant `billSummary` went back to `AsyncLoading` on
+    // ANY reload, so every quantity change flashed a wrong, lower total
     // before correcting itself once the backend responded — "price
     // fluctuates" from the customer's point of view. The backend's
-    // TotalsEngine is the only source of truth for what a customer actually
-    // owes; a client-computed guess must never be shown as if it were that
-    // number. Now: show the last real backend total (still accurate for
-    // the cart as it stood a moment ago) while a fresher one loads, and
-    // only fall back to a genuine "calculating…" shimmer — never a
-    // fabricated number — on the true first load, when there's no real
-    // total yet at all.
+    // TotalsEngine is the only source of truth for what a customer
+    // actually owes; a client-computed guess must never be shown as if it
+    // were that number. Now: show the last real backend total (still
+    // accurate for the cart as it stood a moment ago) while a fresher one
+    // loads, and only fall back to a genuine "calculating…" shimmer —
+    // never a fabricated number — on the true first load, when there's no
+    // real total yet at all.
     final lastKnownSummary = billSummaryAsync.value;
     final displayBillSummary = _displayBillSummary(
       cart: cart,
       remoteSummary: billSummary,
     );
-    final summaryKnown = lastKnownSummary != null;
     final toPay = lastKnownSummary?.payable ?? displayBillSummary.payable;
-
-    // Wallet-balance toggle — a pure client-side derivation from two values
-    // already loaded here (walletProvider, billSummaryProvider), same
-    // approach as the full checkout screen's equivalent calculation. The
-    // actual charged amounts are independently and authoritatively computed
-    // server-side at order-creation time regardless of what this preview
-    // shows.
-    final walletAsync = ref.watch(walletProvider);
-    // `.value`, not `.asData?.value` — keeps showing the last known balance
-    // while a refetch is in flight instead of flashing to ₹0 (`.asData` is
-    // null during AsyncLoading even when it's carrying a previous value).
-    final walletBalance = walletAsync.value?.balance ?? 0.0;
-    final walletMethodEnabled =
-        lastKnownSummary?.paymentMethods.wallet.enabled ??
-            displayBillSummary.paymentMethods.wallet.enabled;
-    // Shown even at zero balance (as long as the admin allows wallet at
-    // all) — a customer who's never topped up otherwise never discovers
-    // this option exists. `_WalletToggleStripe` itself swaps the switch for
-    // an "Add Money" button whenever there's nothing to toggle on yet.
-    final showWalletStripe = walletMethodEnabled;
-    final canUseWallet = walletMethodEnabled && walletBalance > 0;
-    final useWallet = ref.watch(
-      checkoutProvider.select((s) => s.useWallet),
-    );
-    final walletApplied = (useWallet && canUseWallet)
-        ? (walletBalance < toPay ? walletBalance : toPay)
-        : 0.0;
-    final remainderToPay = toPay - walletApplied < 0
-        ? 0.0
-        : toPay - walletApplied;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
@@ -197,68 +150,28 @@ class _CartScreenState extends ConsumerState<CartScreen> {
             children: _buildSections(
               context: context,
               cart: resolvedCart,
-              selectedAddress: selectedAddress,
               hasAddress: hasAddress,
               billSummaryAsync: billSummaryAsync,
-              // Same "never show a fabricated number" rule as the bottom
-              // bar's `toPay`: prefer the last real backend total over the
+              // Same "never show a fabricated number" rule as the dock's
+              // `toPay`: prefer the last real backend total over the
               // client-guessed fallback whenever one exists, so a reload
               // (quantity change, coupon apply, etc.) keeps showing
               // accurate figures instead of a stale-guess-then-jump.
               billSummary: lastKnownSummary ?? displayBillSummary,
-              walletBalance: walletBalance,
             ),
           );
         },
       ),
       bottomNavigationBar: cart.isEmpty
           ? null
-          : CartBottomBar(
+          : CartCheckoutDock(
               hasAddress: hasAddress,
-              hasCompleteAddress: hasCompleteAddress,
-              isLocationNotServiceable: isLocationNotServiceable,
-              toPay: remainderToPay,
-              isPlacingOrder: ref.watch(
-                checkoutProvider.select((s) => s.isPlacingOrder),
-              ),
-              // Whether the *real* summary (payment methods AND price) is
-              // known yet. Until it is, the bar shows a loading placeholder
-              // for both instead of a guess — see the comment above
-              // `summaryKnown` for why a guess here caused two real bugs
-              // (payment buttons flashing wrong, and "To Pay" fluctuating).
-              paymentMethodsKnown: summaryKnown,
-              onlineEnabled:
-                  lastKnownSummary?.paymentMethods.razorpay.enabled ??
-                      true,
-              codEnabled:
-                  lastKnownSummary?.paymentMethods.cod.enabled ??
-                      true,
-              showWalletToggle: showWalletStripe,
-              walletBalance: walletBalance,
-              walletApplied: walletApplied,
-              orderTotal: toPay,
-              useWallet: useWallet,
-              onToggleWallet: (value) =>
-                  ref.read(checkoutProvider.notifier).setUseWallet(value),
-              onAddMoney: () => _goToTopup(
-                context,
-                suggestedAmount: toPay - walletBalance > 0
-                    ? toPay - walletBalance
-                    : null,
-              ),
-              onPayFullWallet: () => _handlePayFullWallet(
-                context,
-                codEnabled:
-                    lastKnownSummary?.paymentMethods.cod.enabled ?? true,
-              ),
-              onAddAddress: () => _ensureAddressAndProceed(context),
-              onCompleteAddress: selectedAddress == null
-                  ? null
-                  : () => _completeAddress(context, selectedAddress),
-              onPayOnline: () => _handlePayOnline(context),
-              onCod: () => _handleCod(context),
               selectedAddress: selectedAddress,
+              isLocationNotServiceable: isLocationNotServiceable,
+              toPay: toPay,
+              onAddAddress: () => _ensureAddressAndProceed(context),
               onEditAddress: () => _openAddressList(context),
+              onContinue: () => _goToCheckout(context),
             ),
     );
   }
@@ -296,7 +209,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       title: Text(
         '$modeLabel Cart${itemCount > 0 ? ' ($itemCount)' : ''}',
         style: TextStyle(
-          fontSize: 20.sp,
+          fontSize: 18.sp,
           fontWeight: FontWeight.w700,
           color: const Color(0xFF222222),
           fontFamily: 'Inter',
@@ -328,34 +241,18 @@ class _CartScreenState extends ConsumerState<CartScreen> {
   List<Widget> _buildSections({
     required BuildContext context,
     required CartEntity cart,
-    required AddressEntity? selectedAddress,
     required bool hasAddress,
     required AsyncValue<BillSummaryEntity> billSummaryAsync,
     required BillSummaryEntity billSummary,
-    required double walletBalance,
   }) {
     final savingsTotal = billSummary.savings.total;
     final estimateMinutes = billSummary.deliveryEstimate.minutes;
     final widgets = <Widget>[];
 
-    if (hasAddress && selectedAddress != null) {
-      widgets.add(
-        RepaintBoundary(
-          child: CartAddressHeader(
-            address: selectedAddress,
-            onTap: () => _openAddressList(context),
-          ),
-        ),
-      );
-    }
-
     if (savingsTotal > 0) {
       widgets.add(
         RepaintBoundary(
-          child: CartSavingsBanner(
-            savingsTotal: savingsTotal,
-            nextRewardLabel: CartSavingsBanner.nextRewardLabelFor(billSummary),
-          ),
+          child: CartSavingsBanner(savingsTotal: savingsTotal),
         ),
       );
     }
@@ -368,17 +265,6 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       ),
     );
     widgets.add(SizedBox(height: 12.h));
-
-    if (CartMembershipUpsellCard.isEligible(billSummary)) {
-      widgets.add(
-        RepaintBoundary(
-          child: CartMembershipUpsellCard(
-            summary: billSummary,
-            onShopMore: () => context.go(RouteNames.home),
-          ),
-        ),
-      );
-    }
 
     // Divider is bundled inside the section itself (not added here) since
     // whether it has anything to show is only known once the async
@@ -403,13 +289,6 @@ class _CartScreenState extends ConsumerState<CartScreen> {
               ),
             );
           },
-          showWalletTile: billSummary.paymentMethods.wallet.enabled,
-          walletBalance: walletBalance,
-          useWallet: ref.watch(
-            checkoutProvider.select((s) => s.useWallet),
-          ),
-          onToggleWallet: (value) =>
-              ref.read(checkoutProvider.notifier).setUseWallet(value),
         ),
       ),
     );
@@ -458,7 +337,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     widgets.add(const CartSectionDivider());
     widgets.add(const RepaintBoundary(child: CartPoliciesSection()));
 
-    widgets.add(SizedBox(height: 110.h));
+    widgets.add(SizedBox(height: 100.h));
 
     return widgets;
   }
@@ -529,7 +408,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
             ),
             if (index != items.length - 1)
               Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16.w),
+                padding: EdgeInsets.symmetric(horizontal: 14.w),
                 child: const Divider(
                   height: 1,
                   thickness: 1,
@@ -592,34 +471,23 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     );
   }
 
-  /// Splits the cart into one or more delivery groups and renders each as
-  /// a [CartDeliveryGroupCard]. The overwhelming majority of carts ship as
-  /// a single group (the cart's one real ASAP/Scheduled preference); a
-  /// second, informational-only group appears only when an item genuinely
-  /// carries its own, distinctly longer [CartItemEntity.displayDeliveryMinutes]
-  /// than the cart's usual estimate — real per-item data already returned
-  /// by the backend, never a fabricated split.
+  /// Renders one [CartDeliveryGroupCard] PER cart item — never several
+  /// items bundled under one shared box — each with its own "Delivering
+  /// in X mins" header and "Change Slot" action, matching the reference
+  /// exactly. All items on the cart's one real ASAP/Scheduled slot show
+  /// the same timing label (they *are* on the same delivery); an item
+  /// that genuinely carries its own, distinctly longer
+  /// [CartItemEntity.displayDeliveryMinutes] than that shared estimate —
+  /// real per-item data already returned by the backend, never a
+  /// fabricated split — shows its own estimate instead and, since there's
+  /// nothing to independently change for just that one item, no "Change
+  /// Slot" chip.
   List<Widget> _buildDeliveryGroups({
     required BuildContext context,
     required List<CartItemEntity> items,
     required int estimateMinutes,
   }) {
-    final primaryItems = <CartItemEntity>[];
-    final laterItems = <CartItemEntity>[];
-    for (final item in items) {
-      final itemMinutes = item.displayDeliveryMinutes;
-      if (itemMinutes != null && itemMinutes > estimateMinutes + 15) {
-        laterItems.add(item);
-      } else {
-        primaryItems.add(item);
-      }
-    }
-
-    final groups = <List<CartItemEntity>>[
-      if (primaryItems.isNotEmpty) primaryItems,
-      if (laterItems.isNotEmpty) laterItems,
-    ];
-    if (groups.isEmpty) {
+    if (items.isEmpty) {
       return const <Widget>[];
     }
 
@@ -630,8 +498,8 @@ class _CartScreenState extends ConsumerState<CartScreen> {
 
     // Closed-store steering: when the store is closed and the customer
     // hasn't already picked a scheduled slot, swap the usual "X min
-    // delivery" header for the next real available window instead —
-    // never silently keep showing an ASAP estimate that can't be honored.
+    // delivery" label for the next real available window instead — never
+    // silently keep showing an ASAP estimate that can't be honored.
     final storeOpen =
         ref.watch(storeStatusProvider).asData?.value.isOpen ?? true;
     String? nextAvailableLabel;
@@ -646,52 +514,32 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       }
     }
 
-    final widgets = <Widget>[
-      if (groups.length > 1)
-        RepaintBoundary(child: CartDeliveryGroupsHeading(groupCount: groups.length)),
-    ];
+    return items.map((item) {
+      final itemMinutes = item.displayDeliveryMinutes;
+      final isLater = itemMinutes != null && itemMinutes > estimateMinutes + 15;
 
-    for (var i = 0; i < groups.length; i++) {
-      final groupItems = groups[i];
-      final isPrimaryGroup = i == 0 && primaryItems.isNotEmpty;
-      final groupItemCount =
-          groupItems.fold<int>(0, (sum, item) => sum + item.quantity);
-
-      widgets.add(
-        RepaintBoundary(
-          child: CartDeliveryGroupCard.fromSlot(
-            estimateMinutes: isPrimaryGroup
-                ? estimateMinutes
-                : (groupItems.first.displayDeliveryMinutes ?? estimateMinutes),
-            itemCount: groupItemCount,
-            selectedSlot: isPrimaryGroup ? effectiveSlot : null,
-            nextAvailableLabel: isPrimaryGroup ? nextAvailableLabel : null,
-            onScheduleTap: isPrimaryGroup
-                ? () => _openScheduleSheet(context, initialScheduled: true)
-                : null,
-            onExpressTap: isPrimaryGroup
-                ? () => _openScheduleSheet(context, initialScheduled: false)
-                : null,
-            onViewHoursTap:
-                isPrimaryGroup ? () => StoreHoursSheet.show(context) : null,
-            itemRows: _buildItemCards(context, groupItems),
-          ),
+      return RepaintBoundary(
+        child: CartDeliveryGroupCard.fromSlot(
+          estimateMinutes: isLater ? itemMinutes : estimateMinutes,
+          selectedSlot: isLater ? null : effectiveSlot,
+          nextAvailableLabel: isLater ? null : nextAvailableLabel,
+          onScheduleTap:
+              isLater ? null : () => _openScheduleSheet(context),
+          itemRows: _buildItemCards(context, <CartItemEntity>[item]),
         ),
       );
-    }
-
-    return widgets;
+    }).toList(growable: false);
   }
 
-  Future<void> _openScheduleSheet(
-    BuildContext context, {
-    required bool initialScheduled,
-  }) async {
+  Future<void> _openScheduleSheet(BuildContext context) async {
+    final alreadyScheduled = ref
+        .read(checkoutProvider.select((s) => s.selectedDeliverySlot))
+        ?.isScheduled ?? false;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => ScheduleDeliverySheet(initialScheduled: initialScheduled),
+      builder: (_) => ScheduleDeliverySheet(initialScheduled: alreadyScheduled),
     );
   }
 
@@ -749,36 +597,12 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     return true;
   }
 
-  /// "Complete Your Address" button — opens the same forced completion
-  /// screen home_screen.dart used to push automatically on every app open
-  /// (see _maybeShowLocationPrompt there for why that was removed); this is
-  /// the checkout-time equivalent, only reached when the customer actually
-  /// tries to order with House No./Building still missing.
-  Future<void> _completeAddress(
-    BuildContext context,
-    AddressEntity address,
-  ) async {
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => AddEditAddressScreen(
-          initialAddress: address,
-          forceCompletion: true,
-        ),
-      ),
-    );
-    if (!context.mounted) {
-      return;
-    }
-    ref.read(addressProvider.notifier).refresh();
-    try {
-      await ref.read(addressProvider.future);
-    } catch (_) {}
-  }
-
-  /// "Add Address to Proceed" button — just adds the address. No further
+  /// "Add Address to Proceed" — just adds the address. No further
   /// auto-proceed step needed: once it's saved, `hasAddress` flips true and
-  /// the bottom bar re-renders into the Pay Online / Cash-Wallet buttons on
-  /// its own for the customer to tap.
+  /// the dock re-renders into the "Pay ₹…" CTA on its own for the customer
+  /// to tap. Address *completeness* (House No./Building) is no longer
+  /// gated here — `CheckoutScreen`'s own address card is where that address
+  /// actually gets used to place the order, so it owns that check.
   Future<void> _ensureAddressAndProceed(BuildContext context) async {
     await _openAddAddress(context);
   }
@@ -790,6 +614,13 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     }
 
     ref.read(addressProvider.notifier).refresh();
+  }
+
+  /// Hands off to `CheckoutScreen`, which owns delivery-slot changes,
+  /// wallet, and payment-method selection — the cart page itself places no
+  /// order and shows no payment UI.
+  void _goToCheckout(BuildContext context) {
+    context.push(RouteNames.checkout);
   }
 
   Future<void> _removeItem(BuildContext context, CartItemEntity item) async {
@@ -826,154 +657,6 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     if (!result.isSuccess && context.mounted) {
       showCartSnackBar(context, result.failure!.message);
     }
-  }
-
-  /// Shared pre-flight for both payment buttons: resolves the selected
-  /// address (prompting for one if missing, or completing it if it's still
-  /// missing House No./Building — see CartBottomBar's hasCompleteAddress)
-  /// and re-validates the cart against the live backend (stock/pricing may
-  /// have moved since this screen opened) — the same two checks
-  /// `_proceedToCheckout` used to run before handing off to the separate
-  /// checkout page. Returns the address to place the order against, or null
-  /// if the caller should stop (an error was already surfaced, or the user
-  /// backed out of adding/completing one). Defense-in-depth alongside the
-  /// bottom bar's own gating — the buttons this guards are only ever
-  /// reachable once the bar shows them at all, but this makes the guarantee
-  /// hold regardless of how that ever changes.
-  Future<AddressEntity?> _validateForPayment(BuildContext context) async {
-    var selectedAddress = ref.read(cartSelectedAddressProvider);
-    if (selectedAddress == null) {
-      final added = await _openAddAddress(context);
-      if (!context.mounted || !added) {
-        return null;
-      }
-      selectedAddress = ref.read(cartSelectedAddressProvider);
-      if (selectedAddress == null) {
-        return null;
-      }
-    }
-
-    if ((selectedAddress.addressLine2 ?? '').trim().isEmpty) {
-      await _completeAddress(context, selectedAddress);
-      if (!context.mounted) {
-        return null;
-      }
-      final completedAddress = ref.read(cartSelectedAddressProvider);
-      if (completedAddress == null ||
-          (completedAddress.addressLine2 ?? '').trim().isEmpty) {
-        return null;
-      }
-      selectedAddress = completedAddress;
-    }
-
-    final validation =
-        await ref.read(cartProvider.notifier).validateAndProceed();
-    if (!context.mounted) {
-      return null;
-    }
-    if (validation.hasFailure) {
-      showCartSnackBar(context, validation.failure!.message);
-      return null;
-    }
-    if (!validation.valid) {
-      showCartSnackBar(context, validation.warnings.join('\n'));
-      return null;
-    }
-
-    return selectedAddress;
-  }
-
-  /// Places the order for [method] and surfaces any failure. Success needs
-  /// no handling here: COD navigates to the order-success screen and
-  /// online/wallet hand off to their own payment flow, all already inside
-  /// CheckoutNotifier.placeOrder().
-  Future<void> _placeOrder(BuildContext context, PaymentMethod method) async {
-    final checkoutNotifier = ref.read(checkoutProvider.notifier);
-    checkoutNotifier.selectPaymentMethod(method);
-    final result = await checkoutNotifier.placeOrder();
-
-    if (!context.mounted) {
-      return;
-    }
-    if (result.errorMessage != null) {
-      showCartSnackBar(context, result.errorMessage!);
-    }
-  }
-
-  Future<void> _handlePayOnline(BuildContext context) async {
-    if (ref.read(checkoutProvider).isPlacingOrder) {
-      return;
-    }
-    final address = await _validateForPayment(context);
-    if (address == null || !context.mounted) {
-      return;
-    }
-    ref.read(checkoutProvider.notifier).selectAddress(address);
-    await _placeOrder(context, PaymentMethod.online);
-  }
-
-  /// "Cash on Delivery" — wallet is no longer a separate exclusive method
-  /// here; it's the orthogonal toggle in [CartBottomBar] (see
-  /// `useWallet`/`onToggleWallet` wiring in `build()`), which offsets the
-  /// total regardless of which button is tapped. This handler just places
-  /// the order as COD — whatever the toggle is currently set to travels
-  /// with it via `checkoutProvider`'s own state.
-  Future<void> _handleCod(BuildContext context) async {
-    if (ref.read(checkoutProvider).isPlacingOrder) {
-      return;
-    }
-    final address = await _validateForPayment(context);
-    if (address == null || !context.mounted) {
-      return;
-    }
-    ref.read(checkoutProvider.notifier).selectAddress(address);
-    await _placeOrder(context, PaymentMethod.cod);
-  }
-
-  /// Opens wallet top-up from the cart's "Add Money" button — pre-filled
-  /// with the shortfall so the customer doesn't have to work out how much
-  /// more they need — and refreshes the balance on return. The customer may
-  /// have topped up even if they didn't pop with `true`, so always refresh
-  /// rather than trusting the pop result.
-  Future<void> _goToTopup(BuildContext context, {double? suggestedAmount}) async {
-    await context.push<bool>(
-      RouteNames.topup,
-      extra: suggestedAmount,
-    );
-    if (!context.mounted) {
-      return;
-    }
-    ref.invalidate(walletProvider);
-  }
-
-  /// "Pay via Wallet" — the wallet stripe's dedicated one-tap action once
-  /// the balance already covers the order in full. Reuses the same
-  /// placeOrder path as COD/Online (useWallet is already true by the time
-  /// this button is visible); the nominal method just needs to be one the
-  /// admin actually has enabled, since the backend's payment-method gate
-  /// checks that regardless of the wallet fully covering the remainder.
-  Future<void> _handlePayFullWallet(
-    BuildContext context, {
-    required bool codEnabled,
-  }) async {
-    if (ref.read(checkoutProvider).isPlacingOrder) {
-      return;
-    }
-    final address = await _validateForPayment(context);
-    if (address == null || !context.mounted) {
-      return;
-    }
-    ref.read(checkoutProvider.notifier)
-      ..selectAddress(address)
-      // The "Pay with Wallet" button is reachable without the switch ever
-      // having been toggled on (it only shows when balance already covers
-      // the order) — set this explicitly rather than assuming it's already
-      // true.
-      ..setUseWallet(true);
-    await _placeOrder(
-      context,
-      codEnabled ? PaymentMethod.cod : PaymentMethod.online,
-    );
   }
 
   BillSummaryEntity _displayBillSummary({

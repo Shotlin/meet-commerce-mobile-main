@@ -9,7 +9,13 @@ class RouteNames {
   static const categoriesBrowse = '/categories/browse';
   static const categoryProducts = '/categories/:categoryId/products';
   static const cart = '/cart';
-  static const checkout = '/checkout';
+  // Registered in app_router.dart as a child route of `cart`, so its real
+  // matched path is `/cart/checkout` — this constant previously said
+  // `/checkout` (no such route exists), which would have made every
+  // `context.push(RouteNames.checkout)` a dead navigation. Never caught
+  // before because nothing navigated here until the cart screen started
+  // routing to it (see cart_screen.dart).
+  static const checkout = '/cart/checkout';
   static const orders = '/orders';
   static const orderDetail = '/orders/:orderId';
   static const tracking = '/orders/:orderId/track';
