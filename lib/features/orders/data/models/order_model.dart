@@ -21,6 +21,7 @@ class OrderModel {
     required this.paymentMethod,
     required this.paymentStatus,
     required this.createdAt,
+    this.taxAmount = 0,
     this.walletAmountUsed = 0,
     this.razorpayPaymentId,
     this.couponCode,
@@ -44,6 +45,7 @@ class OrderModel {
   final double deliveryFee;
   final double platformFee;
   final double total;
+  final double taxAmount;
   final Map<String, dynamic> deliveryAddress;
   final Map<String, dynamic> tracking;
   final String paymentMethod;
@@ -115,6 +117,7 @@ class OrderModel {
         json,
         <String>['total', 'totalAmount', 'total_amount'],
       ),
+      taxAmount: _readDouble(json, <String>['taxAmount', 'tax_amount']),
       deliveryAddress: _readMap(
         json,
         <String>['deliveryAddress', 'delivery_address'],
@@ -183,6 +186,7 @@ class OrderModel {
       deliveryFee: deliveryFee,
       platformFee: platformFee,
       total: total,
+      taxAmount: taxAmount,
       deliveryAddress: Map<String, dynamic>.from(deliveryAddress),
       tracking: Map<String, dynamic>.from(tracking),
       paymentMethod: paymentMethod,
@@ -214,6 +218,7 @@ class OrderModel {
       'deliveryFee': deliveryFee,
       'platformFee': platformFee,
       'total': total,
+      'taxAmount': taxAmount,
       'deliveryAddress': deliveryAddress,
       'tracking': tracking,
       'paymentMethod': paymentMethod,

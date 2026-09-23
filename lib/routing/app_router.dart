@@ -265,7 +265,7 @@ GoRouter appRouter(Ref ref) {
                   GoRoute(
                     path: ':orderId',
                     builder: (BuildContext context, GoRouterState state) {
-                      return OrderDetailScreen(
+                      return OrderDetailsScreen(
                         id: state.pathParameters['orderId'] ?? '',
                       );
                     },
