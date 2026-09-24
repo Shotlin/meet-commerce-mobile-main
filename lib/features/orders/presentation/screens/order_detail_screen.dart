@@ -5,9 +5,7 @@ import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
 import 'package:open_file/open_file.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
 
-import 'package:bakaloo_flutter_app/core/constants/app_constants.dart';
 import 'package:bakaloo_flutter_app/core/utils/app_toast.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/providers/cart_provider.dart';
 import 'package:bakaloo_flutter_app/features/orders/domain/entities/order_entity.dart';
@@ -29,6 +27,7 @@ import 'package:bakaloo_flutter_app/features/refund_requests/presentation/screen
 import 'package:bakaloo_flutter_app/features/reviews/presentation/screens/order_review_screen.dart';
 import 'package:bakaloo_flutter_app/routing/route_names.dart';
 import 'package:bakaloo_flutter_app/shared/widgets/cancel_order_sheet.dart';
+import 'package:bakaloo_flutter_app/shared/widgets/contact_support_sheet.dart';
 
 /// FreshCuts Order Details screen. Real backend-driven data throughout —
 /// order id/number/status/timeline/items/address/payment come straight off
@@ -182,63 +181,9 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
   }
 
   Future<void> _showNeedHelpSheet() {
-    return showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      backgroundColor: OrderDetailPalette.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20.r)),
-      ),
-      builder: (sheetContext) {
-        return Padding(
-          padding: EdgeInsets.fromLTRB(24.w, 4.h, 24.w, 28.h),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(
-                'Need help with this order?',
-                style: TextStyle(
-                  fontFamily: 'Inter',
-                  fontSize: 16.sp,
-                  fontWeight: FontWeight.w700,
-                  color: OrderDetailPalette.textPrimary,
-                ),
-              ),
-              Gap(14.h),
-              _SupportRow(
-                icon: PhosphorIcons.phone,
-                label: 'Call ${AppConstants.supportPhone}',
-                onTap: () => launchUrl(
-                  Uri.parse('tel:${AppConstants.supportPhoneDialable}'),
-                ),
-              ),
-              _SupportRow(
-                icon: PhosphorIcons.envelope,
-                label: 'Email ${AppConstants.supportEmail}',
-                onTap: () => launchUrl(
-                  Uri.parse('mailto:${AppConstants.supportEmail}'),
-                ),
-              ),
-              Gap(16.h),
-              SizedBox(
-                width: double.infinity,
-                height: 46.h,
-                child: FilledButton(
-                  onPressed: () => Navigator.of(sheetContext).pop(),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: OrderDetailPalette.primaryRed,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12.r),
-                    ),
-                  ),
-                  child: const Text('Done'),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
+    return showContactSupportSheet(
+      context,
+      title: 'Need help with this order?',
     );
   }
 
@@ -514,43 +459,6 @@ class _AppBarIconButton extends StatelessWidget {
                 ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SupportRow extends StatelessWidget {
-  const _SupportRow({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  final PhosphorIconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8.r),
-      child: Padding(
-        padding: EdgeInsets.symmetric(vertical: 8.h),
-        child: Row(
-          children: <Widget>[
-            Icon(icon, size: 18.sp, color: OrderDetailPalette.primaryRed),
-            Gap(10.w),
-            Text(
-              label,
-              style: TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 14.sp,
-                color: OrderDetailPalette.textPrimary,
-              ),
-            ),
-          ],
         ),
       ),
     );

@@ -137,6 +137,12 @@ class ApiConstants {
 
   static const appVersionCheck = '/app/version-check';
 
+  /// Public, no auth — the single source of truth for brand name / support
+  /// phone / support email, admin-editable from the dashboard's
+  /// Configuration page. Replaces the old hardcoded
+  /// AppConstants.supportPhone/supportEmail.
+  static const supportSettings = '/support-settings';
+
   static const wallet = '/wallet';
   static const walletTransactions = '/wallet/transactions';
   static const walletTopup = '/wallet/topup';

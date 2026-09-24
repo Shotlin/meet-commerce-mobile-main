@@ -13,7 +13,6 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:bakaloo_flutter_app/core/constants/api_constants.dart';
-import 'package:bakaloo_flutter_app/core/constants/app_constants.dart';
 import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
 import 'package:bakaloo_flutter_app/core/utils/app_toast.dart';
 import 'package:bakaloo_flutter_app/core/theme/app_text_styles.dart';
@@ -28,6 +27,7 @@ import 'package:bakaloo_flutter_app/features/wallet/presentation/providers/walle
 import 'package:bakaloo_flutter_app/features/wallet/domain/entities/wallet_entity.dart';
 import 'package:bakaloo_flutter_app/routing/app_router.dart';
 import 'package:bakaloo_flutter_app/routing/route_names.dart';
+import 'package:bakaloo_flutter_app/shared/widgets/contact_support_sheet.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -474,88 +474,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
   }
 
-  Future<void> _showSupportSheet() async {
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      backgroundColor: Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(20.r),
-        ),
-      ),
-      builder: (context) {
-        return Padding(
-          padding: EdgeInsets.fromLTRB(20.w, 4.h, 20.w, 24.h),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text('Need help?', style: AppTextStyles.h2),
-              Gap(10.h),
-              InkWell(
-                onTap: () => launchUrl(
-                  Uri.parse('tel:${AppConstants.supportPhoneDialable}'),
-                ),
-                borderRadius: BorderRadius.circular(8.r),
-                child: Padding(
-                  padding: EdgeInsets.symmetric(vertical: 6.h),
-                  child: Row(
-                    children: <Widget>[
-                      Icon(
-                        PhosphorIcons.phone,
-                        size: 18.sp,
-                      ),
-                      Gap(8.w),
-                      Text(
-                        'Call ${AppConstants.supportPhone}',
-                        style: AppTextStyles.bodyMedium,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              InkWell(
-                onTap: () => launchUrl(
-                  Uri.parse('mailto:${AppConstants.supportEmail}'),
-                ),
-                borderRadius: BorderRadius.circular(8.r),
-                child: Padding(
-                  padding: EdgeInsets.symmetric(vertical: 6.h),
-                  child: Row(
-                    children: <Widget>[
-                      Icon(
-                        PhosphorIcons.envelope,
-                        size: 18.sp,
-                      ),
-                      Gap(8.w),
-                      Text(
-                        'Email ${AppConstants.supportEmail}',
-                        style: AppTextStyles.bodyMedium,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              Gap(14.h),
-              SizedBox(
-                width: double.infinity,
-                height: 46.h,
-                child: FilledButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: Text(
-                    'Done',
-                    style: AppTextStyles.buttonMedium.copyWith(
-                      color: AppColors.textOnGreen,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
+  Future<void> _showSupportSheet() {
+    return showContactSupportSheet(context, title: 'Need help?');
   }
 
   void _showAbout() {
