@@ -56,52 +56,54 @@ class OrderItemsCard extends StatelessWidget {
                 ),
               ),
               if (canDownloadInvoice)
-                InkWell(
-                  onTap: isDownloadingInvoice ? null : onDownloadInvoice,
-                  borderRadius: BorderRadius.circular(8.r),
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: 6.w,
-                      vertical: 4.h,
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: <Widget>[
-                        if (isDownloadingInvoice)
-                          SizedBox(
-                            width: 13.w,
-                            height: 13.w,
-                            child: const CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                OrderDetailPalette.primaryRed,
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: isDownloadingInvoice ? null : onDownloadInvoice,
+                    borderRadius: BorderRadius.circular(8.r),
+                    child: Container(
+                      constraints: BoxConstraints(minHeight: 44.h),
+                      padding: EdgeInsets.symmetric(horizontal: 4.w),
+                      alignment: Alignment.center,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          if (isDownloadingInvoice)
+                            SizedBox(
+                              width: 14.w,
+                              height: 14.w,
+                              child: const CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  OrderDetailPalette.primaryRed,
+                                ),
                               ),
+                            )
+                          else
+                            Icon(
+                              PhosphorIcons.downloadSimple,
+                              size: 16.sp,
+                              color: OrderDetailPalette.primaryRed,
                             ),
-                          )
-                        else
-                          Icon(
-                            PhosphorIcons.downloadSimple,
-                            size: 14.sp,
-                            color: OrderDetailPalette.primaryRed,
+                          Gap(6.w),
+                          Text(
+                            'Download Invoice',
+                            style: TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 14.sp,
+                              fontWeight: FontWeight.w600,
+                              color: OrderDetailPalette.primaryRed,
+                            ),
                           ),
-                        Gap(4.w),
-                        Text(
-                          'Download Invoice',
-                          style: TextStyle(
-                            fontFamily: 'Inter',
-                            fontSize: 12.sp,
-                            fontWeight: FontWeight.w700,
-                            color: OrderDetailPalette.primaryRed,
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
             ],
           ),
           Gap(4.h),
-          const Divider(color: OrderDetailPalette.border, height: 20),
+          const Divider(color: OrderDetailPalette.headerDivider, height: 20),
           ...items.map(
             (item) => Padding(
               padding: EdgeInsets.only(bottom: 12.h),

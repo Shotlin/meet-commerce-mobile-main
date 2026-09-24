@@ -17,6 +17,7 @@ class OrderDetailPalette {
   static const textPrimary = Color(0xFF111318);
   static const textSecondary = Color(0xFF6F7785);
   static const border = Color(0xFFEAECF0);
+  static const headerDivider = Color(0xFFF0F1F3);
   static const successGreen = Color(0xFF22B45A);
 
   static const screenBg = Color(0xFFF7F7F8);
