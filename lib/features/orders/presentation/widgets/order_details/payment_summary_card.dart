@@ -42,6 +42,12 @@ class PaymentSummaryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final (icon, methodLabel) = _methodIconAndLabel(order.paymentMethod);
     final balanceDue = order.total - order.walletAmountUsed;
+    // "Total Paid" is only accurate once the order is actually settled
+    // (payment_status PAID) — a COD order that hasn't been collected yet,
+    // or an ONLINE order still awaiting confirmation, has nothing paid
+    // yet, so this must read "Amount Due" (what's still owed) instead of
+    // falsely claiming the full total was already paid.
+    final isPaid = order.paymentStatus.trim().toUpperCase() == 'PAID';
 
     return Container(
       padding: EdgeInsets.all(16.w),
@@ -173,9 +179,7 @@ class PaymentSummaryCard extends StatelessWidget {
                       children: <Widget>[
                         Expanded(
                           child: Text(
-                            order.walletAmountUsed > 0
-                                ? 'Balance Due'
-                                : 'Total Paid',
+                            isPaid ? 'Total Paid' : 'Amount Due',
                             style: TextStyle(
                               fontFamily: 'Inter',
                               fontSize: 13.5.sp,
@@ -185,9 +189,7 @@ class PaymentSummaryCard extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          (order.walletAmountUsed > 0
-                                  ? balanceDue
-                                  : order.total)
+                          (isPaid ? order.total : balanceDue)
                               .toInrCurrency,
                           style: TextStyle(
                             fontFamily: 'Inter',
