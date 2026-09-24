@@ -9,6 +9,9 @@ class OrderItemModel {
     required this.unit,
     required this.total,
     this.thumbnailUrl,
+    this.brand,
+    this.originalPrice,
+    this.discountPercent = 0,
   });
 
   final String productId;
@@ -18,6 +21,9 @@ class OrderItemModel {
   final String unit;
   final double total;
   final String? thumbnailUrl;
+  final String? brand;
+  final double? originalPrice;
+  final int discountPercent;
 
   factory OrderItemModel.fromJson(Map<String, dynamic> json) {
     return OrderItemModel(
@@ -34,6 +40,9 @@ class OrderItemModel {
         json,
         <String>['thumbnailUrl', 'thumbnail_url', 'imageUrl', 'image_url'],
       ),
+      brand: _readNullableString(json, <String>['brand']),
+      originalPrice: _readNullableDouble(json, <String>['originalPrice', 'original_price']),
+      discountPercent: _readInt(json, <String>['discountPercent', 'discount_percent']),
     );
   }
 
@@ -46,6 +55,9 @@ class OrderItemModel {
       unit: unit,
       total: total,
       thumbnailUrl: thumbnailUrl,
+      brand: brand,
+      originalPrice: originalPrice,
+      discountPercent: discountPercent,
     );
   }
 
@@ -58,6 +70,9 @@ class OrderItemModel {
       'unit': unit,
       'total': total,
       'thumbnailUrl': thumbnailUrl,
+      'brand': brand,
+      'originalPrice': originalPrice,
+      'discountPercent': discountPercent,
     };
   }
 
@@ -83,6 +98,22 @@ class OrderItemModel {
       final value = json[key];
       if (value is String && value.trim().isNotEmpty) {
         return value.trim();
+      }
+    }
+    return null;
+  }
+
+  static double? _readNullableDouble(Map<String, dynamic> json, List<String> keys) {
+    for (final key in keys) {
+      final value = json[key];
+      if (value is num) {
+        return value.toDouble();
+      }
+      if (value is String && value.trim().isNotEmpty) {
+        final parsed = double.tryParse(value.trim());
+        if (parsed != null) {
+          return parsed;
+        }
       }
     }
     return null;

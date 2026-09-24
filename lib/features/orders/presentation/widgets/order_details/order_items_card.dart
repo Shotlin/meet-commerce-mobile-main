@@ -9,12 +9,13 @@ import 'package:bakaloo_flutter_app/features/orders/presentation/widgets/order_d
 import 'package:bakaloo_flutter_app/shared/widgets/safe_product_image.dart';
 
 /// Item 7 — the order's line items, with a "Download Invoice" link in the
-/// header. Each [OrderItemTile] shows only fields the backend actually
-/// persists per line (`orders.repository.js#createCheckoutOrder`: name,
-/// unit, quantity, price, total — no per-item MRP/discount is stored on a
-/// placed order, only on the live cart before checkout), so there is no
-/// strikethrough "was ₹X" price or discount badge here — showing one would
-/// mean inventing a number that isn't real.
+/// header. Each [OrderItemTile] shows the strikethrough MRP + "X% OFF"
+/// badge whenever the backend actually captured one at checkout time
+/// (`orders.service.js#placeOrder` snapshots the cart line's real
+/// `originalPrice`/`discountPercent` onto the order — not re-derived from
+/// today's live price, which could have since changed) — an order placed
+/// before that field existed, or one that genuinely had no discount, has
+/// neither, and shows no badge rather than a fabricated one.
 class OrderItemsCard extends StatelessWidget {
   const OrderItemsCard({
     required this.items,
@@ -118,8 +119,17 @@ class OrderItemTile extends StatelessWidget {
 
   final OrderItemEntity item;
 
+  bool get _hasDiscount =>
+      item.discountPercent > 0 &&
+      item.originalPrice != null &&
+      item.originalPrice! > item.price;
+
   @override
   Widget build(BuildContext context) {
+    final String subtitle = item.brand != null && item.brand!.trim().isNotEmpty
+        ? '${item.unit} | ${item.brand}'
+        : item.unit;
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -149,12 +159,57 @@ class OrderItemTile extends StatelessWidget {
               ),
               Gap(3.h),
               Text(
-                item.unit,
+                subtitle,
                 style: TextStyle(
                   fontFamily: 'Inter',
                   fontSize: 12.sp,
                   color: OrderDetailPalette.textSecondary,
                 ),
+              ),
+              Gap(6.h),
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 6.w,
+                runSpacing: 4.h,
+                children: <Widget>[
+                  Text(
+                    item.price.toInrCurrency,
+                    style: TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 13.sp,
+                      fontWeight: FontWeight.w700,
+                      color: OrderDetailPalette.textPrimary,
+                    ),
+                  ),
+                  if (_hasDiscount) ...<Widget>[
+                    Text(
+                      item.originalPrice!.toInrCurrency,
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 12.sp,
+                        color: OrderDetailPalette.textSecondary,
+                        decoration: TextDecoration.lineThrough,
+                        decorationColor: OrderDetailPalette.textSecondary,
+                      ),
+                    ),
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 2.h),
+                      decoration: BoxDecoration(
+                        color: OrderDetailPalette.successGreen.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(6.r),
+                      ),
+                      child: Text(
+                        '${item.discountPercent}% OFF',
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 10.5.sp,
+                          fontWeight: FontWeight.w700,
+                          color: OrderDetailPalette.successGreen,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ],
           ),
@@ -164,21 +219,21 @@ class OrderItemTile extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: <Widget>[
             Text(
+              'Qty: ${item.quantity}',
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 11.5.sp,
+                color: OrderDetailPalette.textSecondary,
+              ),
+            ),
+            Gap(3.h),
+            Text(
               item.total.toInrCurrency,
               style: TextStyle(
                 fontFamily: 'Inter',
                 fontSize: 13.5.sp,
                 fontWeight: FontWeight.w700,
                 color: OrderDetailPalette.textPrimary,
-              ),
-            ),
-            Gap(3.h),
-            Text(
-              'Qty: ${item.quantity}',
-              style: TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 11.5.sp,
-                color: OrderDetailPalette.textSecondary,
               ),
             ),
           ],
