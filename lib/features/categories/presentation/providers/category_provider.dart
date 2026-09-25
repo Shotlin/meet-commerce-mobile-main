@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import 'package:bakaloo_flutter_app/core/di/providers.dart';
+import 'package:bakaloo_flutter_app/core/providers/storefront_scope_provider.dart';
+import 'package:bakaloo_flutter_app/core/utils/cache_for.dart';
 import 'package:bakaloo_flutter_app/features/categories/data/datasources/category_remote_datasource.dart';
 import 'package:bakaloo_flutter_app/features/categories/data/local/category_local_datasource.dart';
 import 'package:bakaloo_flutter_app/features/categories/data/repositories/category_repository_impl.dart';
@@ -44,6 +46,12 @@ final getCategoryProductsUseCaseProvider =
 
 @riverpod
 Future<List<CategoryEntity>> categoryCollection(Ref ref) async {
+  // The category list itself is never shop-scoped server-side (same list
+  // for every shop), so — unlike the providers below — this deliberately
+  // does not watch storefrontScopeProvider; only the cache lifetime matters
+  // here, so reopening Search/Categories shows the list instantly instead
+  // of re-fetching a list that virtually never changes mid-session.
+  ref.cacheFor(const Duration(minutes: 15));
   final result = await ref.read(getCategoriesUseCaseProvider).call();
   return result.fold((_) => const <CategoryEntity>[], (data) => data);
 }
@@ -80,6 +88,10 @@ class CategoryProductShelfRequest {
 final categoryProductShelfProvider = FutureProvider.autoDispose
     .family<List<ProductEntity>, CategoryProductShelfRequest>(
   (ref, request) async {
+    // Per-shop price/stock — a shop switch must force a refetch, never
+    // silently keep serving the previous store's products.
+    ref.watch(storefrontScopeProvider);
+    ref.cacheFor(const Duration(minutes: 5));
     final useCase = ref.read(getCategoryProductsUseCaseProvider);
     final orderedIds = request.categoryIds
         .map((id) => id.trim())

@@ -2,6 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import 'package:bakaloo_flutter_app/core/di/providers.dart';
+import 'package:bakaloo_flutter_app/core/providers/storefront_scope_provider.dart';
+import 'package:bakaloo_flutter_app/core/utils/cache_for.dart';
 import 'package:bakaloo_flutter_app/features/addresses/domain/entities/address_entity.dart';
 import 'package:bakaloo_flutter_app/features/addresses/presentation/providers/address_provider.dart';
 import 'package:bakaloo_flutter_app/features/cart/data/datasources/cart_enhancements_remote_datasource.dart';
@@ -293,10 +295,15 @@ Future<List<Map<String, dynamic>>> lastMinuteProducts(Ref ref) async {
 /// categories already in the cart, ~30% from admin-configured related
 /// categories, and the remainder a random popular pick (all resolved
 /// server-side in cart.controller.js#getQuickAdd, which already excludes
-/// whatever's currently in the cart). Re-fetches on every cart change since
-/// the backend needs the up-to-date item/category set to exclude correctly.
+/// whatever's currently in the cart). Still correctly reacts to every real
+/// cart change (via `ref.watch(cartProvider.future)`, unaffected by the
+/// cache below) and to a shop switch; `cacheFor` only prevents the rail
+/// from restarting at zero every time the Cart screen is merely reopened
+/// with nothing having actually changed.
 @riverpod
 Future<List<ProductEntity>> cartQuickAddProducts(Ref ref) async {
+  ref.watch(storefrontScopeProvider);
+  ref.cacheFor(const Duration(minutes: 3));
   final cart = await ref.watch(cartProvider.future);
   if (cart.isEmpty) {
     return const <ProductEntity>[];

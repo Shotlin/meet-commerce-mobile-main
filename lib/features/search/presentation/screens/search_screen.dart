@@ -28,7 +28,6 @@ import 'package:bakaloo_flutter_app/features/search/presentation/providers/searc
 import 'package:bakaloo_flutter_app/routing/route_names.dart';
 import 'package:bakaloo_flutter_app/features/products/presentation/widgets/show_product_options.dart';
 import 'package:bakaloo_flutter_app/features/search/presentation/widgets/search_filter_chip_bar.dart';
-import 'package:bakaloo_flutter_app/features/search/presentation/widgets/search_product_grid_card.dart';
 import 'package:bakaloo_flutter_app/shared/widgets/b2b_segment_toggle.dart';
 import 'package:bakaloo_flutter_app/shared/widgets/product_card.dart';
 import 'package:bakaloo_flutter_app/shared/widgets/skeleton_loader.dart';
@@ -61,20 +60,24 @@ class _GridGeometry {
     const mainAxisSpacing = 12.0;
     final cardWidth =
         (screenWidth - horizontalPadding * 2 - crossAxisSpacing) / 2;
-    final imageHeight = cardWidth / 1.10;
-    // The card's own internal spacing scales with ScreenUtil's width ratio
-    // (.w, not .h) — see search_product_grid_card.dart — specifically so it
-    // tracks this same screenWidth/390 factor instead of device *height*,
-    // which varies independently of card width and would otherwise throw
-    // this estimate off. The full content stack (9dp padding, a reserved
-    // 2-line title, an optional subtitle, the variant-chip row, the price
-    // row and the 44dp delivery/add row) measures ~190dp at the 390dp
-    // design width at worst case (subtitle + two variant chips present);
-    // scaling it by the same ratio keeps this estimate accurate at every
-    // tested width so no card overflows.
-    final widthScale = screenWidth / 390.0;
-    final contentHeight = 235.0 * widthScale;
-    final mainAxisExtent = (imageHeight + contentHeight).clamp(320.0, 440.0);
+    // The grid now renders the shared Premium Fresh card (ProductCard,
+    // ProductCardVariant.premiumFresh/ProductCardStyle.grid — the exact
+    // same "boxed" card used on Home and every other product-suggestion
+    // surface), not the old search-only card this geometry used to be
+    // tuned for. That card's real image slot uses aspectRatio 1.28, and
+    // its real content height (measured via WidgetTester.getSize across a
+    // range of widths/titles) is ~150-158dp at the base text scale and
+    // grows with the device's accessibility text-scale setting, not with
+    // screen width — the previous screenWidth-based estimate reserved far
+    // more room than the shorter card ever needed, which is what produced
+    // the large blank gap under every result card. Driving the budget off
+    // the real text scale keeps the cell tight (no gap) while still
+    // growing for large-text accessibility settings (no overflow).
+    final imageHeight = cardWidth / 1.28;
+    final textScale = MediaQuery.textScalerOf(context).scale(1.0);
+    final contentHeight = 182.0 + (textScale - 1.0).clamp(0.0, 1.0) * 175.0;
+    final mainAxisExtent =
+        (imageHeight + contentHeight).clamp(300.0, 520.0);
     return _GridGeometry(
       horizontalPadding: horizontalPadding,
       crossAxisSpacing: crossAxisSpacing,
@@ -983,8 +986,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                         Gap(10.w),
                         Image.asset(
                           'assets/images/freshcuts-logo-wordmark.png',
-                          height: 26.h,
-                          cacheHeight: 104,
+                          height: 36.h,
+                          cacheHeight: 144,
                           fit: BoxFit.contain,
                           filterQuality: FilterQuality.high,
                         ),
@@ -1215,13 +1218,21 @@ class _SearchInput extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 50.h,
-      decoration: BoxDecoration(
-        color: AppColors.bgCard,
-        borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
-        border: Border.all(color: AppColors.borderLight),
-        boxShadow: const <BoxShadow>[AppShadows.cardShadow],
+    return AnimatedBuilder(
+      animation: focusNode,
+      builder: (context, child) => Container(
+        height: 50.h,
+        decoration: BoxDecoration(
+          color: AppColors.bgCard,
+          borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
+          border: Border.all(
+            color:
+                focusNode.hasFocus ? AppColors.brandRed : AppColors.borderLight,
+            width: focusNode.hasFocus ? 1.4 : 1,
+          ),
+          boxShadow: const <BoxShadow>[AppShadows.cardShadow],
+        ),
+        child: child,
       ),
       child: Row(
         children: <Widget>[
@@ -1778,7 +1789,7 @@ class _DebouncingState extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             SkeletonLoader(
-              height: geometry.cardWidth / 1.10,
+              height: geometry.cardWidth / 1.28,
               radius: 16,
             ),
             Gap(9.w),
@@ -1996,9 +2007,20 @@ class _SortedFilteredGrid extends StatelessWidget {
               );
             }
             final product = displayProducts[index];
-            return SearchProductGridCard(
+            // Same Premium Fresh box UI as the Home screen's product grid
+            // and every other product-suggestion surface in the app — one
+            // reused card, not a search-specific design.
+            return ProductCard(
               key: ValueKey<String>(product.id),
               product: product,
+              width: 165,
+              style: ProductCardStyle.grid,
+              variant: ProductCardVariant.premiumFresh,
+              showWishlist: true,
+              onTap: () => context.push('/product/${product.id}'),
+              onOptionsTap: product.hasMultipleOptions
+                  ? () => showProductOptionsSheet(context, product)
+                  : null,
             );
           },
         );
@@ -2103,6 +2125,9 @@ class _NoResultsState extends StatelessWidget {
             style: AppTextStyles.h3,
           ),
           const Gap(AppDimensions.spacing12),
+          // Same Premium Fresh box UI as every other product-suggestion
+          // surface in the app (Home grid, Cart, Product Details, search
+          // results above) — one reused card, not a bespoke rail design.
           SizedBox(
             height: 246.h,
             child: ListView.separated(
@@ -2110,13 +2135,20 @@ class _NoResultsState extends StatelessWidget {
               itemCount: suggestions.length,
               separatorBuilder: (_, __) => Gap(12.w),
               itemBuilder: (_, index) {
-                return ProductCard(
-                  product: suggestions[index],
-                  style: ProductCardStyle.scroll,
-                  onOptionsTap: suggestions[index].hasMultipleOptions
-                      ? () =>
-                          showProductOptionsSheet(context, suggestions[index])
-                      : null,
+                final product = suggestions[index];
+                return SizedBox(
+                  width: 170.w,
+                  child: ProductCard(
+                    product: product,
+                    width: 170,
+                    style: ProductCardStyle.grid,
+                    variant: ProductCardVariant.premiumFresh,
+                    showWishlist: true,
+                    onTap: () => context.push('/product/${product.id}'),
+                    onOptionsTap: product.hasMultipleOptions
+                        ? () => showProductOptionsSheet(context, product)
+                        : null,
+                  ),
                 );
               },
             ),

@@ -12,6 +12,7 @@ import 'package:bakaloo_flutter_app/core/theme/app_text_styles.dart';
 import 'package:bakaloo_flutter_app/features/cart/presentation/providers/cart_provider.dart';
 import 'package:bakaloo_flutter_app/features/categories/domain/entities/category_entity.dart';
 import 'package:bakaloo_flutter_app/features/categories/presentation/providers/category_provider.dart';
+import 'package:bakaloo_flutter_app/features/products/domain/entities/product_entity.dart';
 import 'package:bakaloo_flutter_app/features/products/presentation/providers/product_list_provider.dart';
 import 'package:bakaloo_flutter_app/features/products/presentation/widgets/show_product_options.dart';
 import 'package:bakaloo_flutter_app/features/purchase_limits/presentation/providers/purchase_limits_provider.dart';
@@ -21,26 +22,29 @@ import 'package:bakaloo_flutter_app/shared/widgets/error_state.dart';
 import 'package:bakaloo_flutter_app/shared/widgets/product_card.dart';
 import 'package:bakaloo_flutter_app/shared/widgets/skeleton_loader.dart';
 
-/// Categories accent (premium violet, consistent with Orders/Product screens).
+/// Categories accent — `orderViolet` is a legacy alias for the real brand
+/// red (`AppColors.brandRed`, #D02428), consistent with Orders/Product
+/// screens; the name is stale but the colour is already the brand red.
 const Color _accent = AppColors.orderViolet;
 const Color _accentSurface = AppColors.orderVioletSurface;
 
-/// The product grid is 2 columns inside the pane to the right of the
-/// 92.w category rail, with 14.w side padding and a 12.w gap between columns.
-double _gridColumnWidth(double paneWidth) {
-  final double gridWidth = paneWidth - 14.w * 2;
-  return (gridWidth - 12.w) / 2;
-}
+/// Category rail width. Widened from the old 92.w so the thumbnail + label
+/// have real breathing room instead of looking squeezed on standard phone
+/// widths (~360-430 logical px).
+const double _railWidth = 104;
 
-/// Mirrors ProductCard's grid-style layout (image = 84% of card width, plus
-/// a roughly fixed footer for the unit/ADD row, price, name, and rating) so
-/// the grid row stays tall enough for the real column width instead of a
-/// constant tuned for phone-narrow columns. A fixed `mainAxisExtent` can't
-/// work across both phone and tablet: iPad's 2-column grid is far wider per
-/// column, so the width-proportional image alone was blowing past the old
-/// fixed 256.h row height.
-// ProductCard keeps image, title, unit, price, and CTA in one compact surface.
-double _gridRowExtent(double columnWidth) => columnWidth * 0.72 + 108.h;
+/// Product grid layout constants — kept identical to the Home screen's
+/// Premium Fresh grid (`_ManifestProductGridSection` in
+/// `section_registry.dart`) so both screens render the exact same card
+/// size/gaps for the same variant.
+const double _gridGap = 12; // horizontal gap between columns
+const double _gridRunSpacing = 16; // vertical gap between rows
+
+double _screenUtilWidth(double logicalWidth) {
+  final double scale = ScreenUtil().scaleWidth;
+  if (scale == 0) return logicalWidth;
+  return logicalWidth / scale;
+}
 
 class CategoriesScreen extends ConsumerStatefulWidget {
   const CategoriesScreen({this.initialCategoryId, super.key});
@@ -210,13 +214,13 @@ class _CategoriesScreenState extends ConsumerState<CategoriesScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         Container(
-          width: 92.w,
+          width: _railWidth.w,
           color: AppColors.bgPrimary,
           padding: EdgeInsets.symmetric(vertical: 12.h),
           child: Column(
             children: <Widget>[
               for (var i = 0; i < 8; i++) ...<Widget>[
-                const SkeletonLoader(height: 64, radius: 16),
+                const SkeletonLoader(height: 78, radius: 16),
                 Gap(12.h),
               ],
             ],
@@ -227,18 +231,19 @@ class _CategoriesScreenState extends ConsumerState<CategoriesScreen> {
             padding: EdgeInsets.fromLTRB(14.w, 16.h, 14.w, 24.h),
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final double columnWidth = (constraints.maxWidth - 12.w) / 2;
+                final double columnWidth =
+                    (constraints.maxWidth - _gridGap.w) / 2;
                 return GridView.builder(
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: 6,
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 2,
-                    crossAxisSpacing: 12.w,
-                    mainAxisSpacing: 14.h,
-                    mainAxisExtent: _gridRowExtent(columnWidth),
+                    crossAxisSpacing: _gridGap.w,
+                    mainAxisSpacing: _gridRunSpacing.h,
+                    mainAxisExtent: columnWidth / 1.28 + 150.h,
                   ),
                   itemBuilder: (_, __) =>
-                      const SkeletonLoader(height: 220, radius: 16),
+                      const SkeletonLoader(height: 260, radius: 15),
                 );
               },
             ),
@@ -400,7 +405,7 @@ class _CategoryRail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 92.w,
+      width: _railWidth.w,
       decoration: const BoxDecoration(
         color: AppColors.bgPrimary,
         border: Border(
@@ -436,66 +441,81 @@ class _CategoryRailItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The active-indicator bar and the thumb+label content are laid out as
+    // real Row/Column children (not Positioned overlays sized off the
+    // Stack's other children) so the bar always occupies real space and is
+    // never clipped/overlapped — the previous Positioned(left:0) version
+    // could render squeezed against the rounded card's own inner padding.
     return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+      padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 4.h),
       child: Material(
         color: isSelected ? Colors.white : Colors.transparent,
         borderRadius: BorderRadius.circular(16.r),
+        clipBehavior: Clip.antiAlias,
         child: InkWell(
-          borderRadius: BorderRadius.circular(16.r),
           onTap: onTap,
-          child: Stack(
-            children: <Widget>[
-              // Active indicator bar on the left edge.
-              if (isSelected)
-                Positioned(
-                  left: 0,
-                  top: 14.h,
-                  bottom: 14.h,
-                  child: Container(
-                    width: 3.w,
-                    decoration: BoxDecoration(
-                      color: _accent,
-                      borderRadius: BorderRadius.circular(100.r),
-                    ),
-                  ),
-                ),
-              Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16.r),
-                  border: Border.all(
-                    color: isSelected
-                        ? AppColors.orderVioletBorder
-                        : Colors.transparent,
-                  ),
-                ),
-                padding: EdgeInsets.symmetric(vertical: 10.h, horizontal: 4.w),
-                child: Column(
-                  children: <Widget>[
-                    _CategoryThumb(
-                      imageUrl: category.imageUrl,
-                      name: category.name,
-                      isSelected: isSelected,
-                    ),
-                    Gap(6.h),
-                    Text(
-                      category.name,
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontFamily: 'Inter',
-                        fontSize: 10.5.sp,
-                        color: isSelected ? _accent : AppColors.textSecondary,
-                        fontWeight:
-                            isSelected ? FontWeight.w700 : FontWeight.w500,
-                        height: 1.2,
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16.r),
+              border: Border.all(
+                color: isSelected
+                    ? AppColors.orderVioletBorder
+                    : Colors.transparent,
+              ),
+            ),
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  // Active indicator bar — always present as real layout
+                  // space so it can never be squeezed out by rounding or
+                  // sibling padding; only its colour toggles.
+                  Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12.h),
+                    child: Container(
+                      width: 4.w,
+                      decoration: BoxDecoration(
+                        color: isSelected ? _accent : Colors.transparent,
+                        borderRadius: BorderRadius.circular(100.r),
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                  Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(4.w, 10.h, 6.w, 10.h),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          _CategoryThumb(
+                            imageUrl: category.imageUrl,
+                            name: category.name,
+                            isSelected: isSelected,
+                          ),
+                          Gap(6.h),
+                          Text(
+                            category.name,
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 10.5.sp,
+                              color: isSelected
+                                  ? _accent
+                                  : AppColors.textSecondary,
+                              fontWeight: isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                              height: 1.2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -519,7 +539,7 @@ class _CategoryThumb extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasImage = imageUrl != null && imageUrl!.trim().isNotEmpty;
-    final size = 46.w;
+    final size = 56.w;
 
     return Container(
       width: size,
@@ -761,60 +781,13 @@ class _CategoryProductPaneState extends ConsumerState<_CategoryProductPane> {
                   );
             });
 
-            return SliverLayoutBuilder(
-              builder: (context, sliverConstraints) {
-                final double columnWidth =
-                    _gridColumnWidth(sliverConstraints.crossAxisExtent);
-
-                return SliverPadding(
-                  padding: EdgeInsets.fromLTRB(14.w, 0, 14.w, 4.h),
-                  sliver: SliverGrid.builder(
-                    itemCount: viewState.items.length,
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 12.w,
-                      mainAxisSpacing: 14.h,
-                      mainAxisExtent: _gridRowExtent(columnWidth),
-                    ),
-                    itemBuilder: (context, index) {
-                      final product = viewState.items[index];
-                      return TweenAnimationBuilder<double>(
-                        duration: Duration(
-                          milliseconds: 220 + ((index % 6) * 30),
-                        ),
-                        curve: Curves.easeOutCubic,
-                        tween: Tween<double>(begin: 0, end: 1),
-                        child: ProductCard(
-                          product: product,
-                          // ProductCard re-applies `.w` internally, so pass
-                          // the real column width pre-divided by the scale
-                          // factor (same convention as _threeColumnCardWidth
-                          // in home_screen.dart) — otherwise it gets scaled
-                          // twice and the card balloons past its own column.
-                          width: columnWidth / ScreenUtil().scaleWidth,
-                          style: ProductCardStyle.grid,
-                          useCompactAddButton: true,
-                          showImageBorder: true,
-                          accentColor: _accent,
-                          onTap: () => context.push('/product/${product.id}'),
-                          onOptionsTap: product.hasMultipleOptions
-                              ? () => showProductOptionsSheet(context, product)
-                              : null,
-                        ),
-                        builder: (context, value, child) {
-                          return Opacity(
-                            opacity: value,
-                            child: Transform.translate(
-                              offset: Offset(0, (1 - value) * 16),
-                              child: child,
-                            ),
-                          );
-                        },
-                      );
-                    },
-                  ),
-                );
-              },
+            return SliverPadding(
+              padding: EdgeInsets.fromLTRB(14.w, 0, 14.w, 4.h),
+              sliver: SliverToBoxAdapter(
+                child: _PremiumFreshProductGrid(
+                  products: viewState.items,
+                ),
+              ),
             );
           },
         ),
@@ -863,26 +836,80 @@ class _CategoryProductPaneState extends ConsumerState<_CategoryProductPane> {
   }
 
   Widget _buildLoadingSliver() {
-    return SliverLayoutBuilder(
-      builder: (context, sliverConstraints) {
-        final double columnWidth =
-            _gridColumnWidth(sliverConstraints.crossAxisExtent);
+    return SliverPadding(
+      padding: EdgeInsets.fromLTRB(14.w, 0, 14.w, 20.h),
+      sliver: SliverToBoxAdapter(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final double columnWidth =
+                (constraints.maxWidth - _gridGap.w) / 2;
+            return GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: 6,
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: _gridGap.w,
+                mainAxisSpacing: _gridRunSpacing.h,
+                mainAxisExtent: columnWidth / 1.28 + 150.h,
+              ),
+              itemBuilder: (_, __) => const SkeletonLoader(
+                height: 260,
+                radius: 15,
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
 
-        return SliverPadding(
-          padding: EdgeInsets.fromLTRB(14.w, 0, 14.w, 20.h),
-          sliver: SliverGrid.builder(
-            itemCount: 6,
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 12.w,
-              mainAxisSpacing: 14.h,
-              mainAxisExtent: _gridRowExtent(columnWidth),
-            ),
-            itemBuilder: (_, __) => const SkeletonLoader(
-              height: 220,
-              radius: 16,
-            ),
-          ),
+// ── Premium Fresh product grid ─────────────────────────────────────────────
+//
+// The exact same card + grid used by the Home screen's Premium Fresh section
+// (`_ManifestProductGridSection` in section_registry.dart): a 2-column
+// `Wrap` (content-driven row height — cards never overflow a fixed
+// `mainAxisExtent`, since option chips/description length vary per product),
+// 12.w column gap, 16.h row gap, `ProductCardVariant.premiumFresh` +
+// `showWishlist: true`.
+
+class _PremiumFreshProductGrid extends StatelessWidget {
+  const _PremiumFreshProductGrid({required this.products});
+
+  final List<ProductEntity> products;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        const int columns = 2;
+        final double gap = _gridGap.w;
+        final double itemWidth =
+            (constraints.maxWidth - (gap * (columns - 1))) / columns;
+        final double cardWidth = _screenUtilWidth(itemWidth);
+
+        return Wrap(
+          spacing: gap,
+          runSpacing: _gridRunSpacing.h,
+          children: products
+              .map(
+                (ProductEntity product) => SizedBox(
+                  width: itemWidth,
+                  child: ProductCard(
+                    product: product,
+                    width: cardWidth,
+                    style: ProductCardStyle.grid,
+                    variant: ProductCardVariant.premiumFresh,
+                    showWishlist: true,
+                    onTap: () => context.push('/product/${product.id}'),
+                    onOptionsTap: product.hasMultipleOptions
+                        ? () => showProductOptionsSheet(context, product)
+                        : null,
+                  ),
+                ),
+              )
+              .toList(growable: false),
         );
       },
     );

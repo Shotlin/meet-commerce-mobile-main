@@ -553,12 +553,16 @@ class _ProductCardState extends State<ProductCard> {
                               color: crimson,
                             ),
                             SizedBox(width: 5.w),
-                            Text(
-                              '${product.formattedDeliveryTime} delivery',
-                              style: TextStyle(
-                                fontSize: 9.5.sp,
-                                fontWeight: FontWeight.w600,
-                                color: muted,
+                            Flexible(
+                              child: Text(
+                                '${product.formattedDeliveryTime} delivery',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 9.5.sp,
+                                  fontWeight: FontWeight.w600,
+                                  color: muted,
+                                ),
                               ),
                             ),
                           ],

@@ -2,6 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import 'package:bakaloo_flutter_app/core/constants/app_constants.dart';
+import 'package:bakaloo_flutter_app/core/providers/storefront_scope_provider.dart';
+import 'package:bakaloo_flutter_app/core/utils/cache_for.dart';
 import 'package:bakaloo_flutter_app/features/products/data/local/recently_viewed_datasource.dart';
 import 'package:bakaloo_flutter_app/features/products/domain/entities/product_entity.dart';
 import 'package:bakaloo_flutter_app/features/products/presentation/providers/product_detail_provider.dart';
@@ -42,6 +44,8 @@ Future<List<ProductEntity>> recentlyViewedProducts(
   Ref ref,
   String excludeProductId,
 ) async {
+  ref.watch(storefrontScopeProvider);
+  ref.cacheFor(const Duration(minutes: 5));
   final ids = ref
       .watch(recentlyViewedProvider)
       .where((id) => id != excludeProductId)

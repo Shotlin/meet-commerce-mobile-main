@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
+import 'package:lottie/lottie.dart';
 
 import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
 import 'package:bakaloo_flutter_app/core/utils/extensions/double_extensions.dart';
@@ -136,6 +137,9 @@ class CartCouponTile extends StatelessWidget {
       iconColor: Colors.white,
       iconBackground: _green,
       borderColor: _green,
+      // The coupon/offer badge animates in place of the static tag icon —
+      // same 26x26 footprint as every other tile's leading icon.
+      leadingLottieAsset: 'assets/lottie/coupon_offer_badge.json',
       title: title,
       titleColor: const Color(0xFF1A1A1A),
       onTap: onTap,
@@ -200,6 +204,7 @@ class _OfferTile extends StatelessWidget {
     this.subtitle,
     this.trailing,
     this.onTap,
+    this.leadingLottieAsset,
   });
 
   final IconData icon;
@@ -211,6 +216,11 @@ class _OfferTile extends StatelessWidget {
   final String? subtitle;
   final Widget? trailing;
   final VoidCallback? onTap;
+
+  /// When set, this Lottie animation replaces the plain icon+circle in the
+  /// same 26x26 footprint — the animation already draws its own badge/circle
+  /// artwork, so no background circle is layered behind it.
+  final String? leadingLottieAsset;
 
   @override
   Widget build(BuildContext context) {
@@ -236,15 +246,32 @@ class _OfferTile extends StatelessWidget {
           ),
           child: Row(
             children: <Widget>[
-              Container(
-                width: 26.w,
-                height: 26.w,
-                decoration: BoxDecoration(
-                  color: iconBackground,
-                  shape: BoxShape.circle,
+              if (leadingLottieAsset != null)
+                SizedBox(
+                  width: 26.w,
+                  height: 26.w,
+                  child: Lottie.asset(
+                    leadingLottieAsset!,
+                    repeat: true,
+                    errorBuilder: (_, __, ___) => Container(
+                      decoration: BoxDecoration(
+                        color: iconBackground,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(icon, size: 13.sp, color: iconColor),
+                    ),
+                  ),
+                )
+              else
+                Container(
+                  width: 26.w,
+                  height: 26.w,
+                  decoration: BoxDecoration(
+                    color: iconBackground,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, size: 13.sp, color: iconColor),
                 ),
-                child: Icon(icon, size: 13.sp, color: iconColor),
-              ),
               Gap(9.w),
               Expanded(
                 child: Column(

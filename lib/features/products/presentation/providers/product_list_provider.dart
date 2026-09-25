@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import 'package:bakaloo_flutter_app/core/di/providers.dart';
+import 'package:bakaloo_flutter_app/core/providers/storefront_scope_provider.dart';
+import 'package:bakaloo_flutter_app/core/utils/cache_for.dart';
 import 'package:bakaloo_flutter_app/features/categories/presentation/providers/category_provider.dart';
 import 'package:bakaloo_flutter_app/features/products/data/datasources/product_remote_datasource.dart';
 import 'package:bakaloo_flutter_app/features/products/data/local/product_local_datasource.dart';
@@ -134,6 +136,13 @@ class ProductListNotifier extends _$ProductListNotifier {
 
   @override
   Future<ProductListViewState> build(ProductListParams params) async {
+    // Per-shop price/stock — a shop switch must force a fresh page 1, never
+    // silently keep paginating the previous store's products.
+    ref.watch(storefrontScopeProvider);
+    // Paging back into a product grid within 3 minutes (tapping back from
+    // a product, switching bottom-nav tabs and back) shows what was already
+    // loaded instantly instead of restarting from page 1.
+    ref.cacheFor(const Duration(minutes: 3));
     _params = params;
     _items.clear();
     _page = 1;

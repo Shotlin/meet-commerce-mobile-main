@@ -15,7 +15,6 @@ class PairWithWrapper extends ConsumerWidget {
     required this.enabled,
     required this.onProductTap,
     required this.onSeeAll,
-    required this.onAddToCart,
     super.key,
   });
 
@@ -23,7 +22,6 @@ class PairWithWrapper extends ConsumerWidget {
   final bool enabled;
   final ValueChanged<ProductEntity> onProductTap;
   final VoidCallback onSeeAll;
-  final ValueChanged<ProductEntity> onAddToCart;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -41,7 +39,6 @@ class PairWithWrapper extends ConsumerWidget {
               products: products,
               onProductTap: onProductTap,
               onSeeAll: onSeeAll,
-              onAddToCart: onAddToCart,
             ),
     );
   }
@@ -53,7 +50,6 @@ class SimilarWrapper extends ConsumerWidget {
     required this.enabled,
     required this.onProductTap,
     required this.onSeeAll,
-    required this.onAddToCart,
     super.key,
   });
 
@@ -61,7 +57,6 @@ class SimilarWrapper extends ConsumerWidget {
   final bool enabled;
   final ValueChanged<ProductEntity> onProductTap;
   final VoidCallback onSeeAll;
-  final ValueChanged<ProductEntity> onAddToCart;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -90,7 +85,6 @@ class SimilarWrapper extends ConsumerWidget {
               products: products,
               onProductTap: onProductTap,
               onSeeAll: onSeeAll,
-              onAddToCart: onAddToCart,
             ),
     );
   }
@@ -101,14 +95,12 @@ class RecentlyViewedWrapper extends ConsumerWidget {
     required this.productId,
     required this.enabled,
     required this.onProductTap,
-    required this.onAddToCart,
     super.key,
   });
 
   final String productId;
   final bool enabled;
   final ValueChanged<ProductEntity> onProductTap;
-  final ValueChanged<ProductEntity> onAddToCart;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -125,7 +117,6 @@ class RecentlyViewedWrapper extends ConsumerWidget {
           : ProductRecentlyViewedSection(
               products: products,
               onProductTap: onProductTap,
-              onAddToCart: onAddToCart,
             ),
     );
   }

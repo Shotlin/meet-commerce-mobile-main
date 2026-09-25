@@ -20,7 +20,6 @@ import 'package:bakaloo_flutter_app/features/products/presentation/screens/produ
 import 'package:bakaloo_flutter_app/features/products/presentation/screens/product_detail_socket_delegate.dart';
 import 'package:bakaloo_flutter_app/features/products/presentation/screens/product_list_screen.dart';
 import 'package:bakaloo_flutter_app/features/products/presentation/widgets/product_bottom_bar.dart';
-import 'package:bakaloo_flutter_app/features/products/presentation/widgets/show_product_options.dart';
 import 'package:bakaloo_flutter_app/features/products/presentation/widgets/product_detail_loading_view.dart';
 import 'package:bakaloo_flutter_app/features/products/presentation/widgets/product_details_section.dart';
 import 'package:bakaloo_flutter_app/features/products/presentation/widgets/product_detail_tabs.dart';
@@ -347,7 +346,6 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                         targetProduct,
                       ),
                       onSeeAll: () => _openSimilarProducts(effectiveProduct),
-                      onAddToCart: _addToCart,
                     ),
                   ),
                 ),
@@ -358,7 +356,6 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                       enabled: _hasReachedRecommendations,
                       onProductTap: (targetProduct) =>
                           _openProduct(targetProduct),
-                      onAddToCart: _addToCart,
                     ),
                   ),
                 ),
@@ -372,7 +369,6 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                         targetProduct,
                       ),
                       onSeeAll: _openRecommendedProducts,
-                      onAddToCart: _addToCart,
                     ),
                   ),
                 ),
@@ -556,29 +552,13 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       );
   }
 
-  // Used by the recommendation rails (Pair With / Similar / Recently
-  // Viewed), which have no inline unit selector of their own — a
-  // multi-option product tapped from one of those rows still needs the
-  // picker sheet to choose which variant to add.
-  Future<void> _addToCart(ProductEntity product) async {
-    if (!product.inStock) {
-      showCartSnackBar(context, 'This product is currently unavailable.');
-      return;
-    }
-
-    if (product.hasMultipleOptions) {
-      showProductOptionsSheet(context, product);
-      return;
-    }
-
-    await _addProductToCart(product);
-  }
-
   // Used by this screen's own bottom bar. The "Select Unit" chip row
   // (when present) already lets the customer choose the exact variant
-  // in place, so — unlike _addToCart — this skips straight to adding
-  // whichever variant is currently displayed instead of popping the
-  // options sheet again on top of it.
+  // in place, so this skips straight to adding whichever variant is
+  // currently displayed instead of popping the options sheet again on top
+  // of it. The recommendation rails (Pair With / Similar / Recently
+  // Viewed) no longer route through here — their shared `ProductCard` adds
+  // to cart (and opens the options sheet for multi-option products) itself.
   Future<void> _addSelectedVariantToCart(ProductEntity product) async {
     if (!product.inStock) {
       showCartSnackBar(context, 'This product is currently unavailable.');

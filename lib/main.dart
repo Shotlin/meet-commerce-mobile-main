@@ -43,19 +43,17 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   }
 }
 
-Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-
-  // MapLibre's default Android platform-view mode (SurfaceView-backed) is
-  // known to render a solid black surface instead of map tiles on a subset
-  // of devices (widely reported on MIUI/Xiaomi, and whenever the map sits
-  // inside a Stack with other overlays composited above it, as
-  // AddressMapPickerScreen does). Hybrid composition (TextureView-backed) is
-  // slightly slower to render but avoids that failure mode entirely — this
-  // must be set before the first MapLibreMap widget is created.
-  MapLibreMap.useHybridComposition = true;
-
-  await dotenv.load(fileName: '.env');
+/// Firebase init, Hive init and `.env` load touch entirely disjoint state
+/// (confirmed by inspection: `firebase_options.dart` and `hive_service.dart`
+/// never read `dotenv`, and neither Firebase nor Hive depends on the other)
+/// — the only thing downstream that needs `dotenv` is
+/// `AppCacheManager.ensureFreshOnStartup()`, which needs `ApiConstants
+/// .baseUrl` (itself a `dotenv.env` read) AND Hive's boxes to already be
+/// open. Running these three independent steps concurrently instead of
+/// back-to-back turns their combined latency into just the slowest of the
+/// three (usually Firebase's platform-channel handshake), shaving real time
+/// off the cold-start path before the first frame can render.
+Future<void> _initFirebase() async {
   try {
     // Previously this call threw `core/duplicate-app` on every single iOS
     // launch (see _ensureFirebaseInitialized doc comment), which silently
@@ -81,9 +79,25 @@ Future<void> main() async {
   } catch (e) {
     debugPrint('Firebase init failed (dummy keys?): $e');
   }
+}
 
-  await HiveService.init();
-  debugPrint('Hive initialized');
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // MapLibre's default Android platform-view mode (SurfaceView-backed) is
+  // known to render a solid black surface instead of map tiles on a subset
+  // of devices (widely reported on MIUI/Xiaomi, and whenever the map sits
+  // inside a Stack with other overlays composited above it, as
+  // AddressMapPickerScreen does). Hybrid composition (TextureView-backed) is
+  // slightly slower to render but avoids that failure mode entirely — this
+  // must be set before the first MapLibreMap widget is created.
+  MapLibreMap.useHybridComposition = true;
+
+  await Future.wait<void>(<Future<void>>[
+    dotenv.load(fileName: '.env'),
+    _initFirebase(),
+    HiveService.init().then((_) => debugPrint('Hive initialized')),
+  ]);
 
   // PHASE 2 FIX: App-wide cache reconciliation. Wipes ALL non-auth caches
   // when the app cache schema version OR the API base URL changes — so an

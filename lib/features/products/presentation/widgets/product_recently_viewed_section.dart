@@ -2,22 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import 'package:bakaloo_flutter_app/features/products/domain/entities/product_entity.dart';
-import 'package:bakaloo_flutter_app/features/products/presentation/widgets/product_pair_with_section.dart';
+import 'package:bakaloo_flutter_app/features/products/presentation/widgets/show_product_options.dart';
+import 'package:bakaloo_flutter_app/shared/widgets/product_card.dart';
 
-/// Standalone carousel (no "See all" link, unlike Pair With / Similar) —
-/// built separately rather than reusing `ProductRecommendationsStrip` so
-/// this feature stays purely additive with zero edits to that shared file.
+/// Standalone carousel (no "See all" link, unlike Pair With / Similar).
+/// Renders the exact same [ProductCard] (`ProductCardVariant.premiumFresh`,
+/// `ProductCardStyle.grid`) the Home screen's Premium Fresh product grid
+/// uses — the same reused box UI as every other product-suggestion rail on
+/// this screen, just without a header link.
 class ProductRecentlyViewedSection extends StatelessWidget {
   const ProductRecentlyViewedSection({
     required this.products,
     this.onProductTap,
-    this.onAddToCart,
     super.key,
   });
 
   final List<ProductEntity> products;
   final ValueChanged<ProductEntity>? onProductTap;
-  final ValueChanged<ProductEntity>? onAddToCart;
 
   @override
   Widget build(BuildContext context) {
@@ -44,26 +45,33 @@ class ProductRecentlyViewedSection extends StatelessWidget {
               ),
             ),
           ),
-          // Row + SingleChildScrollView instead of a height-locked ListView
-          // so each card sizes to its own content — see the matching
-          // comment in `product_pair_with_section.dart` for why.
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             physics: const BouncingScrollPhysics(),
-            padding: EdgeInsets.only(left: 16.w, right: 16.w),
+            padding: EdgeInsets.only(left: 16.w, right: 16.w, bottom: 16.h),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 for (final product in products)
-                  RepaintBoundary(
-                    child: ProductRecommendationCard(
-                      product: product,
-                      onTap: onProductTap == null
-                          ? null
-                          : () => onProductTap!(product),
-                      onAdd: onAddToCart == null
-                          ? null
-                          : () => onAddToCart!(product),
+                  Padding(
+                    padding: EdgeInsets.only(right: 12.w),
+                    child: RepaintBoundary(
+                      child: SizedBox(
+                        width: 170.w,
+                        child: ProductCard(
+                          product: product,
+                          width: 170,
+                          style: ProductCardStyle.grid,
+                          variant: ProductCardVariant.premiumFresh,
+                          showWishlist: true,
+                          onTap: onProductTap == null
+                              ? null
+                              : () => onProductTap!(product),
+                          onOptionsTap: product.hasMultipleOptions
+                              ? () => showProductOptionsSheet(context, product)
+                              : null,
+                        ),
+                      ),
                     ),
                   ),
               ],
