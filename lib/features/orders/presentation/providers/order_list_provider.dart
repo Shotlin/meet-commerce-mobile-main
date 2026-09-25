@@ -13,6 +13,7 @@ import 'package:bakaloo_flutter_app/features/orders/domain/usecases/download_inv
 import 'package:bakaloo_flutter_app/features/orders/domain/usecases/get_active_order.dart';
 import 'package:bakaloo_flutter_app/features/orders/domain/usecases/get_detail.dart';
 import 'package:bakaloo_flutter_app/features/orders/domain/usecases/get_orders.dart';
+import 'package:bakaloo_flutter_app/features/orders/domain/usecases/get_quality_videos.dart';
 import 'package:bakaloo_flutter_app/features/orders/domain/usecases/reorder.dart';
 import 'package:bakaloo_flutter_app/shared/entities/pagination_entity.dart';
 
@@ -86,6 +87,11 @@ final reorderUseCaseProvider = Provider<ReorderUseCase>((Ref ref) {
 final downloadInvoiceUseCaseProvider =
     Provider<DownloadInvoiceUseCase>((Ref ref) {
   return DownloadInvoiceUseCase(ref.watch(orderRepositoryProvider));
+});
+
+final getOrderQualityVideosUseCaseProvider =
+    Provider<GetOrderQualityVideosUseCase>((Ref ref) {
+  return GetOrderQualityVideosUseCase(ref.watch(orderRepositoryProvider));
 });
 
 final orderListControllerProvider = Provider<OrderListController>((Ref ref) {

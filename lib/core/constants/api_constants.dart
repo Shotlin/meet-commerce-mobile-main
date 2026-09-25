@@ -122,6 +122,7 @@ class ApiConstants {
   static String orderCancel(String id) => '/orders/$id/cancel';
   static String orderReorder(String id) => '/orders/$id/reorder';
   static String orderInvoice(String id) => '/orders/$id/invoice';
+  static String orderQualityVideos(String id) => '/orders/$id/quality-videos';
 
   static const paymentsCreateOrder = '/payments/create-order';
   static const paymentsVerify = '/payments/verify';

@@ -2,6 +2,7 @@ import 'package:dartz/dartz.dart';
 
 import 'package:bakaloo_flutter_app/core/errors/failure.dart';
 import 'package:bakaloo_flutter_app/features/orders/domain/entities/order_entity.dart';
+import 'package:bakaloo_flutter_app/features/orders/domain/entities/order_quality_video_entity.dart';
 import 'package:bakaloo_flutter_app/shared/entities/pagination_entity.dart';
 
 class OrderPageResult {
@@ -56,4 +57,10 @@ abstract class OrderRepository {
   Future<Either<Failure, ReorderResult>> reorder(String orderId);
 
   Future<Either<Failure, InvoiceFileResult>> downloadInvoice(String orderId);
+
+  /// The vendor quality/cleaning video(s) that backed this order's items —
+  /// what scanning the order's invoice QR resolves to.
+  Future<Either<Failure, List<OrderQualityVideoEntity>>> getQualityVideos(
+    String orderId,
+  );
 }

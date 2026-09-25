@@ -36,4 +36,10 @@ class RouteNames {
   static const superMall = '/super_mall';
   static const cafe = '/cafe';
   static const locationUnavailable = '/location-unavailable';
+  // Deliberately NOT under /orders/ — a literal single-segment path there
+  // (e.g. /orders/scan) would collide with the shell's /orders/:orderId
+  // branch the exact same way /orders/active once did on the backend
+  // (orderId="active" — see CLAUDE.md §7.2 point 9). Top-level and
+  // unambiguous instead.
+  static const scanOrderQr = '/scan-order-qr';
 }

@@ -259,12 +259,7 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
                     isReordering: _isReordering,
                   ),
                   Gap(12.h),
-                  OrderQrCard(
-                    order: order,
-                    onDownloadInvoice: () => _downloadInvoice(order),
-                    isDownloadingInvoice: _isDownloadingInvoice,
-                    canDownloadInvoice: canDownloadInvoice,
-                  ),
+                  OrderQrCard(order: order),
                   Gap(12.h),
                   _CardShell(
                     title: 'Order Timeline',

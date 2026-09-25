@@ -31,7 +31,7 @@
 		<key>LSRequiresIPhoneOS</key>
 		<true/>
 		<key>NSCameraUsageDescription</key>
-		<string>Take a photo for your profile picture.</string>
+		<string>Used to take a profile photo and to scan your order's QR code.</string>
 		<key>NSFaceIDUsageDescription</key>
 		<string>Use Face ID to access your Bakaloo Wallet securely.</string>
 		<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>

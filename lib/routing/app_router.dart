@@ -19,6 +19,8 @@ import 'package:bakaloo_flutter_app/features/notifications/presentation/screens/
 import 'package:bakaloo_flutter_app/features/notifications/presentation/screens/notification_preferences_screen.dart';
 import 'package:bakaloo_flutter_app/features/orders/presentation/screens/order_detail_screen.dart';
 import 'package:bakaloo_flutter_app/features/orders/presentation/screens/orders_screen.dart';
+import 'package:bakaloo_flutter_app/features/orders/presentation/screens/order_qr_scan_screen.dart';
+import 'package:bakaloo_flutter_app/features/orders/presentation/screens/order_quality_video_screen.dart';
 import 'package:bakaloo_flutter_app/features/orders/presentation/screens/order_success_screen.dart';
 import 'package:bakaloo_flutter_app/features/products/presentation/screens/product_detail_screen.dart';
 import 'package:bakaloo_flutter_app/features/profile/presentation/screens/profile_screen.dart';
@@ -184,6 +186,22 @@ GoRouter appRouter(Ref ref) {
             orderId: state.pathParameters['orderId'] ?? '',
           );
         },
+      ),
+      GoRoute(
+        path: RouteNames.scanOrderQr,
+        builder: (BuildContext context, GoRouterState state) {
+          return const OrderQrScanScreen();
+        },
+        routes: <RouteBase>[
+          GoRoute(
+            path: ':orderId',
+            builder: (BuildContext context, GoRouterState state) {
+              return OrderQualityVideoScreen(
+                orderId: state.pathParameters['orderId'] ?? '',
+              );
+            },
+          ),
+        ],
       ),
       GoRoute(
         path: RouteNames.cart,
