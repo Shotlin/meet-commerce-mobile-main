@@ -7,6 +7,7 @@ import 'package:video_player/video_player.dart';
 
 import 'package:bakaloo_flutter_app/features/orders/domain/entities/order_quality_video_entity.dart';
 import 'package:bakaloo_flutter_app/features/orders/presentation/providers/order_quality_videos_provider.dart';
+import 'package:bakaloo_flutter_app/features/orders/presentation/widgets/order_details/order_detail_palette.dart';
 
 /// What scanning a FreshCuts order QR resolves to — the vendor's real
 /// cleaning/processing/packing video for the batch that supplied this
@@ -98,6 +99,7 @@ class _QualityVideoCardState extends State<_QualityVideoCard> {
   ChewieController? _chewieController;
   bool _isLoading = false;
   bool _hasError = false;
+  String? _errorDetail;
 
   @override
   void dispose() {
@@ -110,6 +112,7 @@ class _QualityVideoCardState extends State<_QualityVideoCard> {
     setState(() {
       _isLoading = true;
       _hasError = false;
+      _errorDetail = null;
     });
     try {
       final controller = VideoPlayerController.networkUrl(Uri.parse(widget.item.videoUrl!));
@@ -129,11 +132,15 @@ class _QualityVideoCardState extends State<_QualityVideoCard> {
         _chewieController = chewie;
         _isLoading = false;
       });
-    } catch (_) {
+    } catch (error) {
+      // The exception used to be swallowed entirely (bare `catch (_)`),
+      // leaving "tap does nothing, or it silently fails" with zero way to
+      // diagnose why on a real device — kept and surfaced here instead.
       if (!mounted) return;
       setState(() {
         _isLoading = false;
         _hasError = true;
+        _errorDetail = error.toString();
       });
     }
   }
@@ -170,22 +177,38 @@ class _QualityVideoCardState extends State<_QualityVideoCard> {
                   : _videoController!.value.aspectRatio,
               child: Chewie(controller: _chewieController!),
             )
-          else
+          else ...<Widget>[
             SizedBox(
               width: double.infinity,
               height: 44,
               child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: OrderDetailPalette.ctaRed,
+                  foregroundColor: OrderDetailPalette.white,
+                  disabledBackgroundColor: OrderDetailPalette.ctaRed.withValues(alpha: 0.6),
+                  disabledForegroundColor: OrderDetailPalette.white,
+                ),
                 onPressed: _isLoading ? null : _play,
                 icon: _isLoading
                     ? const SizedBox(
                         width: 16,
                         height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                        child: CircularProgressIndicator(strokeWidth: 2, color: OrderDetailPalette.white),
                       )
                     : const Icon(PhosphorIcons.play, size: 18),
                 label: Text(_hasError ? 'Try again' : 'Watch Video'),
               ),
             ),
+            if (_hasError && _errorDetail != null) ...<Widget>[
+              const SizedBox(height: 6),
+              Text(
+                _errorDetail!,
+                style: const TextStyle(fontSize: 11, color: Colors.grey),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ],
         ],
       ),
     );
