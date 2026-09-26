@@ -13,11 +13,26 @@ Failure handleDioError(DioException error) {
     case DioExceptionType.sendTimeout:
     case DioExceptionType.receiveTimeout:
     case DioExceptionType.cancel:
-    case DioExceptionType.connectionError:
       return NetworkFailure(
         message: _extractMessage(
           error.response?.data,
           fallback: 'Please check your internet connection and try again.',
+        ),
+      );
+    case DioExceptionType.connectionError:
+      // A REAL request left the device and failed downstream (DNS hiccup,
+      // socket reset, a dropped mid-request connection) — this is distinct
+      // from the device having no network at all (that case never reaches
+      // here: ConnectivityInterceptor rejects it earlier as its own
+      // `Failure`, short-circuited above). Telling the user "check your
+      // internet" for this case is actively misleading when their device
+      // is genuinely online and the backend is genuinely reachable, which
+      // is exactly what made a real report of this indistinguishable from
+      // true offline — kept honest instead.
+      return NetworkFailure(
+        message: _extractMessage(
+          error.response?.data,
+          fallback: "Couldn't reach the server. Please try again.",
         ),
       );
     case DioExceptionType.badCertificate:
