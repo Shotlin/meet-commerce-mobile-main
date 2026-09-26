@@ -72,16 +72,16 @@ class CategoryRepositoryImpl implements CategoryRepository {
     final cacheKey = _localDataSource.productsCacheKey(categoryId);
 
     if (page == 1) {
+      // Network-first: shop-controlled fields (price, stock, availability)
+      // must show what's live right now, not what was cached on a previous
+      // visit to this category. The old "serve the cache whenever it's
+      // still fresh, refresh in the background" strategy meant a customer
+      // who'd already opened this category kept seeing a pre-price-change
+      // value for up to the cache's own TTL, since the background refresh
+      // updated Hive but never pushed the change to the screen already
+      // on-screen. The cache is a fallback for offline/error only now,
+      // matching ProductRepositoryImpl.getProducts/getProductDetail.
       final cached = _cachedProducts(cacheKey);
-      final isFresh = _localDataSource.isFresh(
-        cacheKey,
-        const Duration(minutes: 10),
-      );
-
-      if (cached != null && isFresh) {
-        unawaited(_refreshCategoryProducts(cacheKey, categoryId, limit));
-        return Right(cached);
-      }
 
       try {
         final remotePage = await _remoteDataSource.getCategoryProducts(
@@ -162,26 +162,6 @@ class CategoryRepositoryImpl implements CategoryRepository {
           _sanitizeCategories(await _remoteDataSource.getCategories());
       await _localDataSource.cacheCategories(
         categories.map(_toCategoryJson).toList(),
-      );
-    } catch (_) {}
-  }
-
-  Future<void> _refreshCategoryProducts(
-    String cacheKey,
-    String categoryId,
-    int limit,
-  ) async {
-    try {
-      final remotePage = await _remoteDataSource.getCategoryProducts(
-        categoryId: categoryId,
-        page: 1,
-        limit: limit,
-      );
-      await _localDataSource.cacheCategoryProducts(
-        key: cacheKey,
-        items:
-            remotePage.items.map((ProductModel item) => item.toJson()).toList(),
-        pagination: remotePage.pagination,
       );
     } catch (_) {}
   }
