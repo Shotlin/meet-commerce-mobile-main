@@ -476,9 +476,11 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen>
     // through unchecked). Fails open on a network/validation error rather
     // than blocking checkout on a transient hiccup — the backend's own
     // order-placement check remains the authoritative backstop regardless.
-    final validation = await ref
-        .read(validatePincodeUseCaseProvider)
-        .call(selected.pincode);
+    final validation = await ref.read(validatePincodeUseCaseProvider).call(
+          selected.pincode,
+          lat: selected.latitude,
+          lng: selected.longitude,
+        );
     final available = validation.fold((_) => true, (result) => result.available);
     if (!available) {
       if (!context.mounted) {

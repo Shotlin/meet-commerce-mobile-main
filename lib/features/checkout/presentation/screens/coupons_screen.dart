@@ -19,11 +19,15 @@ import 'package:bakaloo_flutter_app/features/checkout/presentation/providers/che
 import 'package:bakaloo_flutter_app/features/checkout/presentation/providers/coupon_provider.dart';
 
 // ─── Color tokens local to this screen ───────────────────────────────────────
+// Recolored to the real FreshCuts brand red (matches AppColors.brandRed,
+// used app-wide on Order Details/Product Detail/the bottom nav's active
+// tab) — this screen used to run an unrelated generic green/gold palette
+// left over from before the FreshCuts rebrand.
 const _kBg = Color(0xFFF4F6F8);
 const _kCardBg = Colors.white;
-const _kGreen = Color(0xFF0C831F);
-const _kGreenLight = Color(0xFFE8F5E9);
-const _kGreenMid = Color(0xFFCCEDD3);
+const _kBrand = AppColors.brandRed;
+const _kBrandLight = AppColors.brandRedSurface;
+const _kBrandMid = AppColors.brandRedBorder;
 const _kGold = Color(0xFFF0A000);
 const _kGoldLight = Color(0xFFFFF4DD);
 const _kGoldDark = Color(0xFF8A5A00);
@@ -35,8 +39,8 @@ const _kProviderBluePill = Color(0xFFEFF3FF);
 const _kProviderBluePillFg = Color(0xFF173E8F);
 const _kBorder = Color(0xFFE8ECF0);
 const _kDivider = Color(0xFFEEEEEE);
-const _kInfoBg = Color(0xFFEDF7F0);
-const _kInfoBorder = Color(0xFFB8DFC4);
+const _kInfoBg = AppColors.brandRedSurface;
+const _kInfoBorder = AppColors.brandRedBorder;
 
 class CouponsScreen extends ConsumerStatefulWidget {
   const CouponsScreen({super.key});
@@ -133,12 +137,15 @@ class _CouponsScreenState extends ConsumerState<CouponsScreen> {
       backgroundColor: _kBg,
       appBar: _buildAppBar(),
       body: RefreshIndicator(
-        color: _kGreen,
+        color: _kBrand,
         onRefresh: _refreshData,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: EdgeInsets.fromLTRB(16.w, 20.h, 16.w, 36.h),
+          padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 36.h),
           children: <Widget>[
+            const _BrandHeroHeader(),
+            Gap(18.h),
+
             // Applied coupon banner
             if (checkoutState.appliedCoupon != null) ...<Widget>[
               _AppliedBanner(
@@ -152,7 +159,7 @@ class _CouponsScreenState extends ConsumerState<CouponsScreen> {
             // ── Smart Coupons ─────────────────────────────────────────
             _PremiumSectionHeader(
               eyebrow: 'SMART COUPONS',
-              eyebrowColor: _kGreen,
+              eyebrowColor: _kBrand,
               eyebrowIcon: PhosphorIcons.tagFill,
               title: 'Best codes for this order',
               subtitle:
@@ -253,12 +260,15 @@ class _CouponsScreenState extends ConsumerState<CouponsScreen> {
     );
   }
 
+  // The FreshCuts wordmark + "Coupons & Offers" title now live in
+  // [_BrandHeroHeader] at the top of the scrollable body — this bar stays a
+  // minimal, transparent back-navigation strip so the hero banner reads as
+  // the true top of the page rather than sitting under a second title.
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
-      backgroundColor: _kCardBg,
+      backgroundColor: _kBg,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
-      titleSpacing: 0,
       leading: IconButton(
         icon: Icon(
           PhosphorIcons.arrowLeftBold,
@@ -266,41 +276,6 @@ class _CouponsScreenState extends ConsumerState<CouponsScreen> {
           color: AppColors.textPrimary,
         ),
         onPressed: () => Navigator.of(context).pop(),
-      ),
-      title: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
-            'Coupons & Offers',
-            style: AppTextStyles.h2.copyWith(fontWeight: FontWeight.w700),
-          ),
-          Text(
-            'Curated savings for this cart',
-            style: AppTextStyles.bodySmall.copyWith(
-              color: AppColors.textSecondary,
-              fontSize: 11.5.sp,
-            ),
-          ),
-        ],
-      ),
-      actions: <Widget>[
-        Container(
-          margin: EdgeInsets.only(right: 14.w),
-          padding: EdgeInsets.all(10.w),
-          decoration: BoxDecoration(
-            color: _kGreenLight,
-            borderRadius: BorderRadius.circular(12.r),
-          ),
-          child: Icon(
-            PhosphorIcons.giftFill,
-            size: 20.sp,
-            color: _kGreen,
-          ),
-        ),
-      ],
-      bottom: PreferredSize(
-        preferredSize: const Size.fromHeight(1),
-        child: Container(height: 1, color: _kBorder),
       ),
     );
   }
@@ -406,7 +381,7 @@ class _CouponIssueSheet extends StatelessWidget {
               child: ElevatedButton(
                 onPressed: () => Navigator.of(context).pop(),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _kGreen,
+                  backgroundColor: _kBrand,
                   foregroundColor: Colors.white,
                   minimumSize: Size(0, 48.h),
                   elevation: 0,
@@ -554,6 +529,94 @@ class _CartItemThumb extends StatelessWidget {
   }
 }
 
+// ─── Brand Hero Header ─────────────────────────────────────────────────────────
+//
+// The FreshCuts wordmark, front and center at the top of the page, on the
+// real brand-red gradient — replaces the old plain white AppBar title this
+// screen used to have (which, like the rest of its palette, predated the
+// FreshCuts rebrand and never carried the logo at all).
+
+class _BrandHeroHeader extends StatelessWidget {
+  const _BrandHeroHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.all(16.w),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: <Color>[_kBrand, AppColors.brandRedDark],
+        ),
+        borderRadius: BorderRadius.circular(AppDimensions.radiusXl),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: _kBrand.withValues(alpha: 0.25),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Row(
+        children: <Widget>[
+          Container(
+            width: 44.w,
+            height: 44.w,
+            padding: EdgeInsets.all(6.w),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+            ),
+            child: Image.asset(
+              'assets/images/freshcuts-logo-wordmark.png',
+              fit: BoxFit.contain,
+              cacheHeight: 128,
+              filterQuality: FilterQuality.high,
+            ),
+          ),
+          Gap(12.w),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  'Coupons & Offers',
+                  style: AppTextStyles.h2.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                Gap(2.h),
+                Text(
+                  'Curated savings for this cart',
+                  style: AppTextStyles.bodySmall.copyWith(
+                    color: Colors.white.withValues(alpha: 0.85),
+                    fontSize: 11.5.sp,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Gap(8.w),
+          Container(
+            padding: EdgeInsets.all(10.w),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(12.r),
+            ),
+            child: Icon(
+              PhosphorIcons.giftFill,
+              size: 20.sp,
+              color: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // ─── Applied Banner ────────────────────────────────────────────────────────────
 
 class _AppliedBanner extends StatelessWidget {
@@ -576,7 +639,7 @@ class _AppliedBanner extends StatelessWidget {
             width: 38.w,
             height: 38.w,
             decoration: const BoxDecoration(
-              color: _kGreen,
+              color: _kBrand,
               shape: BoxShape.circle,
             ),
             child: Icon(
@@ -593,7 +656,7 @@ class _AppliedBanner extends StatelessWidget {
                 Text(
                   '${coupon.code} applied',
                   style: AppTextStyles.labelLarge.copyWith(
-                    color: _kGreen,
+                    color: _kBrand,
                     fontWeight: FontWeight.w800,
                     fontSize: 14.sp,
                   ),
@@ -732,14 +795,14 @@ class _PremiumCouponCard extends StatelessWidget {
   }
 
   Color get _leftBg {
-    if (isApplied) return _kGreen;
+    if (isApplied) return _kBrand;
     if (isEligible) return const Color(0xFFF3FCF4);
     return _kLocked;
   }
 
   Color get _leftIconColor {
     if (isApplied) return Colors.white;
-    if (isEligible) return _kGreen;
+    if (isEligible) return _kBrand;
     return _kLockedFg;
   }
 
@@ -760,7 +823,7 @@ class _PremiumCouponCard extends StatelessWidget {
         color: _kCardBg,
         borderRadius: BorderRadius.circular(AppDimensions.radiusXl),
         border: Border.all(
-          color: isApplied ? _kGreen.withValues(alpha: 0.6) : _kBorder,
+          color: isApplied ? _kBrand.withValues(alpha: 0.6) : _kBorder,
           width: isApplied ? 1.5 : 1.0,
         ),
         boxShadow: const <BoxShadow>[AppShadows.cardShadow],
@@ -848,12 +911,12 @@ class _PremiumCouponCard extends StatelessWidget {
                                         ? 'Ready'
                                         : 'Locked',
                                 bg: isApplied
-                                    ? _kGreenLight
+                                    ? _kBrandLight
                                     : isEligible
                                         ? const Color(0xFFFFF3E0)
                                         : const Color(0xFFF0F2F5),
                                 fg: isApplied
-                                    ? _kGreen
+                                    ? _kBrand
                                     : isEligible
                                         ? const Color(0xFFBF6900)
                                         : _kLockedFg,
@@ -937,7 +1000,7 @@ class _PremiumCouponCard extends StatelessWidget {
                             Text(
                               isExpanded ? 'Hide terms' : 'View terms',
                               style: AppTextStyles.buttonSmall.copyWith(
-                                color: _kGreen,
+                                color: _kBrand,
                                 fontSize: 12.5.sp,
                               ),
                             ),
@@ -947,7 +1010,7 @@ class _PremiumCouponCard extends StatelessWidget {
                                   ? Icons.keyboard_arrow_up_rounded
                                   : Icons.keyboard_arrow_right_rounded,
                               size: 16.sp,
-                              color: _kGreen,
+                              color: _kBrand,
                             ),
                           ],
                         ),
@@ -1052,15 +1115,15 @@ class _ApplyButton extends StatelessWidget {
         height: 38.h,
         padding: EdgeInsets.symmetric(horizontal: 14.w),
         decoration: BoxDecoration(
-          color: _kGreenLight,
+          color: _kBrandLight,
           borderRadius: BorderRadius.circular(10.r),
-          border: Border.all(color: _kGreenMid),
+          border: Border.all(color: _kBrandMid),
         ),
         alignment: Alignment.center,
         child: Text(
           'Applied',
           style: AppTextStyles.buttonSmall.copyWith(
-            color: _kGreen,
+            color: _kBrand,
             fontSize: 12.5.sp,
           ),
         ),
@@ -1072,9 +1135,9 @@ class _ApplyButton extends StatelessWidget {
       child: OutlinedButton(
         onPressed: onTap,
         style: OutlinedButton.styleFrom(
-          foregroundColor: isEligible ? _kGreen : _kLockedFg,
+          foregroundColor: isEligible ? _kBrand : _kLockedFg,
           side: BorderSide(
-            color: isEligible ? _kGreen : _kBorder,
+            color: isEligible ? _kBrand : _kBorder,
             width: 1.4,
           ),
           padding: EdgeInsets.symmetric(horizontal: 14.w),
@@ -1085,7 +1148,7 @@ class _ApplyButton extends StatelessWidget {
         child: Text(
           'Apply',
           style: AppTextStyles.buttonSmall.copyWith(
-            color: isEligible ? _kGreen : _kLockedFg,
+            color: isEligible ? _kBrand : _kLockedFg,
             fontSize: 12.5.sp,
           ),
         ),
@@ -1207,8 +1270,8 @@ class _PremiumPaymentOfferCard extends StatelessWidget {
                             text: offer.maxCashback != null
                                 ? '${offer.cashbackPercent!.toStringAsFixed(offer.cashbackPercent! % 1 == 0 ? 0 : 1)}% up to ${offer.maxCashback!.toInrCurrency}'
                                 : '${offer.cashbackPercent!.toStringAsFixed(offer.cashbackPercent! % 1 == 0 ? 0 : 1)}% cashback',
-                            bg: _kGreenLight,
-                            fg: _kGreen,
+                            bg: _kBrandLight,
+                            fg: _kBrand,
                           ),
                       ],
                     ),
@@ -1224,7 +1287,7 @@ class _PremiumPaymentOfferCard extends StatelessWidget {
                   vertical: 8.h,
                 ),
                 decoration: BoxDecoration(
-                  color: offer.isLocked ? _kGoldLight : _kGreenLight,
+                  color: offer.isLocked ? _kGoldLight : _kBrandLight,
                   borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
                 ),
                 child: Column(
@@ -1233,7 +1296,7 @@ class _PremiumPaymentOfferCard extends StatelessWidget {
                     Text(
                       offer.cashbackAmount.toInrCurrency,
                       style: AppTextStyles.labelLarge.copyWith(
-                        color: offer.isLocked ? _kGoldDark : _kGreen,
+                        color: offer.isLocked ? _kGoldDark : _kBrand,
                         fontWeight: FontWeight.w800,
                         fontSize: 14.sp,
                       ),
@@ -1241,7 +1304,7 @@ class _PremiumPaymentOfferCard extends StatelessWidget {
                     Text(
                       offer.isLocked ? 'Unlock' : 'Cashback',
                       style: AppTextStyles.bodySmall.copyWith(
-                        color: offer.isLocked ? _kGoldDark : _kGreen,
+                        color: offer.isLocked ? _kGoldDark : _kBrand,
                         fontWeight: FontWeight.w700,
                         fontSize: 10.5.sp,
                       ),
@@ -1262,7 +1325,7 @@ class _PremiumPaymentOfferCard extends StatelessWidget {
               value: progress,
               backgroundColor: _kProgressBg,
               valueColor: AlwaysStoppedAnimation<Color>(
-                offer.isLocked ? _kGold : _kGreen,
+                offer.isLocked ? _kGold : _kBrand,
               ),
             ),
           ),
@@ -1287,8 +1350,8 @@ class _PremiumPaymentOfferCard extends StatelessWidget {
               Gap(10.w),
               _Chip(
                 text: offer.isLocked ? 'Locked' : 'Live',
-                bg: offer.isLocked ? _kGoldLight : _kGreenLight,
-                fg: offer.isLocked ? _kGoldDark : _kGreen,
+                bg: offer.isLocked ? _kGoldLight : _kBrandLight,
+                fg: offer.isLocked ? _kGoldDark : _kBrand,
                 fontWeight: FontWeight.w700,
               ),
             ],
@@ -1319,13 +1382,13 @@ class _SavingsInfoCard extends StatelessWidget {
             width: 38.w,
             height: 38.w,
             decoration: BoxDecoration(
-              color: _kGreen.withValues(alpha: 0.12),
+              color: _kBrand.withValues(alpha: 0.12),
               shape: BoxShape.circle,
             ),
             child: Icon(
               PhosphorIcons.shieldCheckFill,
               size: 18.sp,
-              color: _kGreen,
+              color: _kBrand,
             ),
           ),
           Gap(12.w),
@@ -1396,15 +1459,15 @@ class _ErrorCard extends StatelessWidget {
           OutlinedButton(
             onPressed: onRetry,
             style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: _kGreen),
-              foregroundColor: _kGreen,
+              side: const BorderSide(color: _kBrand),
+              foregroundColor: _kBrand,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10.r),
               ),
             ),
             child: Text(
               'Retry',
-              style: AppTextStyles.buttonSmall.copyWith(color: _kGreen),
+              style: AppTextStyles.buttonSmall.copyWith(color: _kBrand),
             ),
           ),
         ],

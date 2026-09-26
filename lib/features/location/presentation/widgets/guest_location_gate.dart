@@ -80,6 +80,21 @@ class _GuestLocationGateState extends ConsumerState<GuestLocationGate> {
 
   @override
   Widget build(BuildContext context) {
+    return const StorefrontAccessLoadingSkeleton();
+  }
+}
+
+/// The blurred storefront skeleton, with no behaviour of its own — no
+/// provider listeners, no location prompts. [GuestLocationGate] renders this
+/// while its own listener decides whether a guest actually needs the
+/// location-enable sheet; other callers (see AppShell in app_bottom_nav.dart)
+/// use it directly as a neutral "still resolving" placeholder for cases
+/// where [GuestLocationGate]'s guest-only side effects must not run.
+class StorefrontAccessLoadingSkeleton extends StatelessWidget {
+  const StorefrontAccessLoadingSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bgPrimary,
       body: Stack(

@@ -213,7 +213,15 @@ Future<LocationAutoDetectResult> _geocodeAndSave(
   // first (no extra cost in the common case) and only if it is missing or not
   // served consult the device geocoder's PINs, keeping the first one that is.
   Future<bool?> pinServed(String pin) async {
-    final validation = await ref.read(validatePincodeUseCaseProvider).call(pin);
+    // Same lat/lng-aware radius fallback the manual Add Address form now
+    // uses — without it, a device genuinely standing inside a shop's
+    // delivery radius but geocoded to a pincode that isn't in that shop's
+    // explicit list would be wrongly reported unserviceable here.
+    final validation = await ref.read(validatePincodeUseCaseProvider).call(
+          pin,
+          lat: position.latitude,
+          lng: position.longitude,
+        );
     // A failed validation call is "unknown" (null) and never blocks — the
     // create/update call still enforces serviceability server-side.
     return validation.fold((_) => null, (r) => r.available);

@@ -122,10 +122,16 @@ class AddressRepositoryImpl implements AddressRepository {
 
   @override
   Future<Either<Failure, PincodeValidationResult>> validatePincode(
-    String pincode,
-  ) async {
+    String pincode, {
+    double? lat,
+    double? lng,
+  }) async {
     try {
-      final result = await _remoteDataSource.validatePincode(pincode);
+      final result = await _remoteDataSource.validatePincode(
+        pincode,
+        lat: lat,
+        lng: lng,
+      );
       return Right(
         PincodeValidationResult(
           available: result.available,

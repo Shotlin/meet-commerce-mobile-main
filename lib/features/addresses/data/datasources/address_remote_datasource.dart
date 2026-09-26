@@ -71,9 +71,25 @@ class AddressRemoteDataSource {
     return _parseAddress(response.data, ApiConstants.addressDefault(id));
   }
 
-  Future<PincodeValidationModel> validatePincode(String pincode) async {
+  // [lat]/[lng] are optional — when the caller already has a map pin (Add
+  // Address, checkout's re-validate-before-selecting), passing them lets
+  // the backend accept a pincode that isn't in a shop's explicit list but
+  // still falls inside its delivery radius, the same pincode-OR-radius rule
+  // saving that exact address already enforces. Omitted entirely (not sent
+  // as null) for a caller with no coordinates on hand, so ajv's schema and
+  // the backend's own "no coords given" branch see the exact same request
+  // shape as before this existed.
+  Future<PincodeValidationModel> validatePincode(
+    String pincode, {
+    double? lat,
+    double? lng,
+  }) async {
     final response = await _apiClient.validatePincode(
-      <String, dynamic>{'pincode': normalizePincode(pincode) ?? pincode.trim()},
+      <String, dynamic>{
+        'pincode': normalizePincode(pincode) ?? pincode.trim(),
+        if (lat != null && lng != null) 'lat': lat,
+        if (lat != null && lng != null) 'lng': lng,
+      },
     );
     final payload = _parsePayload(response.data, ApiConstants.validatePincode);
     final data = payload['data'];

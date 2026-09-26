@@ -8,7 +8,11 @@ class ValidatePincodeUseCase {
 
   final AddressRepository _repository;
 
-  Future<Either<Failure, PincodeValidationResult>> call(String pincode) {
-    return _repository.validatePincode(pincode);
+  Future<Either<Failure, PincodeValidationResult>> call(
+    String pincode, {
+    double? lat,
+    double? lng,
+  }) {
+    return _repository.validatePincode(pincode, lat: lat, lng: lng);
   }
 }

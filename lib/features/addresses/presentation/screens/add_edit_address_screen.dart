@@ -572,7 +572,20 @@ class _AddEditAddressScreenState extends ConsumerState<AddEditAddressScreen> {
   }
 
   Future<void> _validatePincode(String pincode, int requestId) async {
-    final result = await ref.read(validatePincodeUseCaseProvider).call(pincode);
+    // The map pin is already dropped by the time this runs (see
+    // _applyMapResult, which sets _latitude/_longitude before scheduling
+    // this validation) — passing it lets the backend accept a pincode
+    // that's genuinely inside a shop's delivery radius even when it isn't
+    // in that shop's explicit pincode list, matching what saving this exact
+    // address would actually do. Fixes a real reported case: a map pin in
+    // an already-serviceable area (by radius) showed "Delivery is not
+    // available at this pin yet." here even though the address would have
+    // saved successfully.
+    final result = await ref.read(validatePincodeUseCaseProvider).call(
+          pincode,
+          lat: _latitude,
+          lng: _longitude,
+        );
     if (!mounted || requestId != _pincodeRequestId || pincode != _pincode) {
       return;
     }

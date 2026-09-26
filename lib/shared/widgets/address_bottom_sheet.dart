@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:bakaloo_flutter_app/core/providers/store_provider.dart';
+import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
 import 'package:bakaloo_flutter_app/features/addresses/presentation/providers/address_provider.dart';
 import 'package:bakaloo_flutter_app/features/products/presentation/widgets/show_product_options.dart';
 import 'package:bakaloo_flutter_app/routing/route_names.dart';
@@ -29,12 +29,15 @@ class AddressBottomSheet extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final storeColor = ref.watch(
-      selectedStoreProvider.select((store) => store.chipActiveColor),
-    );
-    final storeBgColor = ref.watch(
-      selectedStoreProvider.select((store) => store.backgroundColor),
-    );
+    // Was previously tinted off `selectedStoreProvider` — the leftover
+    // multi-store demo shell (Zepto/50% OFF Zone/Super Mall/Cafe, see
+    // core/models/store_model.dart), whose default/first entry ("Zepto")
+    // happens to be light blue. A customer's delivery address has nothing
+    // to do with which of those demo store tabs is selected, so this sheet
+    // always renders in the real FreshCuts brand red now, regardless.
+    const storeColor = AppColors.brandRed;
+    const storeBgColor = AppColors.brandRedSurface;
+    const storeBorderColor = AppColors.brandRedBorder;
 
     // Resolve the currently selected / default address for display.
     final addresses = ref.watch(addressProvider).asData?.value;
@@ -61,9 +64,9 @@ class AddressBottomSheet extends ConsumerWidget {
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 28),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -79,36 +82,60 @@ class AddressBottomSheet extends ConsumerWidget {
               ),
             ),
           ),
-          const SizedBox(height: 16),
-          const Text(
-            'Delivery Address',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: Colors.black,
-            ),
+          const SizedBox(height: 18),
+          Row(
+            children: <Widget>[
+              Container(
+                width: 34,
+                height: 34,
+                decoration: const BoxDecoration(
+                  color: storeBgColor,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.location_on_rounded,
+                  color: storeColor,
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Text(
+                'Delivery Address',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.black,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           // ── Current address display ──────────────────────────────────
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
             decoration: BoxDecoration(
-              color: storeBgColor.withValues(alpha: 0.10),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: storeColor.withValues(alpha: 0.25),
-                width: 1,
-              ),
+              color: storeBgColor,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: storeBorderColor, width: 1),
             ),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Icon(
-                  Icons.location_on_rounded,
-                  color: storeColor,
-                  size: 20,
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.location_on_rounded,
+                    color: storeColor,
+                    size: 18,
+                  ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 12),
                 Expanded(
                   child: currentAddress != null
                       ? Column(
@@ -116,13 +143,25 @@ class AddressBottomSheet extends ConsumerWidget {
                           mainAxisSize: MainAxisSize.min,
                           children: <Widget>[
                             if (currentAddress.label.trim().isNotEmpty)
-                              Text(
-                                currentAddress.label.trim(),
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                  color: storeColor,
-                                  height: 1.2,
+                              Container(
+                                margin: const EdgeInsets.only(bottom: 4),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: storeBorderColor),
+                                ),
+                                child: Text(
+                                  currentAddress.label.trim(),
+                                  style: const TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: storeColor,
+                                    height: 1.2,
+                                  ),
                                 ),
                               ),
                             Text(
@@ -161,16 +200,34 @@ class AddressBottomSheet extends ConsumerWidget {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               decoration: BoxDecoration(
-                color: storeBgColor.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(12),
+                color: storeColor,
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: const <BoxShadow>[
+                  BoxShadow(
+                    color: Color(0x33D02428),
+                    blurRadius: 12,
+                    offset: Offset(0, 4),
+                  ),
+                ],
               ),
-              child: Text(
-                'Manage Addresses',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: storeColor,
-                ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  Icon(
+                    Icons.edit_location_alt_rounded,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                  SizedBox(width: 8),
+                  Text(
+                    'Manage Addresses',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),

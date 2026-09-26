@@ -86,6 +86,8 @@ abstract class AddressRepository {
   Future<Either<Failure, AddressEntity>> setDefaultAddress(String id);
 
   Future<Either<Failure, PincodeValidationResult>> validatePincode(
-    String pincode,
-  );
+    String pincode, {
+    double? lat,
+    double? lng,
+  });
 }

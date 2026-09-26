@@ -1,14 +1,17 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import 'package:bakaloo_flutter_app/core/constants/api_constants.dart';
 import 'package:bakaloo_flutter_app/core/constants/storage_keys.dart';
 import 'package:bakaloo_flutter_app/core/di/providers.dart';
 import 'package:bakaloo_flutter_app/core/errors/failure.dart';
+import 'package:bakaloo_flutter_app/core/storage/app_cache_manager.dart';
 import 'package:bakaloo_flutter_app/core/storage/hive_service.dart';
 import 'package:bakaloo_flutter_app/features/addresses/data/datasources/address_remote_datasource.dart';
 import 'package:bakaloo_flutter_app/features/addresses/data/repositories/address_repository_impl.dart';
@@ -22,6 +25,8 @@ import 'package:bakaloo_flutter_app/features/addresses/domain/usecases/update_ad
 import 'package:bakaloo_flutter_app/features/addresses/domain/usecases/validate_pincode_usecase.dart';
 import 'package:bakaloo_flutter_app/features/auth/presentation/providers/auth_notifier.dart';
 import 'package:bakaloo_flutter_app/features/auth/presentation/providers/auth_state.dart';
+import 'package:bakaloo_flutter_app/features/home/presentation/providers/banner_provider.dart';
+import 'package:bakaloo_flutter_app/features/home/presentation/providers/home_provider.dart';
 import 'package:bakaloo_flutter_app/shared/widgets/confirmation_dialog.dart';
 
 part 'address_provider.g.dart';
@@ -284,6 +289,27 @@ class AddressNotifier extends _$AddressNotifier {
         );
         state = AsyncData(next);
         _writeCache(next);
+        // FIX (root cause of a stale store/theme after switching the
+        // default address): the backend already recomputes this account's
+        // shop allocation the moment an existing address is promoted to
+        // default (addresses.service.js#setDefault), but nothing on the
+        // client ever told it — unlike creating/editing an address as
+        // default, which already calls this same recompute via
+        // add_edit_address_screen.dart. A customer with, say, a Kolkata
+        // address and a second, already-saved New Delhi address would tap
+        // "Set as Default" on the Delhi one and see the server-side
+        // allocation genuinely switch, while the app kept showing the old
+        // Kolkata store/catalogue/theme until a full logout+login — because
+        // the locally cached shop scope (AppCacheManager, which every
+        // theme/product provider is keyed by) was never refreshed. Mirrors
+        // allocation_recompute.dart's triggerAllocationRecompute, which
+        // can't be called directly here: it takes a WidgetRef (widget-only
+        // in Riverpod), while a Notifier only ever has a Ref — the same
+        // constraint AuthNotifier's own
+        // _triggerAllocationAutoAssign/_invalidateShopScopedHomeProviders
+        // already work around by duplicating the same fire-and-forget
+        // pattern for its Ref context.
+        unawaited(_triggerAllocationRecomputeForAddress(address));
         return const AddressActionResult();
       },
     );
@@ -291,6 +317,65 @@ class AddressNotifier extends _$AddressNotifier {
 
   void refresh() {
     ref.invalidateSelf();
+  }
+
+  /// See the FIX note in [setDefault]. Fire-and-forget: a failure here just
+  /// leaves the previous (now stale) shop scope in place until the next
+  /// successful recompute, exactly like allocation_recompute.dart's
+  /// widget-callable twin.
+  Future<void> _triggerAllocationRecomputeForAddress(
+    AddressEntity address,
+  ) async {
+    try {
+      final response = await ref.read(dioClientProvider).post<dynamic>(
+        ApiConstants.allocationRecompute,
+        data: <String, dynamic>{
+          'address': <String, dynamic>{
+            'lat': address.latitude,
+            'lng': address.longitude,
+            'pincode': address.pincode,
+          },
+        },
+      );
+      // Persist the resolved shop scope BEFORE invalidating providers below
+      // — see allocation_recompute.dart's matching comment for why ordering
+      // matters here.
+      await AppCacheManager.applyAllocationResponse(response.data);
+      await _invalidateShopScopedHomeProviders();
+    } on DioException catch (_) {
+      // Non-fatal — refresh interceptor handles 401s; any other failure
+      // just leaves the previous allocation in place until the next
+      // successful call.
+    } catch (_) {
+      // Non-fatal — ignore.
+    }
+  }
+
+  /// Refreshes the home feeds after the allocation may have changed.
+  /// Storefront caches/providers are keyed by `StorefrontScope`, so nothing
+  /// is wiped and the theme/section providers re-key by themselves if the
+  /// shop changed — these are the older keepAlive home-feed providers that
+  /// don't, and need an explicit nudge (mirrors auth_notifier.dart's own
+  /// copy of this exact list).
+  Future<void> _invalidateShopScopedHomeProviders() async {
+    try {
+      ref.invalidate(homeProvider);
+    } catch (_) {}
+    try {
+      ref.invalidate(homeFeaturedProductsProvider);
+    } catch (_) {}
+    try {
+      ref.invalidate(homeDealsProvider);
+    } catch (_) {}
+    try {
+      ref.invalidate(homeTrendingProductsProvider);
+    } catch (_) {}
+    try {
+      ref.invalidate(homeNewArrivalsProvider);
+    } catch (_) {}
+    try {
+      ref.invalidate(homeCategoryProductsProvider);
+    } catch (_) {}
   }
 
   List<AddressEntity> get _currentAddresses => switch (state) {

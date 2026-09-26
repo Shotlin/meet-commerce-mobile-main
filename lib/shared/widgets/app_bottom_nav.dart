@@ -30,6 +30,24 @@ import 'package:bakaloo_flutter_app/routing/route_names.dart';
 import 'package:bakaloo_flutter_app/features/products/presentation/widgets/show_product_options.dart';
 import 'package:bakaloo_flutter_app/shared/widgets/app_route_loading_gate.dart';
 
+/// True only for the brief window where a signed-in account's
+/// [storefrontAccessProvider] has never resolved at all yet — its very
+/// first frame after a fresh login/cold start, before the GET /addresses
+/// round trip it awaits returns. Deliberately false once the provider has
+/// ANY value (even a stale one being refreshed), so a later
+/// invalidate/refetch of the same provider never flashes back to this
+/// state — only the true "we don't know yet" case should suppress the
+/// normal gating below.
+///
+/// Extracted as a pure function (no BuildContext/WidgetRef) so the exact
+/// condition that fixed the "location prompt appears for an
+/// already-addressed account" race (see the call site in
+/// AppShell.build) is directly unit-testable without mounting AppShell's
+/// full, heavy provider tree.
+bool isStorefrontAccessStillResolving(AsyncValue<bool> storefrontAccess) {
+  return storefrontAccess.isLoading && !storefrontAccess.hasValue;
+}
+
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({
     required this.navigationShell,
@@ -137,6 +155,29 @@ class _AppShellState extends ConsumerState<AppShell>
       }
     } else {
       final storefrontAccess = ref.watch(storefrontAccessProvider);
+      // storefrontAccessProvider, for a signed-in account, resolves only
+      // after a real GET /addresses round trip — on every cold start (or
+      // fresh login) it starts out with no cached value at all, i.e.
+      // `isLoading && !hasValue`. That "still finding out" state must NOT
+      // fall through to GuestLocationGate below: that widget is not a
+      // neutral placeholder — it independently drives itself off
+      // guestStorefrontProvider, a local-storage-only cache (no network)
+      // that, for any account that logged in directly and never browsed
+      // as a guest first, resolves almost instantly to "unresolved" and
+      // fires GuestLocationGate's own mandatory "Enable Location" sheet —
+      // regardless of whether this (slower) account-scoped future is
+      // about to resolve `true`. Because the local read wins that race,
+      // the sheet would appear for an already-addressed account and then
+      // self-dismiss (orphaned on the root navigator) the moment
+      // storefrontAccess actually resolves and this branch stops
+      // matching. Reported bug: an already-logged-in account with a
+      // saved address occasionally sees the location prompt anyway,
+      // gone as soon as it's dismissed. A plain loading skeleton has no
+      // such side effect, so showing it here instead closes the race at
+      // its source rather than reacting to symptoms of it.
+      if (isStorefrontAccessStillResolving(storefrontAccess)) {
+        return const StorefrontAccessLoadingSkeleton();
+      }
       if (storefrontAccess.value != true) {
         return GuestLocationGate(state: guestStorefront);
       }
@@ -881,6 +922,18 @@ class _NavTabButton extends StatelessWidget {
     const Color inactiveColor = Color(0xFF1A1A1A);
     final String iconAsset = selected ? tab.activeIcon : tab.inactiveIcon;
     final Color labelColor = selected ? activeColor : inactiveColor;
+    // The bundled PNG icons aren't drawn at a consistent weight — measured
+    // directly (glyph bounding box ÷ 256px canvas), the Categories icon's
+    // actual artwork fills noticeably less of its canvas than Home/Orders/
+    // Profile's (outline ~31% vs ~40-49%; filled ~41% vs ~44-48%), which is
+    // why it visibly reads smaller in the footer even though every tab
+    // renders through the exact same fixed 36×36 box below. Rather than
+    // resize the box (risks overlapping the label underneath), zoom just
+    // this icon's own artwork within its existing box so its on-screen
+    // glyph size matches its siblings — a no-op (scale 1.0) for every
+    // other tab.
+    final double iconZoom =
+        selected ? tab.activeIconZoom : tab.inactiveIconZoom;
 
     return Material(
       color: Colors.transparent,
@@ -905,12 +958,17 @@ class _NavTabButton extends StatelessWidget {
                         selected ? activeColor : inactiveColor,
                         BlendMode.srcIn,
                       ),
-                      child: Image.asset(
-                        iconAsset,
-                        width: 36.w,
-                        height: 36.h,
-                        fit: BoxFit.contain,
-                        filterQuality: FilterQuality.medium,
+                      child: ClipRect(
+                        child: Transform.scale(
+                          scale: iconZoom,
+                          child: Image.asset(
+                            iconAsset,
+                            width: 36.w,
+                            height: 36.h,
+                            fit: BoxFit.contain,
+                            filterQuality: FilterQuality.medium,
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -940,12 +998,20 @@ class AppShellTab {
     required this.path,
     required this.inactiveIcon,
     required this.activeIcon,
+    this.inactiveIconZoom = 1.0,
+    this.activeIconZoom = 1.0,
   });
 
   final String label;
   final String path;
   final String inactiveIcon;
   final String activeIcon;
+
+  /// Per-tab compensation for how much of its own artwork's 256×256 canvas
+  /// the bundled PNG glyph actually fills — see the comment in
+  /// [_NavTabButton.build]. 1.0 (the default) is a no-op.
+  final double inactiveIconZoom;
+  final double activeIconZoom;
 }
 
 const String _footerIconBase = 'assets/icon/footer_icon';
@@ -968,6 +1034,12 @@ final List<AppShellTab> _tabs = <AppShellTab>[
     path: RouteNames.categories,
     inactiveIcon: '$_footerIconBase/mc-categories-outline-icon.png',
     activeIcon: '$_footerIconBase/mc-categories-filled-icon.png',
+    // Measured against the other 3 tabs' own artwork (glyph bbox ÷ 256px
+    // canvas): outline ~31% filled vs ~40-49% for Home/Orders/Profile,
+    // filled ~41% vs ~44-48% — these zoom values bring both states back in
+    // line with everyone else's on-screen weight.
+    inactiveIconZoom: 1.4,
+    activeIconZoom: 1.1,
   ),
   AppShellTab(
     label: 'Profile',
