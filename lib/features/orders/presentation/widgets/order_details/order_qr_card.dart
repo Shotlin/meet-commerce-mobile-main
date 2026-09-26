@@ -41,7 +41,10 @@ class OrderQrCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(16.r),
       child: InkWell(
         borderRadius: BorderRadius.circular(16.r),
-        onTap: () => context.push(RouteNames.scanOrderQr),
+        // Passes `order` as `extra` so the scanner can validate the
+        // scanned QR belongs to THIS exact order — see `app_router.dart`'s
+        // scanOrderQr route and `OrderQrScanScreen`'s `expectedOrderId`.
+        onTap: () => context.push(RouteNames.scanOrderQr, extra: order),
         child: Container(
           padding: EdgeInsets.all(14.w),
           decoration: BoxDecoration(

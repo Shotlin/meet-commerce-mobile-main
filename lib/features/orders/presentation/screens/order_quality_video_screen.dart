@@ -6,6 +6,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:video_player/video_player.dart';
 
 import 'package:bakaloo_flutter_app/features/orders/domain/entities/order_quality_video_entity.dart';
+import 'package:bakaloo_flutter_app/features/orders/domain/entities/order_quality_videos_result.dart';
 import 'package:bakaloo_flutter_app/features/orders/presentation/providers/order_quality_videos_provider.dart';
 import 'package:bakaloo_flutter_app/features/orders/presentation/widgets/order_details/order_detail_palette.dart';
 
@@ -24,7 +25,28 @@ class OrderQualityVideoScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Quality Video'),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            const Text('Quality Video'),
+            // Two different orders can legitimately show the identical
+            // vendor video when they were both fulfilled from the same
+            // real vendor batch — showing the real order number here
+            // makes it visually unambiguous which order this actually is,
+            // rather than looking like the app might be reusing a stale
+            // or cached result from a previously-viewed order.
+            videosAsync.maybeWhen(
+              data: (OrderQualityVideosResult result) => result.orderNumber != null
+                  ? Text(
+                      'Order ${result.orderNumber}',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+                    )
+                  : const SizedBox.shrink(),
+              orElse: () => const SizedBox.shrink(),
+            ),
+          ],
+        ),
         leading: IconButton(
           icon: const Icon(Icons.close),
           onPressed: () => context.pop(),
@@ -36,7 +58,8 @@ class OrderQualityVideoScreen extends ConsumerWidget {
           icon: PhosphorIcons.warningCircle,
           message: "Couldn't load this order's quality video right now. Please try again.",
         ),
-        data: (List<OrderQualityVideoEntity> items) {
+        data: (OrderQualityVideosResult result) {
+          final items = result.items;
           final withVideo = items.where((item) => item.hasVideo).toList(growable: false);
           if (withVideo.isEmpty) {
             return const _MessageState(
@@ -179,14 +202,23 @@ class _QualityVideoCardState extends State<_QualityVideoCard> {
             )
           else ...<Widget>[
             SizedBox(
+              // A hard-clipping `height: 44` here (the previous value) was
+              // shorter than an ElevatedButton.icon's natural content
+              // height with Material's default internal padding — the
+              // label got vertically clipped rather than the button
+              // growing to fit it (confirmed live: "Watch Video"'s text
+              // rendered cut off at the bottom). `minimumSize` on the
+              // style lets the button size itself to its real content
+              // instead of being forced into too small a box.
               width: double.infinity,
-              height: 44,
               child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: OrderDetailPalette.ctaRed,
                   foregroundColor: OrderDetailPalette.white,
                   disabledBackgroundColor: OrderDetailPalette.ctaRed.withValues(alpha: 0.6),
                   disabledForegroundColor: OrderDetailPalette.white,
+                  minimumSize: const Size.fromHeight(48),
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                 ),
                 onPressed: _isLoading ? null : _play,
                 icon: _isLoading

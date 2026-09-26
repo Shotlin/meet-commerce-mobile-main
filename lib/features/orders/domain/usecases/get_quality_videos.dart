@@ -1,7 +1,7 @@
 import 'package:dartz/dartz.dart';
 
 import 'package:bakaloo_flutter_app/core/errors/failure.dart';
-import 'package:bakaloo_flutter_app/features/orders/domain/entities/order_quality_video_entity.dart';
+import 'package:bakaloo_flutter_app/features/orders/domain/entities/order_quality_videos_result.dart';
 import 'package:bakaloo_flutter_app/features/orders/domain/repositories/order_repository.dart';
 
 class GetOrderQualityVideosUseCase {
@@ -9,7 +9,7 @@ class GetOrderQualityVideosUseCase {
 
   final OrderRepository _repository;
 
-  Future<Either<Failure, List<OrderQualityVideoEntity>>> call(
+  Future<Either<Failure, OrderQualityVideosResult>> call(
     String orderId,
   ) {
     return _repository.getQualityVideos(orderId);

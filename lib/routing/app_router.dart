@@ -17,6 +17,7 @@ import 'package:bakaloo_flutter_app/features/home/presentation/screens/home_scre
 import 'package:bakaloo_flutter_app/features/location/presentation/screens/location_unavailable_screen.dart';
 import 'package:bakaloo_flutter_app/features/notifications/presentation/screens/notifications_screen.dart';
 import 'package:bakaloo_flutter_app/features/notifications/presentation/screens/notification_preferences_screen.dart';
+import 'package:bakaloo_flutter_app/features/orders/domain/entities/order_entity.dart';
 import 'package:bakaloo_flutter_app/features/orders/presentation/screens/order_detail_screen.dart';
 import 'package:bakaloo_flutter_app/features/orders/presentation/screens/orders_screen.dart';
 import 'package:bakaloo_flutter_app/features/orders/presentation/screens/order_qr_scan_screen.dart';
@@ -190,7 +191,16 @@ GoRouter appRouter(Ref ref) {
       GoRoute(
         path: RouteNames.scanOrderQr,
         builder: (BuildContext context, GoRouterState state) {
-          return const OrderQrScanScreen();
+          // Passed by `OrderQrCard`'s onTap — the order the scanner was
+          // opened FROM, so a scanned QR is validated against it (a
+          // customer must only ever be able to unlock the video for the
+          // exact order they're viewing, never a different one of their
+          // own past orders just because it happens to have a valid QR).
+          final currentOrder = state.extra is OrderEntity ? state.extra! as OrderEntity : null;
+          return OrderQrScanScreen(
+            expectedOrderId: currentOrder?.id,
+            expectedOrderNumber: currentOrder?.orderNumber,
+          );
         },
         routes: <RouteBase>[
           GoRoute(

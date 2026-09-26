@@ -11,7 +11,7 @@ import 'package:bakaloo_flutter_app/features/orders/data/datasources/order_remot
 import 'package:bakaloo_flutter_app/features/orders/data/local/order_local_datasource.dart';
 import 'package:bakaloo_flutter_app/features/orders/data/models/order_model.dart';
 import 'package:bakaloo_flutter_app/features/orders/domain/entities/order_entity.dart';
-import 'package:bakaloo_flutter_app/features/orders/domain/entities/order_quality_video_entity.dart';
+import 'package:bakaloo_flutter_app/features/orders/domain/entities/order_quality_videos_result.dart';
 import 'package:bakaloo_flutter_app/features/orders/domain/repositories/order_repository.dart';
 import 'package:bakaloo_flutter_app/shared/entities/pagination_entity.dart';
 
@@ -242,12 +242,12 @@ class OrderRepositoryImpl implements OrderRepository {
   }
 
   @override
-  Future<Either<Failure, List<OrderQualityVideoEntity>>> getQualityVideos(
+  Future<Either<Failure, OrderQualityVideosResult>> getQualityVideos(
     String orderId,
   ) async {
     try {
-      final items = await _remoteDataSource.getQualityVideos(orderId);
-      return Right(items);
+      final result = await _remoteDataSource.getQualityVideos(orderId);
+      return Right(result);
     } on DioException catch (error) {
       return Left(handleDioError(error));
     } catch (_) {

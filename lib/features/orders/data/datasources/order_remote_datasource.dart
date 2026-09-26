@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:bakaloo_flutter_app/core/constants/api_constants.dart';
 import 'package:bakaloo_flutter_app/features/orders/data/models/order_model.dart';
 import 'package:bakaloo_flutter_app/features/orders/domain/entities/order_quality_video_entity.dart';
+import 'package:bakaloo_flutter_app/features/orders/domain/entities/order_quality_videos_result.dart';
 import 'package:bakaloo_flutter_app/shared/entities/pagination_entity.dart';
 
 class OrderRemoteDataSource {
@@ -132,18 +133,19 @@ class OrderRemoteDataSource {
     );
   }
 
-  Future<List<OrderQualityVideoEntity>> getQualityVideos(
+  Future<OrderQualityVideosResult> getQualityVideos(
     String orderId,
   ) async {
     final path = ApiConstants.orderQualityVideos(orderId);
     final response = await _dio.get<dynamic>(path);
     final payload = _parsePayload(response.data, path);
     final data = payload['data'];
+    final orderNumber = data is Map ? data['orderNumber'] as String? : null;
     final itemsRaw = data is Map ? data['items'] : null;
     if (itemsRaw is! List) {
-      return const <OrderQualityVideoEntity>[];
+      return OrderQualityVideosResult(orderNumber: orderNumber, items: const <OrderQualityVideoEntity>[]);
     }
-    return itemsRaw
+    final items = itemsRaw
         .whereType<Map>()
         .map((raw) {
           final item = Map<String, dynamic>.from(raw);
@@ -158,6 +160,7 @@ class OrderRemoteDataSource {
           );
         })
         .toList(growable: false);
+    return OrderQualityVideosResult(orderNumber: orderNumber, items: items);
   }
 
   Future<InvoiceRemoteResult> downloadInvoice(String orderId) async {

@@ -5,16 +5,31 @@ import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
-import 'package:bakaloo_flutter_app/features/orders/presentation/widgets/order_details/order_qr_payload_parser.dart';
+import 'package:bakaloo_flutter_app/features/orders/presentation/screens/order_qr_scan_outcome.dart';
 
 /// Camera QR scanner reached from Order Details' "Scan / View QR" card.
 /// Scanning either the printed invoice's QR or the on-screen code (they
 /// encode the same `FRESHCUTS-ORDER|orderNumber|id` payload) resolves that
-/// order's vendor cleaning/packing video — the order it resolves is
-/// whichever one the scanned code names, not necessarily the order the
-/// scanner was opened from, so an old invoice scanned later still works.
+/// order's vendor cleaning/packing video.
+///
+/// **Scoped to the order the scanner was opened from** (`expectedOrderId`,
+/// passed by `OrderQrCard` as the route's `extra`): a customer must only
+/// ever be able to unlock the video for the exact order they're currently
+/// viewing, not a different one of their own past orders just because its
+/// QR happens to be genuinely valid. Scanning any other order's QR is
+/// rejected with a clear message and the camera stays open to retry —
+/// `expectedOrderId` is nullable only as a defensive fallback for a route
+/// entry with no order in scope (there is currently no such call site).
 class OrderQrScanScreen extends StatefulWidget {
-  const OrderQrScanScreen({super.key});
+  const OrderQrScanScreen({this.expectedOrderId, this.expectedOrderNumber, super.key});
+
+  /// The real `orders.id` of the order this scanner was opened from.
+  final String? expectedOrderId;
+
+  /// The human-readable order number (e.g. `FC-KOL-...-0001`), shown in
+  /// the mismatch message so the customer knows which order they're
+  /// actually inside.
+  final String? expectedOrderNumber;
 
   @override
   State<OrderQrScanScreen> createState() => _OrderQrScanScreenState();
@@ -36,21 +51,31 @@ class _OrderQrScanScreenState extends State<OrderQrScanScreen> {
   void _onDetect(BarcodeCapture capture) {
     if (_handledScan) return;
     final rawValue = capture.barcodes.isEmpty ? null : capture.barcodes.first.rawValue;
-    final orderId = parseFreshCutsOrderQrPayload(rawValue);
 
-    if (orderId == null) {
-      setState(() {
-        _errorMessage = "That doesn't look like a FreshCuts order QR — try again.";
-      });
-      return;
+    // The actual validation (including the core requirement — this QR
+    // must belong to the exact order the scanner was opened from) is a
+    // pure function so it's directly unit-tested without a real camera.
+    final outcome = resolveQrScanOutcome(
+      rawValue: rawValue,
+      expectedOrderId: widget.expectedOrderId,
+      expectedOrderNumber: widget.expectedOrderNumber,
+    );
+
+    switch (outcome) {
+      case QrScanRejected(:final message):
+        // Camera keeps running — the customer can immediately try again
+        // (the right invoice, or a valid FreshCuts code).
+        setState(() {
+          _errorMessage = message;
+        });
+      case QrScanMatch(:final orderId):
+        setState(() {
+          _handledScan = true;
+          _errorMessage = null;
+        });
+        unawaited(_controller.stop());
+        context.pushReplacement('/scan-order-qr/$orderId');
     }
-
-    setState(() {
-      _handledScan = true;
-      _errorMessage = null;
-    });
-    unawaited(_controller.stop());
-    context.pushReplacement('/scan-order-qr/$orderId');
   }
 
   @override
