@@ -643,4 +643,122 @@ void main() {
       expect(AppCacheManager.currentShopScope, 'shopA');
     });
   });
+
+  group('non-serviceable location — persisted so GuestLocationGate stops '
+      'asking (the reported "location pop-up comes back on every refresh" '
+      'bug)', () {
+    const MethodChannel secureChannel =
+        MethodChannel('plugins.it_nomads.com/flutter_secure_storage');
+
+    setUp(() {
+      // _load()'s expiry branch calls secure-storage delete() for real; a
+      // plain unit-test environment has no method channel handler wired up
+      // for it unless a test registers one, which would otherwise surface
+      // as an unrelated MissingPluginException caught by _load()'s own
+      // catch-all (landing on `failed` instead of the `unresolved` this
+      // branch actually sets) — a test-infra gap, not something this fix
+      // introduced. A no-op handler here keeps the test only asserting the
+      // ACTUAL fix under test.
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(secureChannel, (MethodCall call) async {
+        return null;
+      });
+    });
+
+    tearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(secureChannel, null);
+    });
+
+    ProviderContainer guestContainer() => ProviderContainer(
+          overrides: [secureStorageProvider.overrideWithValue(secure)],
+        );
+
+    Future<void> savedUnavailable({
+      String? pincode = '999999',
+      String? city = 'Nowhere',
+      String? addressLine1 = 'Somewhere Rd',
+      DateTime? expires,
+    }) =>
+        HiveService.settingsBox.put(
+          StorageKeys.guestStorefrontLocation,
+          <String, dynamic>{
+            'serviceable': false,
+            'pincode': pincode,
+            'city': city,
+            'addressLine1': addressLine1,
+            'expiresAt':
+                (expires ?? DateTime.now().add(const Duration(days: 7)))
+                    .toIso8601String(),
+          },
+        );
+
+    test('a cold start restores `unavailable` directly from the persisted '
+        'record — never `unresolved` (which is what re-triggers the '
+        'mandatory sheet)', () async {
+      await savedUnavailable();
+
+      final ProviderContainer c = guestContainer();
+      addTearDown(c.dispose);
+      c.read(guestStorefrontProvider);
+      await waitUntil(
+        () =>
+            c.read(guestStorefrontProvider).status !=
+            GuestStorefrontStatus.loading,
+      );
+
+      final GuestStorefrontState state = c.read(guestStorefrontProvider);
+      expect(state.status, GuestStorefrontStatus.unavailable);
+      expect(state.isReady, isFalse);
+      expect(state.pincode, '999999');
+      expect(state.city, 'Nowhere');
+      expect(state.addressLine1, 'Somewhere Rd');
+    });
+
+    test('an expired "not serviceable" record falls through to `unresolved`, '
+        'the same as an expired serviceable one', () async {
+      await savedUnavailable(
+        expires: DateTime.now().subtract(const Duration(days: 1)),
+      );
+
+      final ProviderContainer c = guestContainer();
+      addTearDown(c.dispose);
+      c.read(guestStorefrontProvider);
+      await waitUntil(
+        () =>
+            c.read(guestStorefrontProvider).status !=
+            GuestStorefrontStatus.loading,
+      );
+
+      expect(c.read(guestStorefrontProvider).status,
+          GuestStorefrontStatus.unresolved);
+    });
+
+    test('retry() resets in-memory state to `unresolved` without touching '
+        'the persisted record — the explicit "Try a Different Location" '
+        'escape hatch', () async {
+      await savedUnavailable();
+
+      final ProviderContainer c = guestContainer();
+      addTearDown(c.dispose);
+      c.read(guestStorefrontProvider);
+      await waitUntil(
+        () =>
+            c.read(guestStorefrontProvider).status ==
+            GuestStorefrontStatus.unavailable,
+      );
+
+      c.read(guestStorefrontProvider.notifier).retry();
+      expect(c.read(guestStorefrontProvider).status,
+          GuestStorefrontStatus.unresolved);
+
+      // The persisted record is untouched — a cold start right after,
+      // without ever actually retrying, still correctly remembers the last
+      // known answer instead of re-asking from scratch.
+      final dynamic stillThere =
+          HiveService.settingsBox.get(StorageKeys.guestStorefrontLocation);
+      expect(stillThere, isA<Map>());
+      expect((stillThere as Map)['serviceable'], isFalse);
+    });
+  });
 }

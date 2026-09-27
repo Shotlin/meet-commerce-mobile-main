@@ -511,36 +511,39 @@ class _MoreActionsRow extends StatelessWidget {
     return Row(
       children: <Widget>[
         Expanded(
-          child: SizedBox(
-            height: 44.h,
-            child: OutlinedButton(
-              onPressed: onWriteReview,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: OrderDetailPalette.textPrimary,
-                side: const BorderSide(color: OrderDetailPalette.border),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12.r),
-                ),
+          // A hard `height: 44.h` SizedBox here (the previous value)
+          // clipped the label under Material's default internal padding —
+          // the same bug already fixed once on the Quality Video screen's
+          // "Watch Video" button. `minimumSize` on the style lets the
+          // button size itself to its real content.
+          child: OutlinedButton(
+            onPressed: onWriteReview,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: OrderDetailPalette.textPrimary,
+              side: const BorderSide(color: OrderDetailPalette.border),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12.r),
               ),
-              child: const Text('Write Review'),
+              minimumSize: Size.fromHeight(44.h),
+              padding: EdgeInsets.symmetric(vertical: 10.h, horizontal: 12.w),
             ),
+            child: const Text('Write Review'),
           ),
         ),
         Gap(10.w),
         Expanded(
-          child: SizedBox(
-            height: 44.h,
-            child: OutlinedButton(
-              onPressed: onRequestRefund,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: OrderDetailPalette.primaryRed,
-                side: const BorderSide(color: OrderDetailPalette.primaryRed),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12.r),
-                ),
+          child: OutlinedButton(
+            onPressed: onRequestRefund,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: OrderDetailPalette.primaryRed,
+              side: const BorderSide(color: OrderDetailPalette.primaryRed),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12.r),
               ),
-              child: const Text('Request Refund'),
+              minimumSize: Size.fromHeight(44.h),
+              padding: EdgeInsets.symmetric(vertical: 10.h, horizontal: 12.w),
             ),
+            child: const Text('Request Refund'),
           ),
         ),
       ],

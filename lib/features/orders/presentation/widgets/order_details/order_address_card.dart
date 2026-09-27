@@ -128,25 +128,32 @@ class OrderAddressCard extends StatelessWidget {
               if (_isTrackable) ...<Widget>[
                 Expanded(
                   flex: 3,
-                  child: SizedBox(
-                    height: 40.h,
-                    child: FilledButton.icon(
-                      onPressed: () =>
-                          context.push('/orders/${order.id}/track'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: OrderDetailPalette.ctaRed,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10.r),
-                        ),
+                  // A hard `height: 40.h` SizedBox here (the previous value)
+                  // was shorter than a FilledButton.icon's natural content
+                  // height with Material's default internal padding — the
+                  // label rendered cut off rather than the button growing
+                  // to fit it (the same bug already fixed once on the
+                  // Quality Video screen's "Watch Video" button — see
+                  // order_quality_video_screen.dart). `minimumSize` on the
+                  // style lets the button size itself to its real content.
+                  child: FilledButton.icon(
+                    onPressed: () =>
+                        context.push('/orders/${order.id}/track'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: OrderDetailPalette.ctaRed,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10.r),
                       ),
-                      icon: Icon(PhosphorIcons.navigationArrow, size: 16.sp),
-                      label: Text(
-                        'Live Tracking',
-                        style: TextStyle(
-                          fontFamily: 'Inter',
-                          fontSize: 12.5.sp,
-                          fontWeight: FontWeight.w700,
-                        ),
+                      minimumSize: Size.fromHeight(40.h),
+                      padding: EdgeInsets.symmetric(vertical: 8.h, horizontal: 12.w),
+                    ),
+                    icon: Icon(PhosphorIcons.navigationArrow, size: 16.sp),
+                    label: Text(
+                      'Live Tracking',
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 12.5.sp,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
@@ -155,31 +162,30 @@ class OrderAddressCard extends StatelessWidget {
               ],
               Expanded(
                 flex: _isTrackable ? 2 : 5,
-                child: SizedBox(
-                  height: 40.h,
-                  child: OutlinedButton.icon(
-                    onPressed: hasCoordinates
-                        ? () => _openMap(lat, lng)
-                        : null,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: OrderDetailPalette.textPrimary,
-                      side: BorderSide(
-                        color: hasCoordinates
-                            ? OrderDetailPalette.border
-                            : OrderDetailPalette.border.withValues(alpha: 0.5),
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10.r),
-                      ),
+                child: OutlinedButton.icon(
+                  onPressed: hasCoordinates
+                      ? () => _openMap(lat, lng)
+                      : null,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: OrderDetailPalette.textPrimary,
+                    side: BorderSide(
+                      color: hasCoordinates
+                          ? OrderDetailPalette.border
+                          : OrderDetailPalette.border.withValues(alpha: 0.5),
                     ),
-                    icon: Icon(PhosphorIcons.mapTrifold, size: 16.sp),
-                    label: Text(
-                      'View on Map',
-                      style: TextStyle(
-                        fontFamily: 'Inter',
-                        fontSize: 12.5.sp,
-                        fontWeight: FontWeight.w700,
-                      ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10.r),
+                    ),
+                    minimumSize: Size.fromHeight(40.h),
+                    padding: EdgeInsets.symmetric(vertical: 8.h, horizontal: 12.w),
+                  ),
+                  icon: Icon(PhosphorIcons.mapTrifold, size: 16.sp),
+                  label: Text(
+                    'View on Map',
+                    style: TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 12.5.sp,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),

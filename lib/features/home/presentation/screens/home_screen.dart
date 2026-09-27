@@ -432,6 +432,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         return;
       }
 
+      // A location detected earlier (this session, or an earlier one — the
+      // flag is persisted in SharedPreferences) that turned out not to be
+      // serviceable never gets a saved address at all (the backend
+      // hard-blocks it), so `addresses.isNotEmpty` above can never become
+      // true for this customer no matter how many times they reopen the
+      // app — this function would otherwise show the mandatory "Enable
+      // Location" sheet again on every single cold start, only to
+      // rediscover the exact same non-serviceable answer once more. Same
+      // root cause and same fix as the guest flow's GuestLocationGate (see
+      // guest_storefront_provider.dart's `serviceable: false` persistence
+      // note) — skip straight to the not-serviceable screen instead of
+      // re-asking a question we already know the answer to.
+      if (ref.read(nonServiceableLocationProvider)) {
+        context.push(RouteNames.locationUnavailable);
+        return;
+      }
+
       final shouldShow =
           await ref.read(locationPromptShouldShowProvider.future);
       if (!mounted || !shouldShow) return;

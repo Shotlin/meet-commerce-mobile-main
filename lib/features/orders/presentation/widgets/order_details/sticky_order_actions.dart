@@ -56,60 +56,63 @@ class StickyOrderActions extends StatelessWidget {
           child: Row(
             children: <Widget>[
               Expanded(
-                child: SizedBox(
-                  height: 48.h,
-                  child: OutlinedButton.icon(
-                    onPressed: onNeedHelp,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: OrderDetailPalette.textPrimary,
-                      side: const BorderSide(color: OrderDetailPalette.border),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12.r),
-                      ),
+                // A hard `height: 48.h` SizedBox here (the previous value)
+                // clipped the label under Material's default internal
+                // padding — the same bug already fixed once on the Quality
+                // Video screen's "Watch Video" button. `minimumSize` on the
+                // style lets the button size itself to its real content.
+                child: OutlinedButton.icon(
+                  onPressed: onNeedHelp,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: OrderDetailPalette.textPrimary,
+                    side: const BorderSide(color: OrderDetailPalette.border),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12.r),
                     ),
-                    icon: Icon(PhosphorIcons.headset, size: 17.sp),
-                    label: Text(
-                      'Need Help?',
-                      style: TextStyle(
-                        fontFamily: 'Inter',
-                        fontSize: 13.sp,
-                        fontWeight: FontWeight.w700,
-                      ),
+                    minimumSize: Size.fromHeight(48.h),
+                    padding: EdgeInsets.symmetric(vertical: 10.h, horizontal: 12.w),
+                  ),
+                  icon: Icon(PhosphorIcons.headset, size: 17.sp),
+                  label: Text(
+                    'Need Help?',
+                    style: TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 13.sp,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
               ),
               Gap(10.w),
               Expanded(
-                child: SizedBox(
-                  height: 48.h,
-                  child: FilledButton.icon(
-                    onPressed: isBusy ? null : onPrimaryAction,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: color,
-                      disabledBackgroundColor: color.withValues(alpha: 0.5),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12.r),
-                      ),
+                child: FilledButton.icon(
+                  onPressed: isBusy ? null : onPrimaryAction,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: color,
+                    disabledBackgroundColor: color.withValues(alpha: 0.5),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12.r),
                     ),
-                    icon: isBusy
-                        ? SizedBox(
-                            width: 16.w,
-                            height: 16.w,
-                            child: const CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor:
-                                  AlwaysStoppedAnimation<Color>(Colors.white),
-                            ),
-                          )
-                        : Icon(icon, size: 17.sp),
-                    label: Text(
-                      label,
-                      style: TextStyle(
-                        fontFamily: 'Inter',
-                        fontSize: 13.sp,
-                        fontWeight: FontWeight.w700,
-                      ),
+                    minimumSize: Size.fromHeight(48.h),
+                    padding: EdgeInsets.symmetric(vertical: 10.h, horizontal: 12.w),
+                  ),
+                  icon: isBusy
+                      ? SizedBox(
+                          width: 16.w,
+                          height: 16.w,
+                          child: const CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : Icon(icon, size: 17.sp),
+                  label: Text(
+                    label,
+                    style: TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 13.sp,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),

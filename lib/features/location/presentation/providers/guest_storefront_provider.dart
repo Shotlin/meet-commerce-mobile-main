@@ -138,6 +138,25 @@ class GuestStorefrontNotifier extends Notifier<GuestStorefrontState> {
           state = restored;
           return;
         }
+        // A persisted "checked, not serviceable" record (see the
+        // `serviceable: false` write in resolveCurrentLocation's unavailable
+        // branch) — no token/shopId exists for this case since no shop was
+        // ever resolved, so it's distinguished by the explicit marker
+        // instead. Restoring it as `unavailable` here (rather than falling
+        // through to `unresolved` below) is what stops GuestLocationGate
+        // from re-showing the mandatory "Enable Location" sheet on every
+        // cold start for a customer whose location genuinely isn't served —
+        // it already knows the answer without asking again.
+        if (raw['serviceable'] == false) {
+          state = GuestStorefrontState(
+            status: GuestStorefrontStatus.unavailable,
+            pincode: raw['pincode'] as String?,
+            city: raw['city'] as String?,
+            addressLine1: raw['addressLine1'] as String?,
+            message: 'Delivery is not available at this location yet.',
+          );
+          return;
+        }
       }
       state = const GuestStorefrontState.unresolved();
     } catch (_) {
@@ -149,6 +168,19 @@ class GuestStorefrontNotifier extends Notifier<GuestStorefrontState> {
         message: 'Could not restore your delivery location.',
       );
     }
+  }
+
+  /// Resets in-memory state to `unresolved` without touching the persisted
+  /// cache record — used only by the guest's explicit "Try a Different
+  /// Location" action on the not-serviceable screen. GuestLocationGate skips
+  /// the mandatory sheet whenever the state is `unavailable` (that's the fix
+  /// for the sheet reappearing on every cold start); an explicit retry needs
+  /// a way to say "actually, do check again" without undoing that fix for
+  /// every ordinary reopen. If the customer backs out without retrying, the
+  /// persisted record is untouched, so the next cold start still correctly
+  /// skips straight to the not-serviceable screen instead of asking again.
+  void retry() {
+    state = const GuestStorefrontState.unresolved();
   }
 
   Future<bool> _hasSavedSession() async {
@@ -252,13 +284,44 @@ class GuestStorefrontNotifier extends Notifier<GuestStorefrontState> {
       final pincode = resolution.pincode ?? '';
       final data = resolution.data;
       if (data['serviceable'] != true) {
-        state = GuestStorefrontState(
+        final unavailable = GuestStorefrontState(
           status: GuestStorefrontStatus.unavailable,
           pincode: pincode.isEmpty ? null : pincode,
           city: resolvedCity?.isNotEmpty == true ? resolvedCity : null,
           addressLine1: reverse?.addressLine1 ?? reverse?.displayName,
           message: 'Delivery is not available at this location yet.',
         );
+        // Root cause of a real reported bug: this result used to be
+        // in-memory only — nothing was ever written to Hive/secure storage
+        // for a non-serviceable location, unlike the serviceable branch
+        // below. So on the very next cold start, `_load()` found nothing,
+        // fell through to `unresolved`, and GuestLocationGate re-showed the
+        // mandatory "Enable Location" sheet from scratch — every single
+        // reopen, forever, for a customer whose location genuinely isn't
+        // served yet (there's no address to ever change that, unlike the
+        // authenticated flow's `addresses.isNotEmpty` check). Reported:
+        // "that same location pop-up coming... I refresh application,
+        // repeatedly coming." Persisted the same way the serviceable case
+        // already is (7-day expiry, `serviceable: false` marker so `_load`
+        // can tell the two apart) so a restart restores this exact
+        // already-checked result instead of asking again.
+        final cacheRecord = <String, dynamic>{
+          'serviceable': false,
+          'pincode': unavailable.pincode,
+          'city': unavailable.city,
+          'addressLine1': unavailable.addressLine1,
+          'expiresAt':
+              DateTime.now().add(const Duration(days: 7)).toIso8601String(),
+        };
+        await Future.wait<void>([
+          HiveService.settingsBox
+              .put(StorageKeys.guestStorefrontLocation, cacheRecord),
+          _guestStorefrontSecureStorage.write(
+            key: _guestStorefrontSecureCacheKey,
+            value: jsonEncode(cacheRecord),
+          ),
+        ]);
+        state = unavailable;
         return;
       }
       final token = data['storefrontToken'] as String?;

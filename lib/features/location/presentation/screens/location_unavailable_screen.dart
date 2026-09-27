@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
+import 'package:bakaloo_flutter_app/features/location/presentation/providers/guest_storefront_provider.dart';
 import 'package:bakaloo_flutter_app/routing/route_names.dart';
 
 /// Shown when FreshCuts does not yet serve the customer's selected location
@@ -13,8 +15,10 @@ import 'package:bakaloo_flutter_app/routing/route_names.dart';
 /// ADDRESS_NOT_SERVICEABLE (add_edit_address_screen.dart), and the
 /// "use my current location" onboarding prompt when auto-detection lands
 /// outside every shop's service area (home_screen.dart, after
-/// showLocationPromptSheet resolves with nonServiceableLocationProvider set).
-class LocationUnavailableScreen extends StatelessWidget {
+/// showLocationPromptSheet resolves with nonServiceableLocationProvider set;
+/// or GuestLocationGate, restoring a persisted "checked, not serviceable"
+/// guest result).
+class LocationUnavailableScreen extends ConsumerWidget {
   const LocationUnavailableScreen({
     this.attemptedLocationLabel,
     this.showSignIn = false,
@@ -40,7 +44,7 @@ class LocationUnavailableScreen extends StatelessWidget {
   final VoidCallback? onNotify;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       backgroundColor: const Color(0xFFF9FAFE),
       body: SafeArea(
@@ -146,6 +150,19 @@ class LocationUnavailableScreen extends StatelessWidget {
                       filled: false,
                       onTap: onChangeLocation ??
                           () {
+                            // Guest flow: GuestLocationGate now skips the
+                            // mandatory sheet whenever the guest storefront
+                            // state is `unavailable` (the fix for the sheet
+                            // reappearing on every cold start for a
+                            // genuinely unserviceable location) — so an
+                            // explicit retry has to say so itself, or
+                            // returning to Home would just bounce straight
+                            // back here with no fresh check at all.
+                            if (showSignIn) {
+                              ref
+                                  .read(guestStorefrontProvider.notifier)
+                                  .retry();
+                            }
                             if (context.canPop()) {
                               context.pop();
                             } else {

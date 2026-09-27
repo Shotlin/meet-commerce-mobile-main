@@ -55,14 +55,14 @@ class ApiConstants {
 
   /// Public-facing marketing/web domain used for user-shareable links
   /// (product share, "share the app", etc). Deliberately separate from
-  /// [baseUrl], which points at the API host (api.bakaloo.in) — that host
-  /// should never appear in a link shown to another person.
+  /// [baseUrl], which points at the API host (api.fc.opslin.com) — that
+  /// host should never appear in a link shown to another person.
   static String get webBaseUrl {
     final configured = dotenv.env['WEB_BASE_URL']?.trim();
     if (configured != null && configured.isNotEmpty) {
       return configured;
     }
-    return 'https://bakaloo.in';
+    return 'https://shotlin.com';
   }
 
   static const sendOtp = '/auth/send-otp';
