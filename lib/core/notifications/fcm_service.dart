@@ -9,6 +9,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import 'package:bakaloo_flutter_app/core/notifications/fcm_token_helper.dart';
 import 'package:bakaloo_flutter_app/core/notifications/local_notification_service.dart';
+import 'package:bakaloo_flutter_app/core/notifications/notification_navigation.dart';
 import 'package:bakaloo_flutter_app/core/notifications/notification_router.dart';
 import 'package:bakaloo_flutter_app/core/session/session_ready_gate.dart';
 import 'package:bakaloo_flutter_app/features/auth/presentation/providers/auth_notifier.dart';
@@ -245,9 +246,15 @@ class FCMService {
   // an already-logged-in user to the login screen (see SessionReadyGate).
   // Once the gate is complete (the common case — app was already running),
   // this resolves on the next microtask with no visible delay.
+  //
+  // Uses navigateToNotificationTarget rather than a bare `_router.go(path)`
+  // — see notification_navigation.dart for why: go() alone replaces the
+  // whole stack, and for a target outside the bottom-nav shell (Cart,
+  // Product Detail, Search, …) that leaves nothing beneath it, so the very
+  // first back-press exits the app instead of returning into it.
   Future<void> _navigateOnceSessionReady(String path) async {
     await _sessionReadyGate.ready;
-    _router.go(path);
+    navigateToNotificationTarget(path, go: _router.go, push: _router.push);
   }
 
   Future<void> _onTokenRefresh(String newToken) async {

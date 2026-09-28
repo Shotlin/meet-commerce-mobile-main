@@ -77,7 +77,7 @@
             tools:replace="android:exported,android:theme" />
 
         <activity
-            android:name="com.meetcommerce.app.MainActivity"
+            android:name="com.freshcuts.app.MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
             android:taskAffinity=""

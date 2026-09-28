@@ -34,12 +34,15 @@ String? _notificationEventKeyFor(OrderStatus status) {
 
 /// Matches the wording already used elsewhere for order-status copy, so
 /// nothing contradicts the Orders screen. Stays quiet (returns '') for a
-/// status whose matching push/in-app notification is switched off in
-/// Settings → Order Notifications — [notificationFlags] missing a key (still
-/// loading, fetch failed) defaults to enabled, never to suppressed.
-String _bannerMessageFor(OrderStatus status, Map<String, bool> notificationFlags) {
+/// status whose banner was specifically turned off in the admin dashboard's
+/// Order Lifecycle tab — deliberately checks only the `banner` flag, not
+/// `notification`: the two are independent toggles, so a push can be off
+/// while the banner stays on, or vice versa. [notificationFlags] missing a
+/// key (still loading, fetch failed) defaults to enabled, never to
+/// suppressed.
+String _bannerMessageFor(OrderStatus status, Map<String, OrderNotificationEventFlags> notificationFlags) {
   final eventKey = _notificationEventKeyFor(status);
-  if (eventKey != null && notificationFlags[eventKey] == false) {
+  if (eventKey != null && notificationFlags[eventKey]?.banner == false) {
     return '';
   }
 
@@ -69,7 +72,7 @@ typedef _RawOrderStatus = ({String message, String key});
 final _rawOrderStatusProvider = Provider.autoDispose<_RawOrderStatus>((ref) {
   final activeOrderAsync = ref.watch(activeOrderProvider);
   final notificationFlags =
-      ref.watch(orderNotificationFlagsProvider).asData?.value ?? const <String, bool>{};
+      ref.watch(orderNotificationFlagsProvider).asData?.value ?? const <String, OrderNotificationEventFlags>{};
 
   // `.value` keeps the last-resolved order while a refetch is in flight
   // (only null before the very first load ever completes), so a socket

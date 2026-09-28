@@ -27,20 +27,21 @@ class DefaultFirebaseOptions {
     }
   }
 
-  // Placeholder/dummy values — deliberately NOT Bakaloo's real Firebase
-  // project. meet-commerce has no Firebase project of its own yet; the app
-  // already treats Firebase.initializeApp() failure as non-fatal (see
-  // main.dart's "dummy keys?" comment), so this intentionally fails to
-  // initialize rather than silently reporting meet-commerce dev/test
-  // analytics and crash data into a real, separate business's live project.
+  // Real FreshCuts Firebase project (freshcuts-slin), registered 2026-09-28
+  // for package com.freshcuts.app — the same project already used by the
+  // vendor app and already wired into the backend's Admin SDK credentials.
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'dummy-not-configured',
-    appId: '1:000000000000:android:0000000000000000000000',
-    messagingSenderId: '000000000000',
-    projectId: 'meet-commerce-dev-unconfigured',
-    storageBucket: 'meet-commerce-dev-unconfigured.firebasestorage.app',
+    apiKey: 'AIzaSyCaKRF8ulk2sW5my6vJ-KmKZxPHFeuCh_s',
+    appId: '1:493517915093:android:b5fd538abecfbdda5af35c',
+    messagingSenderId: '493517915093',
+    projectId: 'freshcuts-slin',
+    storageBucket: 'freshcuts-slin.firebasestorage.app',
   );
 
+  // iOS is not yet registered in Firebase — still deliberately dummy so
+  // Firebase.initializeApp() fails non-fatally on iOS rather than silently
+  // misreporting under the Android app's identity. Register com.bakaloo.india
+  // in the Firebase console and fill this in when iOS push is needed.
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'dummy-not-configured',
     appId: '1:000000000000:ios:0000000000000000000000',

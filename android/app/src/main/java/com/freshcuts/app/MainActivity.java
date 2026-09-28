@@ -1,4 +1,4 @@
-package com.meetcommerce.app;
+package com.freshcuts.app;
 
 import android.os.Build;
 import android.view.WindowManager;

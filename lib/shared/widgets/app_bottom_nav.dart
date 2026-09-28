@@ -9,6 +9,7 @@ import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
+import 'package:bakaloo_flutter_app/core/notifications/notification_navigation.dart';
 import 'package:bakaloo_flutter_app/core/notifications/notification_router.dart';
 import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
 import 'package:bakaloo_flutter_app/core/theme/app_text_styles.dart';
@@ -247,7 +248,13 @@ class _AppShellState extends ConsumerState<AppShell>
                       final path = NotificationRouter.getPath(
                         <String, dynamic>{...event.data, 'type': event.type},
                       );
-                      if (path != null && context.mounted) context.go(path);
+                      if (path != null && context.mounted) {
+                        navigateToNotificationTarget(
+                          path,
+                          go: context.go,
+                          push: context.push,
+                        );
+                      }
                     },
                     child: const Text('Open'),
                   ),
