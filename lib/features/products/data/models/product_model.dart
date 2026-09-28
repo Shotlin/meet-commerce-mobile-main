@@ -92,6 +92,16 @@ abstract class ProductModel with _$ProductModel {
     @JsonKey(name: 'custom_badges', fromJson: _badgesFromJson)
     @Default(<String>[])
     List<String> customBadges,
+    // "Choose Your Cut" / "Available Pieces" — admin-typed, same-SKU
+    // selectable options (see backend migration 148). Purely descriptive;
+    // hidden on this screen entirely when empty (see ProductEntity's
+    // hasCutOptions/hasPieceOptions).
+    @JsonKey(name: 'cut_options', fromJson: _badgesFromJson)
+    @Default(<String>[])
+    List<String> cutOptions,
+    @JsonKey(name: 'piece_options', fromJson: _badgesFromJson)
+    @Default(<String>[])
+    List<String> pieceOptions,
     @JsonKey(name: 'display_delivery_minutes') int? displayDeliveryMinutes,
     @JsonKey(name: 'shop_product_id') String? shopProductId,
     @JsonKey(name: 'shop_id') String? shopId,
@@ -156,6 +166,8 @@ abstract class ProductModel with _$ProductModel {
       foodType: foodType,
       originTag: originTag,
       customBadges: customBadges,
+      cutOptions: cutOptions,
+      pieceOptions: pieceOptions,
       displayDeliveryMinutes: displayDeliveryMinutes,
       shopProductId: shopProductId,
       shopId: shopId,

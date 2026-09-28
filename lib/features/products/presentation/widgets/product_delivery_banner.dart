@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
+import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
 import 'package:bakaloo_flutter_app/features/addresses/domain/entities/address_entity.dart';
 import 'package:bakaloo_flutter_app/features/addresses/presentation/providers/address_provider.dart';
 import 'package:bakaloo_flutter_app/features/location/presentation/providers/guest_storefront_provider.dart';
@@ -14,6 +15,12 @@ import 'package:bakaloo_flutter_app/shared/widgets/address_bottom_sheet.dart';
 
 /// Compact delivery context displayed on the product page. It uses the
 /// active customer or guest location already resolved for storefront pricing.
+///
+/// Deliberately a neutral panel with the brand red as a small icon accent —
+/// not a green/tinted card. This isn't a status ("available"/"unavailable")
+/// the way ProductStoreRow's badge is; it's the same plain informational
+/// line for every product, so it doesn't need — or deserve — a decorative
+/// color treatment of its own.
 class ProductDeliveryBanner extends ConsumerWidget {
   const ProductDeliveryBanner({required this.product, super.key});
 
@@ -50,9 +57,9 @@ class ProductDeliveryBanner extends ConsumerWidget {
       child: Container(
         padding: EdgeInsets.all(14.w),
         decoration: BoxDecoration(
-          color: const Color(0xFFF4FBF5),
+          color: AppColors.bgSection,
           borderRadius: BorderRadius.circular(16.r),
-          border: Border.all(color: const Color(0xFFBDE4C5)),
+          border: Border.all(color: AppColors.borderLight),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -63,7 +70,7 @@ class ProductDeliveryBanner extends ConsumerWidget {
                   width: 36.w,
                   height: 36.w,
                   decoration: const BoxDecoration(
-                    color: Color(0xFF0C831F),
+                    color: AppColors.brandRed,
                     shape: BoxShape.circle,
                   ),
                   child: Center(
@@ -85,7 +92,7 @@ class ProductDeliveryBanner extends ConsumerWidget {
                           fontFamily: 'Inter',
                           fontSize: 13.sp,
                           fontWeight: FontWeight.w800,
-                          color: const Color(0xFF132019),
+                          color: AppColors.textPrimary,
                         ),
                       ),
                       SizedBox(height: 2.h),
@@ -94,7 +101,7 @@ class ProductDeliveryBanner extends ConsumerWidget {
                         style: TextStyle(
                           fontFamily: 'Inter',
                           fontSize: 11.5.sp,
-                          color: const Color(0xFF4C6653),
+                          color: AppColors.textSecondary,
                         ),
                       ),
                     ],
@@ -104,7 +111,7 @@ class ProductDeliveryBanner extends ConsumerWidget {
             ),
             Padding(
               padding: EdgeInsets.symmetric(vertical: 11.h),
-              child: const Divider(height: 1, color: Color(0xFFD6EAD9)),
+              child: const Divider(height: 1, color: AppColors.borderLight),
             ),
             InkWell(
               onTap: changeLocation,
@@ -114,7 +121,7 @@ class ProductDeliveryBanner extends ConsumerWidget {
                   PhosphorIcon(
                     PhosphorIcons.mapPinFill,
                     size: 16.sp,
-                    color: const Color(0xFF0C831F),
+                    color: AppColors.brandRed,
                   ),
                   SizedBox(width: 8.w),
                   Expanded(
@@ -126,7 +133,7 @@ class ProductDeliveryBanner extends ConsumerWidget {
                         fontFamily: 'Inter',
                         fontSize: 12.sp,
                         fontWeight: FontWeight.w600,
-                        color: const Color(0xFF26332A),
+                        color: AppColors.textPrimary,
                       ),
                     ),
                   ),
@@ -137,13 +144,13 @@ class ProductDeliveryBanner extends ConsumerWidget {
                       fontFamily: 'Inter',
                       fontSize: 12.sp,
                       fontWeight: FontWeight.w800,
-                      color: const Color(0xFF0C831F),
+                      color: AppColors.brandRed,
                     ),
                   ),
                   Icon(
                     Icons.chevron_right_rounded,
                     size: 17.sp,
-                    color: const Color(0xFF0C831F),
+                    color: AppColors.brandRed,
                   ),
                 ],
               ),

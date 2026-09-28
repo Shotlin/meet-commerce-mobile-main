@@ -20,6 +20,8 @@ import 'package:bakaloo_flutter_app/features/products/presentation/screens/produ
 import 'package:bakaloo_flutter_app/features/products/presentation/screens/product_detail_socket_delegate.dart';
 import 'package:bakaloo_flutter_app/features/products/presentation/screens/product_list_screen.dart';
 import 'package:bakaloo_flutter_app/features/products/presentation/widgets/product_bottom_bar.dart';
+import 'package:bakaloo_flutter_app/features/products/presentation/widgets/product_cut_selector.dart';
+import 'package:bakaloo_flutter_app/features/products/presentation/widgets/product_piece_selector.dart';
 import 'package:bakaloo_flutter_app/features/products/presentation/widgets/product_detail_loading_view.dart';
 import 'package:bakaloo_flutter_app/features/products/presentation/widgets/product_details_section.dart';
 import 'package:bakaloo_flutter_app/features/products/presentation/widgets/product_detail_tabs.dart';
@@ -64,6 +66,13 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   // be swapped in place via the "Select Unit" chip row (product_variant_
   // selector.dart) without a route change — see _selectVariant.
   late String _selectedProductId;
+  // "Choose Your Cut" / "Available Pieces" — purely a front-end, same-SKU
+  // choice (see ProductEntity.cutOptions/pieceOptions); nothing is sent to
+  // cart/order, so this never needs to survive navigation away from the
+  // screen. Reset whenever the displayed variant changes (a different
+  // family member may have an entirely different option list).
+  String? _selectedCut;
+  String? _selectedPiece;
 
   @override
   void initState() {
@@ -109,6 +118,8 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       _selectedProductId = productId;
       _hasLoggedView = false;
       _currentImageIndex = 0;
+      _selectedCut = null;
+      _selectedPiece = null;
     });
     _socketDelegate = _createSocketDelegate();
   }
@@ -253,6 +264,26 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                     child: ProductInfoHeader(product: effectiveProduct),
                   ),
                 ),
+                if (effectiveProduct.hasCutOptions)
+                  SliverToBoxAdapter(
+                    child: RepaintBoundary(
+                      child: ProductCutSelector(
+                        options: effectiveProduct.cutOptions,
+                        selected: _selectedCut ?? effectiveProduct.cutOptions.first,
+                        onSelect: (cut) => setState(() => _selectedCut = cut),
+                      ),
+                    ),
+                  ),
+                if (effectiveProduct.hasPieceOptions)
+                  SliverToBoxAdapter(
+                    child: RepaintBoundary(
+                      child: ProductPieceSelector(
+                        options: effectiveProduct.pieceOptions,
+                        selected: _selectedPiece ?? effectiveProduct.pieceOptions.first,
+                        onSelect: (piece) => setState(() => _selectedPiece = piece),
+                      ),
+                    ),
+                  ),
                 if (effectiveProduct.hasMultipleOptions)
                   SliverToBoxAdapter(
                     child: RepaintBoundary(

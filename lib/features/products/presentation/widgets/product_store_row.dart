@@ -4,6 +4,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
+import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
 import 'package:bakaloo_flutter_app/core/theme/app_text_styles.dart';
 import 'package:bakaloo_flutter_app/features/products/presentation/providers/product_store_info_provider.dart';
 
@@ -11,6 +12,11 @@ import 'package:bakaloo_flutter_app/features/products/presentation/providers/pro
 ///
 ///   Available:    Sold by SANDI STORE — Available for delivery to 743287
 ///   Unavailable:  Sold by SANDI STORE — Not available for delivery to 743287
+///
+/// A neutral panel (not a green-tinted one) with the brand red as the store
+/// icon's accent — matching ProductDeliveryBanner right above it. Only the
+/// one line that's genuinely a status ("Available"/"Not available") keeps a
+/// semantic color, as a small icon+text accent rather than the whole card.
 class ProductStoreRow extends ConsumerWidget {
   const ProductStoreRow({required this.productId, super.key});
 
@@ -31,16 +37,9 @@ class ProductStoreRow extends ConsumerWidget {
         final available = store.isAvailableAtSelectedLocation;
         final pincode = store.selectedPincode;
 
-        const greenFg = Color(0xFF0C831F);
-        const greenBg = Color(0xFFEAF7EC);
-        const greenBorder = Color(0xFFBDE5C4);
-        const amberFg = Color(0xFFB45309);
-        const amberBg = Color(0xFFFFF6E6);
-        const amberBorder = Color(0xFFF2D9A6);
-
-        final fg = available ? greenFg : amberFg;
-        final bg = available ? greenBg : amberBg;
-        final border = available ? greenBorder : amberBorder;
+        // Small status accent (icon + text only) — the card itself stays
+        // neutral regardless of state.
+        final statusColor = available ? AppColors.successGreen : AppColors.warningOrange;
 
         final String availabilityText;
         if (available) {
@@ -59,9 +58,9 @@ class ProductStoreRow extends ConsumerWidget {
           margin: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
           padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
           decoration: BoxDecoration(
-            color: bg,
+            color: AppColors.bgSection,
             borderRadius: BorderRadius.circular(12.r),
-            border: Border.all(color: border),
+            border: Border.all(color: AppColors.borderLight),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -69,15 +68,14 @@ class ProductStoreRow extends ConsumerWidget {
               Container(
                 width: 34.w,
                 height: 34.w,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(9.r),
-                  border: Border.all(color: border),
+                decoration: const BoxDecoration(
+                  color: AppColors.brandRed,
+                  shape: BoxShape.circle,
                 ),
                 child: Icon(
                   PhosphorIcons.storefrontFill,
                   size: 18.sp,
-                  color: fg,
+                  color: Colors.white,
                 ),
               ),
               Gap(10.w),
@@ -90,7 +88,7 @@ class ProductStoreRow extends ConsumerWidget {
                         Text(
                           'Sold by ',
                           style: AppTextStyles.bodySmall.copyWith(
-                            color: const Color(0xFF555555),
+                            color: AppColors.textSecondary,
                           ),
                         ),
                         Flexible(
@@ -100,7 +98,7 @@ class ProductStoreRow extends ConsumerWidget {
                             overflow: TextOverflow.ellipsis,
                             style: AppTextStyles.labelLarge.copyWith(
                               fontWeight: FontWeight.w700,
-                              color: const Color(0xFF1A1A1A),
+                              color: AppColors.textPrimary,
                             ),
                           ),
                         ),
@@ -114,14 +112,14 @@ class ProductStoreRow extends ConsumerWidget {
                               ? PhosphorIcons.checkCircleFill
                               : PhosphorIcons.warningCircleFill,
                           size: 13.sp,
-                          color: fg,
+                          color: statusColor,
                         ),
                         Gap(4.w),
                         Expanded(
                           child: Text(
                             availabilityText,
                             style: AppTextStyles.bodySmall.copyWith(
-                              color: fg,
+                              color: statusColor,
                               fontWeight: FontWeight.w600,
                             ),
                           ),

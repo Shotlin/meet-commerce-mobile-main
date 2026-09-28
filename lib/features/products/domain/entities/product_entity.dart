@@ -48,6 +48,8 @@ abstract class ProductEntity with _$ProductEntity {
     @Default('NONE') String foodType,
     @Default('NONE') String originTag,
     @Default(<String>[]) List<String> customBadges,
+    @Default(<String>[]) List<String> cutOptions,
+    @Default(<String>[]) List<String> pieceOptions,
     int? displayDeliveryMinutes,
     String? shopProductId,
     String? shopId,
@@ -87,6 +89,10 @@ abstract class ProductEntity with _$ProductEntity {
   bool get hasOriginTag => originTag != 'NONE';
 
   bool get hasBadges => customBadges.isNotEmpty;
+
+  bool get hasCutOptions => cutOptions.isNotEmpty;
+
+  bool get hasPieceOptions => pieceOptions.isNotEmpty;
 
   bool get hasDeliveryTime => displayDeliveryMinutes != null && displayDeliveryMinutes! > 0;
 
