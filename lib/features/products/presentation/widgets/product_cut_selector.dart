@@ -3,12 +3,19 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
 
-/// "Choose Your Cut" — a single-select list of admin-typed, customer-facing
+/// "Choose Your Cut" — a single-select row of admin-typed, customer-facing
 /// cut styles (e.g. Tikka, Curry Cut, Boneless, Small Cubes, Fillet) shown
-/// above the weight/size selector. Purely a same-SKU, front-end choice — no
-/// price, stock or SKU impact, and nothing is sent to the cart/order; hidden
-/// entirely by the caller (ProductEntity.hasCutOptions) when the admin
-/// hasn't configured any options for this product.
+/// above the weight/size selector. Rendered as compact, content-sized boxes
+/// in a single horizontal row (matching the app's existing "Select Weight"
+/// box style) rather than a tall vertical list with a radio dot — the box
+/// itself IS the selection state (filled/bordered red vs. plain), so no
+/// separate indicator is needed. A box is never stretched to full width;
+/// when the options don't all fit the screen, the row scrolls horizontally
+/// instead of wrapping to a new line, so box size/spacing stays consistent
+/// regardless of how many options an admin configures. Purely a same-SKU,
+/// front-end choice — no price, stock or SKU impact, and nothing is sent to
+/// the cart/order; hidden entirely by the caller (ProductEntity.hasCutOptions)
+/// when the admin hasn't configured any options for this product.
 class ProductCutSelector extends StatelessWidget {
   const ProductCutSelector({
     required this.options,
@@ -49,22 +56,30 @@ class ProductCutSelector extends StatelessWidget {
             ),
           ),
           SizedBox(height: 10.h),
-          for (int i = 0; i < options.length; i++) ...<Widget>[
-            if (i > 0) SizedBox(height: 8.h),
-            _CutOptionRow(
-              label: options[i],
-              isSelected: options[i] == selected,
-              onTap: () => onSelect(options[i]),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            child: Row(
+              children: <Widget>[
+                for (int i = 0; i < options.length; i++) ...<Widget>[
+                  if (i > 0) SizedBox(width: 10.w),
+                  _CutChip(
+                    label: options[i],
+                    isSelected: options[i] == selected,
+                    onTap: () => onSelect(options[i]),
+                  ),
+                ],
+              ],
             ),
-          ],
+          ),
         ],
       ),
     );
   }
 }
 
-class _CutOptionRow extends StatelessWidget {
-  const _CutOptionRow({
+class _CutChip extends StatelessWidget {
+  const _CutChip({
     required this.label,
     required this.isSelected,
     required this.onTap,
@@ -78,45 +93,27 @@ class _CutOptionRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12.r),
+      borderRadius: BorderRadius.circular(10.r),
       child: Container(
-        width: double.infinity,
-        padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 12.h),
+        padding: EdgeInsets.symmetric(horizontal: 18.w, vertical: 12.h),
         decoration: BoxDecoration(
           color: isSelected ? AppColors.brandRedSurface : Colors.white,
-          borderRadius: BorderRadius.circular(12.r),
           border: Border.all(
             color: isSelected ? AppColors.brandRed : AppColors.borderLight,
             width: isSelected ? 1.5 : 1,
           ),
+          borderRadius: BorderRadius.circular(10.r),
         ),
-        child: Row(
-          children: <Widget>[
-            Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontFamily: 'Inter',
-                  fontSize: 13.5.sp,
-                  fontWeight: FontWeight.w600,
-                  color: isSelected ? AppColors.brandRedDark : AppColors.textPrimary,
-                ),
-              ),
-            ),
-            SizedBox(width: 10.w),
-            Container(
-              width: 20.w,
-              height: 20.w,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: isSelected ? AppColors.brandRed : AppColors.borderLight,
-                  width: isSelected ? 5.5 : 1.5,
-                ),
-                color: Colors.white,
-              ),
-            ),
-          ],
+        alignment: Alignment.center,
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 13.sp,
+            fontWeight: FontWeight.w600,
+            color: isSelected ? AppColors.brandRedDark : AppColors.textPrimary,
+          ),
         ),
       ),
     );
