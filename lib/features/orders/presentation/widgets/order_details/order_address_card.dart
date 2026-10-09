@@ -19,9 +19,13 @@ class OrderAddressCard extends StatelessWidget {
 
   final OrderEntity order;
 
+  // A rider can accept while the order is still being prepared, so tracking
+  // is offered as soon as the backend reports a rider on the order too.
   bool get _isTrackable =>
       order.status == OrderStatus.PACKED ||
-      order.status == OrderStatus.OUT_FOR_DELIVERY;
+      order.status == OrderStatus.OUT_FOR_DELIVERY ||
+      (order.tracking['rider'] is Map &&
+          (order.tracking['rider'] as Map)['id'] != null);
 
   @override
   Widget build(BuildContext context) {

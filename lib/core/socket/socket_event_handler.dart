@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:bakaloo_flutter_app/core/constants/socket_events.dart';
 import 'package:bakaloo_flutter_app/core/socket/socket_models/notification_event.dart';
 import 'package:bakaloo_flutter_app/core/socket/socket_models/order_status_event.dart';
+import 'package:bakaloo_flutter_app/core/socket/socket_models/refund_status_event.dart';
 import 'package:bakaloo_flutter_app/core/socket/socket_models/rider_location_event.dart';
 
 class SocketEventHandler {
@@ -10,11 +11,13 @@ class SocketEventHandler {
     required this.onOrderStatus,
     required this.onRiderLocation,
     required this.onNotification,
+    this.onRefundStatus,
   });
 
   final void Function(OrderStatusEvent event) onOrderStatus;
   final void Function(RiderLocationEvent event) onRiderLocation;
   final void Function(NotificationEvent event) onNotification;
+  final void Function(RefundStatusEvent event)? onRefundStatus;
 
   void route(String eventName, dynamic payload) {
     final json = _toJson(payload);
@@ -29,6 +32,9 @@ class SocketEventHandler {
         onRiderLocation(RiderLocationEvent.fromJson(json));
       case SocketEvents.notification:
         onNotification(NotificationEvent.fromJson(json));
+      case SocketEvents.refundStatus:
+        final event = RefundStatusEvent.tryParse(json);
+        if (event != null) onRefundStatus?.call(event);
     }
   }
 

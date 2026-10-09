@@ -1226,9 +1226,8 @@ class _SearchInput extends StatelessWidget {
           color: AppColors.bgCard,
           borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
           border: Border.all(
-            color:
-                focusNode.hasFocus ? AppColors.brandRed : AppColors.borderLight,
-            width: focusNode.hasFocus ? 1.4 : 1,
+            color: AppColors.brandRed,
+            width: 1.4,
           ),
           boxShadow: const <BoxShadow>[AppShadows.cardShadow],
         ),
@@ -1251,6 +1250,12 @@ class _SearchInput extends StatelessWidget {
                   ),
                   decoration: InputDecoration(
                     border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    errorBorder: InputBorder.none,
+                    disabledBorder: InputBorder.none,
+                    focusedErrorBorder: InputBorder.none,
+                    filled: false,
                     isCollapsed: true,
                     prefixIcon: Padding(
                       padding: EdgeInsets.only(left: 16.w, right: 10.w),
@@ -1330,58 +1335,60 @@ class _CartIconButton extends ConsumerWidget {
     return Semantics(
       label: 'Cart, $count item${count == 1 ? '' : 's'}',
       button: true,
-      child: Material(
-        color: AppColors.bgCard,
-        shape: const CircleBorder(
-          side: BorderSide(color: AppColors.borderLight),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          customBorder: const CircleBorder(),
-          child: SizedBox(
-            width: 44.w,
-            height: 44.w,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: <Widget>[
-                Center(
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: <Widget>[
+          Material(
+            color: AppColors.bgCard,
+            shape: const CircleBorder(
+              side: BorderSide(color: AppColors.borderLight),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: onTap,
+              customBorder: const CircleBorder(),
+              child: SizedBox(
+                width: 44.w,
+                height: 44.w,
+                child: Center(
                   child: PhosphorIcon(
                     PhosphorIcons.shoppingCartBold,
                     size: 20.sp,
                     color: AppColors.textPrimary,
                   ),
                 ),
-                if (count > 0)
-                  Positioned(
-                    top: -2,
-                    right: -2,
-                    child: Container(
-                      padding: EdgeInsets.symmetric(horizontal: 5.w),
-                      height: 17.h,
-                      decoration: const BoxDecoration(
-                        color: AppColors.brandRed,
-                        shape: BoxShape.circle,
-                      ),
-                      constraints: BoxConstraints(minWidth: 17.w),
-                      child: Center(
-                        child: Text(
-                          count > 99 ? '99+' : '$count',
-                          style: TextStyle(
-                            fontFamily: 'Inter',
-                            fontSize: 9.sp,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                            height: 1,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
+              ),
             ),
           ),
-        ),
+          if (count > 0)
+            Positioned(
+              top: -6,
+              right: -6,
+              child: IgnorePointer(
+                child: Container(
+                  constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: AppColors.brandRed,
+                    borderRadius: BorderRadius.circular(9),
+                    border: Border.all(color: Colors.white, width: 1.5),
+                  ),
+                  child: Text(
+                    count > 9 ? '9+' : '$count',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                      height: 1,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -1968,52 +1975,47 @@ class _SortedFilteredGrid extends StatelessWidget {
         final hasError =
             pagingState.error != null && pagingState.nextPageKey != null;
 
-        return GridView.builder(
-          padding: EdgeInsets.fromLTRB(
-            geometry.horizontalPadding,
-            0,
-            geometry.horizontalPadding,
-            24.h,
-          ),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            crossAxisSpacing: geometry.crossAxisSpacing,
-            mainAxisSpacing: geometry.mainAxisSpacing,
-            mainAxisExtent: geometry.mainAxisExtent,
-          ),
-          itemCount:
-              displayProducts.length + (isLoadingMore || hasError ? 1 : 0),
-          itemBuilder: (context, index) {
-            if (index >= displayProducts.length) {
-              if (hasError) {
-                return Center(
-                  child: Text(
-                    'Unable to load more results.',
-                    style: AppTextStyles.bodySmall,
-                  ),
-                );
-              }
-              // Trigger next page load
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (pagingState.nextPageKey != null) {
-                  pagingController
-                      .notifyPageRequestListeners(pagingState.nextPageKey!);
-                }
-              });
-              return const Center(
-                child: CircularProgressIndicator(
-                  color: Color(0xFFC32D2E),
+        final itemCount =
+            displayProducts.length + (isLoadingMore || hasError ? 1 : 0);
+        final rowCount = (itemCount + 1) ~/ 2;
+
+        Widget buildCell(BuildContext context, int index) {
+          if (index >= itemCount) return const SizedBox.shrink();
+          if (index >= displayProducts.length) {
+            if (hasError) {
+              return Center(
+                child: Text(
+                  'Unable to load more results.',
+                  style: AppTextStyles.bodySmall,
                 ),
               );
             }
-            final product = displayProducts[index];
-            // Same Premium Fresh box UI as the Home screen's product grid
-            // and every other product-suggestion surface in the app — one
-            // reused card, not a search-specific design.
-            return ProductCard(
+            // Trigger next page load
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (pagingState.nextPageKey != null) {
+                pagingController
+                    .notifyPageRequestListeners(pagingState.nextPageKey!);
+              }
+            });
+            return const Padding(
+              padding: EdgeInsets.all(16),
+              child: Center(
+                child: CircularProgressIndicator(
+                  color: Color(0xFFC32D2E),
+                ),
+              ),
+            );
+          }
+          final product = displayProducts[index];
+          // Same Premium Fresh box UI as the Home screen's product grid
+          // and every other product-suggestion surface in the app — one
+          // reused card, not a search-specific design.
+          return Align(
+            alignment: Alignment.topCenter,
+            child: ProductCard(
               key: ValueKey<String>(product.id),
               product: product,
-              width: 165,
+              width: geometry.cardWidth,
               style: ProductCardStyle.grid,
               variant: ProductCardVariant.premiumFresh,
               showWishlist: true,
@@ -2021,6 +2023,35 @@ class _SortedFilteredGrid extends StatelessWidget {
               onOptionsTap: product.hasMultipleOptions
                   ? () => showProductOptionsSheet(context, product)
                   : null,
+            ),
+          );
+        }
+
+        // Rows size to their tallest card (no fixed cell height), so a card
+        // hugs its content instead of leaving blank space below the price.
+        return ListView.builder(
+          padding: EdgeInsets.fromLTRB(
+            geometry.horizontalPadding,
+            0,
+            geometry.horizontalPadding,
+            24.h,
+          ),
+          itemCount: rowCount,
+          itemBuilder: (context, row) {
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: row == rowCount - 1 ? 0 : geometry.mainAxisSpacing,
+              ),
+              child: IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Expanded(child: buildCell(context, row * 2)),
+                    SizedBox(width: geometry.crossAxisSpacing),
+                    Expanded(child: buildCell(context, row * 2 + 1)),
+                  ],
+                ),
+              ),
             );
           },
         );

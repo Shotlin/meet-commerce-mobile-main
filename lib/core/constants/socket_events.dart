@@ -4,6 +4,7 @@ class SocketEvents {
   static const orderTrack = 'order:track';
   static const orderUntrack = 'order:untrack';
   static const orderStatus = 'order:status';
+  static const refundStatus = 'refund:status';
   static const riderLocationUpdate = 'rider:location:update';
   static const notification = 'notification';
   static const themeUpdate = 'theme:update';

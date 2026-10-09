@@ -9,8 +9,10 @@ import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
+import 'package:bakaloo_flutter_app/core/di/providers.dart';
 import 'package:bakaloo_flutter_app/core/notifications/notification_navigation.dart';
 import 'package:bakaloo_flutter_app/core/notifications/notification_router.dart';
+import 'package:bakaloo_flutter_app/core/socket/socket_service.dart';
 import 'package:bakaloo_flutter_app/core/theme/app_colors.dart';
 import 'package:bakaloo_flutter_app/core/theme/app_text_styles.dart';
 import 'package:bakaloo_flutter_app/features/auth/presentation/providers/auth_gate_controller.dart';
@@ -64,7 +66,7 @@ class AppShell extends ConsumerStatefulWidget {
 }
 
 class _AppShellState extends ConsumerState<AppShell>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   // Drives the footer nav reveal. 1.0 = fully visible, 0.0 = hidden.
   late final AnimationController _navController;
   late final Animation<double> _navAnimation;
@@ -88,10 +90,51 @@ class _AppShellState extends ConsumerState<AppShell>
     // the screen that triggered it (a product card's +/- button) has
     // since been navigated away from — see cartMutationFailureNotifier.
     cartMutationFailureNotifier.addListener(_handleCartMutationFailure);
+
+    // ── Realtime order/refund sync lifecycle ──────────────────────────
+    // Socket.IO is already the app's one realtime connection; what was
+    // missing was recovery. (1) credentials are renewed through the normal
+    // refresh-token path before every retry, so a drop longer than the
+    // 15-min access token no longer kills the socket for good; (2) every
+    // (re)connect and every app resume re-reads orders from REST, because
+    // events fired while the app was away are never replayed.
+    WidgetsBinding.instance.addObserver(this);
+    final socket = ref.read(socketServiceProvider);
+    socket.configureRecovery(
+      refreshCredentials: () async {
+        // One cheap authenticated call: a 401 makes RefreshInterceptor renew
+        // the token (single locked flow) and reconnect the socket with it.
+        await ref.read(apiClientProvider).getNotifications(1, 1);
+      },
+      readAccessToken: () => ref.read(secureStorageProvider).getAccessToken(),
+    );
+    _realtimeSubs
+      ..add(socket.connectedStream.listen((_) {
+        ref.read(orderLiveSyncControllerProvider).reconcile();
+      }))
+      ..add(socket.refundStatusStream.listen((event) {
+        ref.read(orderLiveSyncControllerProvider).handleRefundEvent(event);
+      }));
+  }
+
+  final List<StreamSubscription<Object?>> _realtimeSubs =
+      <StreamSubscription<Object?>>[];
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    ref.read(socketServiceProvider).ensureConnected();
+    if (ref.read(authStateProvider) is AuthAuthenticated) {
+      ref.read(orderLiveSyncControllerProvider).reconcile();
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    for (final sub in _realtimeSubs) {
+      sub.cancel();
+    }
     cartMutationFailureNotifier.removeListener(_handleCartMutationFailure);
     _navController.dispose();
     super.dispose();

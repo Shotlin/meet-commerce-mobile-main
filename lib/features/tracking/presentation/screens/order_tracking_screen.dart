@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:math' show Point;
 
 import 'package:flutter/material.dart';
@@ -45,6 +46,17 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
   Line? _routeLine;
   Point? _riderScreenPoint;
   Point? _destinationScreenPoint;
+  Point? _storeScreenPoint;
+
+  /// Pickup store (from the order's tracking block) and whether the rider is
+  /// still heading to it. Before pickup the rider→store leg is what the route,
+  /// distance and ETA describe; after pickup it is rider→customer, and the
+  /// store marker goes away (same as Zomato / Swiggy).
+  GeoPoint? _store;
+  String _storeName = 'Store';
+  bool _toStore = false;
+  bool _riderAssigned = false;
+  DateTime? _lastRouteAt;
 
   /// True for the duration of a camera move we initiated ourselves
   /// (animateCamera), so the onCameraIdle it ends with isn't mistaken for
@@ -91,7 +103,10 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
         setState(() {
           _riderPosition = nextPoint;
         });
-        unawaited(_refreshRoute(fitCamera: !_userMovedMap));
+        // A live fix moves the marker immediately; the (network) road route
+        // is only re-fetched every few seconds.
+        unawaited(_refreshMarkerScreenPositions());
+        unawaited(_refreshRoute(fitCamera: false, throttle: true));
       });
     });
 
@@ -158,6 +173,16 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
                           tint: Color(0xFFE8F5E9),
                         ),
                       ),
+                    if (mapReady && _toStore && _store != null && _storeScreenPoint != null)
+                      _buildMarkerOverlay(
+                        point: _storeScreenPoint!,
+                        marker: _TrackingMarker(
+                          icon: Icons.storefront_rounded,
+                          label: _storeName,
+                          accent: AppColors.brandRed,
+                          tint: const Color(0xFFFDECEC),
+                        ),
+                      ),
                     if (mapReady && rider != null && _riderScreenPoint != null)
                       _buildMarkerOverlay(
                         point: _riderScreenPoint!,
@@ -198,6 +223,8 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
                               etaLabel: _etaLabel,
                               distanceLabel: _distanceLabel,
                               hasRiderLocation: rider != null,
+                              riderAssigned: _riderAssigned,
+                              toStore: _toStore,
                             ),
                           ),
                         ],
@@ -325,24 +352,51 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
     context.go(RouteNames.home);
   }
 
+  GeoPoint? get _routeTarget =>
+      (_toStore && _store != null) ? _store : _destination;
+
+  /// Straight-line metres between the rider and the current target — used
+  /// when the road route is not available (yet) so the card never says "--"
+  /// while the rider is visibly moving.
+  int? get _fallbackMeters {
+    final from = _riderPosition;
+    final to = _routeTarget;
+    if (from == null || to == null) {
+      return null;
+    }
+    const earthRadius = 6371000.0;
+    double rad(double d) => d * math.pi / 180;
+    final dLat = rad(to.lat - from.lat);
+    final dLng = rad(to.lng - from.lng);
+    final a = math.pow(math.sin(dLat / 2), 2) +
+        math.cos(rad(from.lat)) *
+            math.cos(rad(to.lat)) *
+            math.pow(math.sin(dLng / 2), 2);
+    return (2 * earthRadius * math.asin(math.sqrt(a.toDouble()))).round();
+  }
+
   String get _distanceLabel {
     final route = _route;
-    if (route == null) {
+    final meters = route?.distanceMeters ?? _fallbackMeters;
+    if (meters == null) {
       return '--';
     }
-    final kilometers = route.distanceMeters / 1000;
+    final kilometers = meters / 1000;
     if (kilometers < 1) {
-      return '${route.distanceMeters} m';
+      return '$meters m';
     }
     return '${kilometers.toStringAsFixed(kilometers >= 10 ? 0 : 1)} km';
   }
 
   String get _etaLabel {
     final route = _route;
-    if (route == null) {
+    // Fallback: straight-line distance at a city-bike pace (~20 km/h).
+    final seconds = route?.durationSeconds ??
+        (_fallbackMeters == null ? null : (_fallbackMeters! / 5.5).round());
+    if (seconds == null) {
       return '--';
     }
-    final minutes = (route.durationSeconds / 60).ceil();
+    final minutes = math.max(1, (seconds / 60).ceil());
     if (minutes < 60) {
       return '~$minutes min';
     }
@@ -362,6 +416,9 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
       '${_readDouble(_readMap(order.tracking, 'destination'), 'lng') ?? 0}',
       '${_readDouble(_readMap(order.tracking, 'riderLocation'), 'lat') ?? 0}',
       '${_readDouble(_readMap(order.tracking, 'riderLocation'), 'lng') ?? 0}',
+      _readString(order.tracking, 'phase'),
+      '${_readDouble(_readMap(order.tracking, 'store'), 'lat') ?? 0}',
+      _readString(_readMap(order.tracking, 'rider'), 'id'),
     ].join(':');
 
     if (_boundFingerprint == fingerprint) {
@@ -380,7 +437,25 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
         return;
       }
 
+      final storeMap = _readMap(order.tracking, 'store');
+      final storeLat = _readDouble(storeMap, 'lat');
+      final storeLng = _readDouble(storeMap, 'lng');
+      final assigned = _readString(_readMap(order.tracking, 'rider'), 'id')
+          .isNotEmpty;
+      final pickedUp = order.status == OrderStatus.OUT_FOR_DELIVERY ||
+          _readString(order.tracking, 'phase') == 'TO_CUSTOMER';
+      final phaseChanged = _toStore != (assigned && !pickedUp);
+
       setState(() {
+        _store = (storeLat != null && storeLng != null)
+            ? GeoPoint(lat: storeLat, lng: storeLng)
+            : null;
+        _storeName = _readString(storeMap, 'name', fallback: 'Store');
+        _riderAssigned = assigned;
+        _toStore = assigned && !pickedUp && _store != null;
+        if (phaseChanged) {
+          _route = null; // the old leg's line must not linger on the new leg
+        }
         _destination = destination;
         _riderPosition ??= rider;
         _mapMessage = destination == null
@@ -420,12 +495,26 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
     return GeoPoint(lat: riderLat, lng: riderLng);
   }
 
-  Future<void> _refreshRoute({required bool fitCamera}) async {
+  Future<void> _refreshRoute({
+    required bool fitCamera,
+    bool throttle = false,
+  }) async {
     final origin = _riderPosition;
-    final destination = _destination;
+    final destination = _routeTarget;
     if (origin == null || destination == null) {
       return;
     }
+    final last = _lastRouteAt;
+    if (throttle &&
+        _route != null &&
+        last != null &&
+        DateTime.now().difference(last) < const Duration(seconds: 12)) {
+      return;
+    }
+    if (_isLoadingRoute) {
+      return;
+    }
+    _lastRouteAt = DateTime.now();
 
     setState(() {
       _isLoadingRoute = true;
@@ -434,6 +523,13 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
 
     final route = await ref.read(olaMapsServiceProvider).getRoute(origin, destination);
     if (!mounted) {
+      return;
+    }
+    // The leg changed (picked up) or the rider target moved while this
+    // request was in flight — drop the stale answer and fetch the right one.
+    if (_routeTarget != destination) {
+      setState(() => _isLoadingRoute = false);
+      unawaited(_refreshRoute(fitCamera: fitCamera));
       return;
     }
 
@@ -514,8 +610,10 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
     }
 
     final rider = _riderPosition;
+    final store = (_toStore && _store != null) ? _store : null;
     final targets = <LatLng>[
       if (rider != null) _toMapPoint(rider),
+      if (store != null) _toMapPoint(store),
       _toMapPoint(destination),
     ];
     final screenPoints = await controller.toScreenLocationBatch(targets);
@@ -526,6 +624,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
     setState(() {
       var index = 0;
       _riderScreenPoint = rider != null ? screenPoints[index++] : null;
+      _storeScreenPoint = store != null ? screenPoints[index++] : null;
       _destinationScreenPoint = screenPoints[index];
     });
   }
@@ -539,6 +638,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
     final points = <GeoPoint>[
       if (_riderPosition != null) _riderPosition!,
       if (_destination != null) _destination!,
+      if (_toStore && _store != null) _store!,
       ...?_route?.points,
     ];
     if (points.isEmpty) {
@@ -596,7 +696,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
 
   Future<void> _openExternalMap() async {
     final rider = _riderPosition;
-    final destination = _destination;
+    final destination = _routeTarget;
     if (rider == null || destination == null) {
       return;
     }
@@ -732,6 +832,8 @@ class _TrackingStatusCard extends StatelessWidget {
     required this.etaLabel,
     required this.distanceLabel,
     required this.hasRiderLocation,
+    required this.riderAssigned,
+    required this.toStore,
   });
 
   final OrderEntity order;
@@ -739,13 +841,22 @@ class _TrackingStatusCard extends StatelessWidget {
   final String etaLabel;
   final String distanceLabel;
   final bool hasRiderLocation;
+  final bool riderAssigned;
+  final bool toStore;
 
   @override
   Widget build(BuildContext context) {
     final stageLabel = latestEvent?.type.label ?? order.status.label;
-    final stageMessage = hasRiderLocation
-        ? (latestEvent?.message ?? 'Rider is moving towards you.')
-        : 'Rider location will appear once delivery starts.';
+    final String stageMessage;
+    if (hasRiderLocation && toStore) {
+      stageMessage = 'Your delivery partner is heading to the store to pick up your order.';
+    } else if (hasRiderLocation) {
+      stageMessage = 'Your delivery partner is on the way to you.';
+    } else if (riderAssigned) {
+      stageMessage = 'Delivery partner assigned — waiting for live location.';
+    } else {
+      stageMessage = 'A delivery partner will be assigned shortly.';
+    }
 
     return Container(
       margin: EdgeInsets.only(top: 14.h),

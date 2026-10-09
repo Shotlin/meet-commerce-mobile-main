@@ -15,6 +15,7 @@ import 'package:bakaloo_flutter_app/core/session/session_ready_gate.dart';
 import 'package:bakaloo_flutter_app/features/auth/presentation/providers/auth_notifier.dart';
 import 'package:bakaloo_flutter_app/features/auth/presentation/providers/auth_state.dart';
 import 'package:bakaloo_flutter_app/features/notifications/presentation/providers/notification_provider.dart';
+import 'package:bakaloo_flutter_app/features/orders/presentation/providers/order_live_sync_provider.dart';
 import 'package:bakaloo_flutter_app/features/wallet/presentation/providers/wallet_provider.dart';
 import 'package:bakaloo_flutter_app/routing/app_router.dart';
 
@@ -121,6 +122,15 @@ Future<void> initializeFcm(Ref ref) async {
         () => ref.invalidate(walletProvider),
       );
 
+  // Order-status / refund pushes re-read that order (push-triggered sync).
+  ref.watch(fcmServiceProvider).setOrderRelatedMessageCallback(
+        (orderId, {required wallet}) => unawaited(
+          ref
+              .read(orderLiveSyncControllerProvider)
+              .syncOrder(orderId, wallet: wallet),
+        ),
+      );
+
   ref.listen<AuthState>(
     authNotifierProvider,
     (previous, next) {
@@ -186,6 +196,7 @@ class FCMService {
         FirebaseMessaging.onMessage.listen((message) {
           unawaited(_localNotifications.show(message));
           _notifyIfWalletRelated(message.data);
+          _notifyIfOrderRelated(message.data);
         }),
       )
       ..add(
@@ -233,6 +244,7 @@ class FCMService {
       _campaignOpenedCallback?.call(campaignId);
     }
     _notifyIfWalletRelated(data);
+    _notifyIfOrderRelated(data);
 
     final path = NotificationRouter.getPath(data);
     if (path == null || path.isEmpty) {
@@ -294,6 +306,36 @@ class FCMService {
   /// so the caller can refetch wallet balance.
   void setWalletRelatedMessageCallback(void Function() callback) {
     _walletRelatedMessageCallback = callback;
+  }
+
+  static const _orderMessageTypes = <String>{
+    'ORDER_STATUS',
+    'ORDER_UPDATE',
+    'DELIVERY',
+    'RIDER_UPDATE',
+  };
+
+  void Function(String orderId, {required bool wallet})?
+      _orderRelatedMessageCallback;
+
+  /// Called whenever an order/refund push arrives (foreground) or is tapped
+  /// (background/cold start) — a push-triggered sync, so the order screen
+  /// converges on the new status even when the socket is down. [wallet] is
+  /// true for a refund-request update (the wallet balance may have changed).
+  void setOrderRelatedMessageCallback(
+    void Function(String orderId, {required bool wallet}) callback,
+  ) {
+    _orderRelatedMessageCallback = callback;
+  }
+
+  void _notifyIfOrderRelated(Map<String, dynamic> data) {
+    final type = (data['type'] ?? data['notificationType'] ?? '')
+        .toString()
+        .toUpperCase();
+    final orderId = (data['orderId'] ?? data['order_id'] ?? '').toString();
+    if (!_orderMessageTypes.contains(type) || orderId.isEmpty) return;
+    final isRefund = (data['refundRequestId'] ?? '').toString().isNotEmpty;
+    _orderRelatedMessageCallback?.call(orderId, wallet: isRefund);
   }
 
   void _notifyIfWalletRelated(Map<String, dynamic> data) {

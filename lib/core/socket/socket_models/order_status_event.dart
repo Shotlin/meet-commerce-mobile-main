@@ -7,6 +7,8 @@ class OrderStatusEvent {
     required this.timelineType,
     required this.timestamp,
     this.message,
+    this.seq,
+    this.eventId,
   });
 
   final String orderId;
@@ -14,6 +16,11 @@ class OrderStatusEvent {
   final OrderTimelineType timelineType;
   final String? message;
   final DateTime timestamp;
+
+  /// Strictly-increasing server sequence + unique id (absent on events from
+  /// an older backend). Used to drop duplicate / out-of-order deliveries.
+  final int? seq;
+  final String? eventId;
 
   factory OrderStatusEvent.fromJson(Map<String, dynamic> json) {
     final timelineType = orderTimelineTypeFromRaw(
@@ -46,7 +53,15 @@ class OrderStatusEvent {
             <String>['timestamp', 'updatedAt', 'updated_at', 'createdAt'],
           ) ??
           DateTime.now(),
+      seq: _readInt(json['seq']),
+      eventId: _readNullableString(json, <String>['eventId']),
     );
+  }
+
+  static int? _readInt(Object? value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse('$value');
   }
 
   static String _readString(

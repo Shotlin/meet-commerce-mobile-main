@@ -42,22 +42,10 @@ class OrderRepositoryImpl implements OrderRepository {
       limit: limit,
     );
 
+    // Network-first (cache is the offline fallback): serving a "fresh" cached
+    // first page with a silent background refresh meant the Orders tab showed
+    // pre-change statuses for up to the 5-minute TTL.
     final cached = _cachedPage(cacheKey);
-    final isFresh =
-        _localDataSource.isFresh(cacheKey, OrderLocalDataSource.ttl);
-
-    if (page == 1 && cached != null && isFresh) {
-      unawaited(
-        _refreshFirstPage(
-          cacheKey: cacheKey,
-          page: page,
-          limit: limit,
-          status: status,
-          paymentFailed: paymentFailed,
-        ),
-      );
-      return Right(cached);
-    }
 
     try {
       final remote = await _remoteDataSource.getOrders(
@@ -113,15 +101,12 @@ class OrderRepositoryImpl implements OrderRepository {
 
   @override
   Future<Either<Failure, OrderEntity?>> getActiveOrder() async {
-    final cacheKey = _localDataSource.activeCacheKey;
+    // Network-first. A cached TERMINAL order used to be served as "fresh"
+    // with only a silent background refresh (no UI update), so a status that
+    // changed after the cache was written — DELIVERED → REFUNDED, a late
+    // cancel — kept showing the old one until the app was reopened. The
+    // cache is now only the offline fallback.
     final cached = _cachedActiveOrder();
-    final isFresh =
-        _localDataSource.isFresh(cacheKey, OrderLocalDataSource.ttl);
-
-    if (cached != null && isFresh && !cached.isActive) {
-      unawaited(_refreshActiveOrder());
-      return Right(cached);
-    }
 
     try {
       final remote = await _remoteDataSource.getActiveOrder();
@@ -144,15 +129,8 @@ class OrderRepositoryImpl implements OrderRepository {
 
   @override
   Future<Either<Failure, OrderEntity>> getOrderDetail(String orderId) async {
-    final cacheKey = _localDataSource.detailCacheKey(orderId);
+    // Network-first — see getActiveOrder. Cache = offline fallback only.
     final cached = _cachedOrderDetail(orderId);
-    final isFresh =
-        _localDataSource.isFresh(cacheKey, OrderLocalDataSource.ttl);
-
-    if (cached != null && isFresh && !cached.isActive) {
-      unawaited(_refreshOrderDetail(orderId));
-      return Right(cached);
-    }
 
     try {
       final remote = await _remoteDataSource.getOrderDetail(orderId);
@@ -318,40 +296,6 @@ class OrderRepositoryImpl implements OrderRepository {
     return OrderModel.fromJson(cached).toEntity();
   }
 
-  Future<void> _refreshFirstPage({
-    required String cacheKey,
-    required int page,
-    required int limit,
-    required String? status,
-    bool paymentFailed = false,
-  }) async {
-    try {
-      final remote = await _remoteDataSource.getOrders(
-        page: page,
-        limit: limit,
-        status: status,
-        paymentFailed: paymentFailed,
-      );
-      await _localDataSource.cacheOrderList(
-        key: cacheKey,
-        items:
-            remote.orders.map((item) => item.toJson()).toList(growable: false),
-        pagination: remote.pagination,
-      );
-    } catch (_) {}
-  }
 
-  Future<void> _refreshOrderDetail(String orderId) async {
-    try {
-      final remote = await _remoteDataSource.getOrderDetail(orderId);
-      await _localDataSource.cacheOrderDetail(orderId, remote.toJson());
-    } catch (_) {}
-  }
 
-  Future<void> _refreshActiveOrder() async {
-    try {
-      final remote = await _remoteDataSource.getActiveOrder();
-      await _localDataSource.cacheActiveOrder(remote?.toJson());
-    } catch (_) {}
-  }
 }

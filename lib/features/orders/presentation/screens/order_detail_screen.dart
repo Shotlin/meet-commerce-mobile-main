@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -25,6 +27,7 @@ import 'package:bakaloo_flutter_app/features/refund_requests/domain/entities/ref
 import 'package:bakaloo_flutter_app/features/refund_requests/presentation/providers/refund_request_provider.dart';
 import 'package:bakaloo_flutter_app/features/refund_requests/presentation/screens/refund_request_screen.dart';
 import 'package:bakaloo_flutter_app/features/reviews/presentation/screens/order_review_screen.dart';
+import 'package:bakaloo_flutter_app/core/socket/socket_service.dart';
 import 'package:bakaloo_flutter_app/routing/route_names.dart';
 import 'package:bakaloo_flutter_app/shared/widgets/cancel_order_sheet.dart';
 import 'package:bakaloo_flutter_app/shared/widgets/contact_support_sheet.dart';
@@ -53,6 +56,31 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
   bool _isCancelling = false;
   bool _isReordering = false;
   bool _isDownloadingInvoice = false;
+
+  // Safety net, NOT the sync mechanism: realtime updates arrive over the
+  // app's existing socket. Only while that socket is down (and this screen
+  // is open) do we re-read the order every 15s, so a status change still
+  // shows up within seconds instead of waiting for a manual refresh. Zero
+  // extra traffic while the socket is healthy.
+  Timer? _fallbackPoll;
+
+  @override
+  void initState() {
+    super.initState();
+    _fallbackPoll = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (!mounted) return;
+      if (ref.read(socketServiceProvider).isConnected) return;
+      ref
+        ..invalidate(orderDetailProvider(widget.id))
+        ..invalidate(refundRequestByOrderProvider(widget.id));
+    });
+  }
+
+  @override
+  void dispose() {
+    _fallbackPoll?.cancel();
+    super.dispose();
+  }
 
   Future<void> _cancelOrder(OrderEntity order) async {
     if (_isCancelling) return;
@@ -646,10 +674,11 @@ class _RefundRequestStatusCard extends StatelessWidget {
           Gap(10.h),
           SizedBox(
             width: double.infinity,
-            height: 42.h,
             child: OutlinedButton(
               onPressed: onCancel,
               style: OutlinedButton.styleFrom(
+                minimumSize: Size.fromHeight(46.h),
+                padding: EdgeInsets.symmetric(vertical: 12.h),
                 foregroundColor: OrderDetailPalette.textPrimary,
                 side: const BorderSide(color: OrderDetailPalette.border),
                 shape: RoundedRectangleBorder(

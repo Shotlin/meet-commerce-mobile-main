@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -42,12 +43,38 @@ class AppAvailabilityNotifier extends Notifier<AppAvailabilityStatus> {
       next.whenData(syncConnectivity);
     });
 
-    return initialStatus.maybeWhen(
-      data: (ConnectivityStatus value) => value == ConnectivityStatus.offline
-          ? AppAvailabilityStatus.offline
-          : AppAvailabilityStatus.online,
-      orElse: () => AppAvailabilityStatus.online,
-    );
+    // A single connectivity_plus "none" reading at launch is often transient
+    // (network handoff, VPN, dual SIM). Never trust it directly: start online
+    // and let the confirmed check below decide.
+    if (initialStatus.asData?.value == ConnectivityStatus.offline) {
+      unawaited(_confirmOffline());
+    }
+    return AppAvailabilityStatus.online;
+  }
+
+  /// connectivity_plus only reports link-layer state and can briefly say
+  /// "none" while the device is really online. Re-check after a short delay
+  /// and do a real DNS lookup before showing the offline screen.
+  Future<void> _confirmOffline() async {
+    for (var i = 0; i < 2; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
+      if (await ref.read(networkMonitorProvider).isConnected) {
+        return;
+      }
+    }
+    try {
+      final result = await InternetAddress.lookup('api.fc.opslin.com')
+          .timeout(const Duration(seconds: 3));
+      if (result.isNotEmpty) {
+        return;
+      }
+    } catch (_) {
+      // Genuinely unreachable.
+    }
+    if (_browsingWhileOffline) {
+      return;
+    }
+    state = AppAvailabilityStatus.offline;
   }
 
   void syncConnectivity(ConnectivityStatus status) {
@@ -56,7 +83,7 @@ class AppAvailabilityNotifier extends Notifier<AppAvailabilityStatus> {
       if (_browsingWhileOffline) {
         return;
       }
-      state = AppAvailabilityStatus.offline;
+      unawaited(_confirmOffline());
       return;
     }
 
@@ -76,7 +103,7 @@ class AppAvailabilityNotifier extends Notifier<AppAvailabilityStatus> {
     if (_browsingWhileOffline) {
       return;
     }
-    state = AppAvailabilityStatus.offline;
+    unawaited(_confirmOffline());
   }
 
   /// PHASE 3 FIX: A single failed request increments a counter instead of

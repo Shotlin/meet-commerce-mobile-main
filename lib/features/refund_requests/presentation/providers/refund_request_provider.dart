@@ -84,6 +84,9 @@ class RefundRequestNotifier extends _$RefundRequestNotifier {
       },
       (_) {
         state = const AsyncData<void>(null);
+        // The order screen must show the new request immediately — don't
+        // rely on a realtime event (or a manual refresh) to surface it.
+        ref.invalidate(refundRequestByOrderProvider(params.orderId));
         return const RefundRequestActionResult();
       },
     );

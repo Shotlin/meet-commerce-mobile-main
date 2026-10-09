@@ -10,6 +10,7 @@ import 'package:bakaloo_flutter_app/core/constants/socket_events.dart';
 import 'package:bakaloo_flutter_app/core/socket/socket_event_handler.dart';
 import 'package:bakaloo_flutter_app/core/socket/socket_models/notification_event.dart';
 import 'package:bakaloo_flutter_app/core/socket/socket_models/order_status_event.dart';
+import 'package:bakaloo_flutter_app/core/socket/socket_models/refund_status_event.dart';
 import 'package:bakaloo_flutter_app/core/socket/socket_models/rider_location_event.dart';
 import 'package:bakaloo_flutter_app/core/socket/socket_status.dart';
 
@@ -37,7 +38,29 @@ class SocketService {
   // leaving and re-entering the screen.
   final Set<String> _trackedOrderIds = <String>{};
 
+  // ── Connection supervision ────────────────────────────────────────────
+  // socket_io_client re-uses the `auth` token it was created with for every
+  // automatic reconnect, and gives up after `socketReconnectAttempts`. The
+  // access token only lives ~15 minutes, so a drop that outlasts it (phone
+  // locked, app backgrounded, network switch) left the socket dead FOR GOOD
+  // — status changes then only appeared after a manual refresh/reopen. This
+  // supervisor keeps retrying forever with backoff, renewing credentials
+  // (through the normal refresh-token path) before each attempt.
+  Future<void> Function()? _refreshCredentials;
+  Future<String?> Function()? _readAccessToken;
+  Timer? _recoveryTimer;
+  int _recoveryAttempt = 0;
+  bool _stopped = true; // true until connect() / after disconnect()
+  bool _disposed = false;
+
+  /// Emits on EVERY successful (re)connect — consumers reconcile with REST,
+  /// because events published while the socket was down are never replayed.
+  final _connectedController = StreamController<void>.broadcast();
+  Stream<void> get connectedStream => _connectedController.stream;
+
   final _orderStatusController = StreamController<OrderStatusEvent>.broadcast();
+  final _refundStatusController =
+      StreamController<RefundStatusEvent>.broadcast();
   final _riderLocationController =
       StreamController<RiderLocationEvent>.broadcast();
   final _notificationController =
@@ -54,6 +77,8 @@ class SocketService {
 
   Stream<OrderStatusEvent> get orderStatusStream =>
       _orderStatusController.stream;
+  Stream<RefundStatusEvent> get refundStatusStream =>
+      _refundStatusController.stream;
   Stream<RiderLocationEvent> get riderLocationStream =>
       _riderLocationController.stream;
   Stream<NotificationEvent> get notificationStream =>
@@ -70,10 +95,60 @@ class SocketService {
 
   bool get isConnected => _socket?.connected ?? false;
 
+  /// Wires credential renewal. [refreshCredentials] should perform one cheap
+  /// authenticated request (a 401 there triggers the app's single, locked
+  /// refresh-token flow, which calls [reconnect] with the new token);
+  /// [readAccessToken] returns whatever token is currently stored.
+  void configureRecovery({
+    required Future<void> Function() refreshCredentials,
+    required Future<String?> Function() readAccessToken,
+  }) {
+    _refreshCredentials = refreshCredentials;
+    _readAccessToken = readAccessToken;
+  }
+
+  /// Called when the app returns to the foreground: if the socket is not
+  /// connected, recover immediately (no backoff).
+  void ensureConnected() {
+    if (_disposed || _stopped || isConnected) return;
+    _recoveryTimer?.cancel();
+    unawaited(_recover());
+  }
+
+  void _scheduleRecovery() {
+    if (_disposed || _stopped) return;
+    _recoveryTimer?.cancel();
+    // 2s, 4s, 8s, 16s, then every 30s — forever, until connected.
+    final seconds = _recoveryAttempt >= 4 ? 30 : (2 << _recoveryAttempt);
+    _recoveryAttempt++;
+    _recoveryTimer = Timer(Duration(seconds: seconds), () {
+      unawaited(_recover());
+    });
+  }
+
+  Future<void> _recover() async {
+    if (_disposed || _stopped || isConnected) return;
+    try {
+      await _refreshCredentials?.call();
+    } catch (_) {
+      // Offline etc. — the retry below will try again.
+    }
+    if (_disposed || _stopped || isConnected) return;
+    String? token;
+    try {
+      token = await _readAccessToken?.call();
+    } catch (_) {}
+    if (token != null && token.trim().isNotEmpty) {
+      reconnect(token);
+    }
+    _scheduleRecovery();
+  }
+
   void connect(String accessToken) {
     if (accessToken.trim().isEmpty) {
       return;
     }
+    _stopped = false;
 
     final socketUrl = ApiConstants.socketUrl;
     if (socketUrl.trim().isEmpty) {
@@ -96,15 +171,21 @@ class SocketService {
 
     _socket!
       ..onConnect((_) {
+        _recoveryTimer?.cancel();
+        _recoveryAttempt = 0;
         _statusController.add(SocketStatus.connected);
         _setupEventListeners();
         _replayTrackedOrders();
+        _connectedController.add(null);
       })
-      ..onDisconnect((_) {
+      ..onDisconnect((reason) {
         _statusController.add(SocketStatus.disconnected);
+        // 'io client disconnect' = we closed it on purpose (logout/reconnect).
+        if (reason != 'io client disconnect') _scheduleRecovery();
       })
       ..onConnectError((_) {
         _statusController.add(SocketStatus.error);
+        _scheduleRecovery();
       })
       ..onError((_) {
         _statusController.add(SocketStatus.error);
@@ -120,6 +201,7 @@ class SocketService {
     if (_listenersBound) {
       socket
         ..off(SocketEvents.orderStatus)
+        ..off(SocketEvents.refundStatus)
         ..off(SocketEvents.riderLocationUpdate)
         ..off(SocketEvents.notification)
         ..off(SocketEvents.themeUpdate)
@@ -135,12 +217,17 @@ class SocketService {
       onOrderStatus: _orderStatusController.add,
       onRiderLocation: _riderLocationController.add,
       onNotification: _notificationController.add,
+      onRefundStatus: _refundStatusController.add,
     );
 
     socket
       ..on(
         SocketEvents.orderStatus,
         (dynamic data) => eventHandler.route(SocketEvents.orderStatus, data),
+      )
+      ..on(
+        SocketEvents.refundStatus,
+        (dynamic data) => eventHandler.route(SocketEvents.refundStatus, data),
       )
       ..on(
         SocketEvents.riderLocationUpdate,
@@ -254,13 +341,20 @@ class SocketService {
   }
 
   void disconnect() {
+    _stopped = true;
+    _recoveryTimer?.cancel();
+    _recoveryAttempt = 0;
     _disposeSocketOnly();
     _trackedOrderIds.clear();
     _statusController.add(SocketStatus.disconnected);
   }
 
   void dispose() {
+    _disposed = true;
+    _recoveryTimer?.cancel();
     _disposeSocketOnly();
+    _connectedController.close();
+    _refundStatusController.close();
     _orderStatusController.close();
     _riderLocationController.close();
     _notificationController.close();
